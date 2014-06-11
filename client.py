@@ -16,25 +16,24 @@ class IMMessage:
         self.receiver = 0
         self.content = ""
 
-def send_message(cmd, msg, sock):
+def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH:
-        h = struct.pack("!ibbbb", 8, cmd, 0, 0, 0)
+        h = struct.pack("!iibbbb", 8, seq, cmd, 0, 0, 0)
         b = struct.pack("!q", msg.uid)
         sock.sendall(h + b)
     elif cmd == MSG_IM:
         length = 16 + len(msg.content)
-        print "msg len:", len(msg.content)
-        h = struct.pack("!ibbbb", length, cmd, 0, 0, 0)
+        h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
         b = struct.pack("!qq", msg.sender, msg.receiver)
         sock.sendall(h+b+msg.content)
     else:
         print "eeeeee"
 
 def recv_message(sock):
-    buf = sock.recv(8)
-    if len(buf) != 8:
+    buf = sock.recv(12)
+    if len(buf) != 12:
         return 0, None
-    length, cmd = struct.unpack("!ib", buf[:5])
+    length, seq, cmd = struct.unpack("!iib", buf[:9])
     content = sock.recv(length)
     if len(content) != length:
         return 0, None
@@ -52,27 +51,31 @@ def recv_message(sock):
     
     
 def recv_client():
-    address = ("127.0.0.1", 23000)
+    seq = 0
+    address = ("127.0.0.1", 24000)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
     sock.connect(address)
     auth = Authentication()
     auth.uid = 13635273142
-    send_message(MSG_AUTH, auth, sock)
+    seq = seq + 1
+    send_message(MSG_AUTH, seq, auth, sock)
     cmd, msg = recv_message(sock)
     if cmd != MSG_AUTH or msg != 0:
         return
     print "auth success"
     for _ in range(1):
         cmd, msg = recv_message(sock)
-        print cmd, msg.content, msg.sender, msg.receiver
+        print "cmd:", cmd, msg.content, msg.sender, msg.receiver
     
 def send_client():
+    seq = 0
     address = ("127.0.0.1", 23000)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
     sock.connect(address)
     auth = Authentication()
     auth.uid = 13635273143
-    send_message(MSG_AUTH, auth, sock)
+    seq = seq + 1
+    send_message(MSG_AUTH, seq, auth, sock)
     cmd, msg = recv_message(sock)
     if cmd != MSG_AUTH or msg != 0:
         return
@@ -82,7 +85,8 @@ def send_client():
         im.sender = 13635273143
         im.receiver = 13635273142
         im.content = "test%d"%(i,)
-        send_message(MSG_IM, im, sock)
+        seq += 1
+        send_message(MSG_IM, seq, im, sock)
     
 def main():
     t1 = threading.Thread(target=recv_client)

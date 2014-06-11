@@ -1,0 +1,158 @@
+package main
+import "encoding/binary"
+import "io"
+import "net"
+import "bytes"
+import "log"
+
+const MSG_HEARTBEAT = 1
+const MSG_AUTH = 2
+const MSG_IM = 3
+
+const MSG_ADD_CLIENT = 128
+const MSG_REMOVE_CLIENT = 129
+
+type IMMessage struct {
+    sender int64
+    receiver int64
+    content string
+}
+
+type Authentication struct {
+    uid int64
+}
+
+type AuthenticationStatus struct {
+    status int32
+}
+
+type Message struct {
+    cmd int
+    seq int
+    body interface{}
+}
+
+
+func ReceiveMessage(conn *net.TCPConn) *Message {
+    buff := make([]byte, 12)
+    _, err := io.ReadFull(conn, buff)
+    if err != nil {
+        return nil
+    }
+    var len int32
+    var seq int32
+    buffer := bytes.NewBuffer(buff)
+    binary.Read(buffer, binary.BigEndian, &len)
+    binary.Read(buffer, binary.BigEndian, &seq)
+    cmd, _ := buffer.ReadByte()
+
+    if len < 0 || len > 64*1024 {
+        log.Println("invalid len:", len)
+        return nil
+    }
+    buff = make([]byte, len)
+    _, err = io.ReadFull(conn, buff)
+    if err != nil {
+        return nil
+    }
+    
+    if cmd == MSG_AUTH {
+        buffer := bytes.NewBuffer(buff)
+        var uid int64
+        binary.Read(buffer, binary.BigEndian, &uid)
+        log.Println("uid:", uid)
+        return &Message{MSG_AUTH, int(seq), &Authentication{uid}}
+    } else if cmd == MSG_IM {
+        if len < 16 {
+            return nil
+        }
+        buffer := bytes.NewBuffer(buff)
+        im := &IMMessage{}
+        binary.Read(buffer, binary.BigEndian, &im.sender)
+        binary.Read(buffer, binary.BigEndian, &im.receiver)
+        im.content = string(buff[16:])
+        return &Message{MSG_IM, int(seq), im}
+    } else if cmd == MSG_ADD_CLIENT || cmd == MSG_REMOVE_CLIENT{
+        buffer := bytes.NewBuffer(buff)
+        var uid int64
+        binary.Read(buffer, binary.BigEndian, &uid)
+        return &Message{int(cmd), int(seq), uid}
+    } else {
+        return nil
+    }
+}
+
+
+func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {
+    binary.Write(buffer, binary.BigEndian, len)
+    binary.Write(buffer, binary.BigEndian, seq)
+    buffer.WriteByte(cmd)
+    buffer.WriteByte(byte(0))
+    buffer.WriteByte(byte(0))
+    buffer.WriteByte(byte(0))
+}
+
+func WriteMessage(conn *net.TCPConn, seq int, message *IMMessage) {
+    var length int32 = int32(len(message.content) + 16)
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_IM, buffer)
+    binary.Write(buffer, binary.BigEndian, message.sender)
+    binary.Write(buffer, binary.BigEndian, message.receiver)
+    buffer.Write([]byte(message.content))
+    buf := buffer.Bytes()
+
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
+func  WriteAuthStatus(conn *net.TCPConn, seq int, auth *AuthenticationStatus) {
+    var length int32  = 4
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_AUTH, buffer)
+    binary.Write(buffer, binary.BigEndian, auth.status)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
+func WriteAddClient(conn *net.TCPConn, seq int, uid int64) {
+    var length int32  = 8
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_ADD_CLIENT, buffer)
+    binary.Write(buffer, binary.BigEndian, uid)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
+func WriteRemoveClient(conn *net.TCPConn, seq int, uid int64) {
+    var length int32  = 8
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_REMOVE_CLIENT, buffer)
+    binary.Write(buffer, binary.BigEndian, uid)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
+func SendMessage(conn *net.TCPConn, msg *Message) {
+    if msg.cmd == MSG_AUTH {
+        WriteAuthStatus(conn, msg.seq, msg.body.(*AuthenticationStatus))
+    } else if msg.cmd == MSG_IM {
+        WriteMessage(conn, msg.seq, msg.body.(*IMMessage))
+    } else if msg.cmd == MSG_ADD_CLIENT {
+        WriteAddClient(conn, msg.seq, msg.body.(int64))
+    } else if msg.cmd == MSG_REMOVE_CLIENT {
+        WriteRemoveClient(conn, msg.seq, msg.body.(int64))
+    } else {
+        log.Println("unknow cmd", msg.cmd)
+    }
+}

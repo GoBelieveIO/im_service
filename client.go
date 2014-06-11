@@ -1,32 +1,7 @@
 package main
-import "io"
 import "net"
-import "bytes"
-import "encoding/binary"
 import "log"
 
-const MSG_HEARTBEAT = 1
-const MSG_AUTH = 2
-const MSG_IM = 3
-
-type IMMessage struct {
-    sender int64
-    receiver int64
-    content string
-}
-
-type Authentication struct {
-    uid int64
-}
-
-type AuthenticationStatus struct {
-    status int32
-}
-
-type Message struct {
-    cmd int
-    body interface{}
-}
 
 type Client struct {
     wt chan *Message
@@ -43,9 +18,12 @@ func NewClient(conn *net.TCPConn) *Client {
 
 func (client *Client) Read() {
     for {
-        msg := client.ReceiveMessage()
+        msg := ReceiveMessage(client.conn)
         if msg == nil {
             route.RemoveClient(client)
+            if client.uid > 0 {
+                cluster.RemoveClient(client.uid)
+            }
             client.wt <- nil
             break
         }
@@ -63,21 +41,28 @@ func (client *Client) Read() {
 func (client *Client) HandleAuth(login *Authentication) {
     client.uid = login.uid
     log.Println("auth:", login.uid)
-    msg := &Message{MSG_AUTH, &AuthenticationStatus{0}}
+    msg := &Message{cmd:MSG_AUTH, body:&AuthenticationStatus{0}}
     client.wt <- msg
 
     route.AddClient(client)
+    cluster.AddClient(client.uid)
     client.LoadMessage()
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage) {
     other := route.FindClient(msg.receiver)
     if other != nil {
-        other.wt <- &Message{MSG_IM, msg}
+        other.wt <- &Message{cmd:MSG_IM, body:msg}
     } else {
-        client.SaveMessage(msg)
+        peer := route.FindPeerClient(msg.receiver)
+        if peer != nil {
+            peer.wt <- &Message{cmd:MSG_IM, body:msg}
+        } else {
+            client.SaveMessage(msg)
+        }
     }
 }
+
 //加载离线消息
 func (client *Client) LoadMessage() {
     
@@ -88,94 +73,17 @@ func (client *Client) SaveMessage(message *IMMessage) {
     
 }
 
-func (client *Client) ReceiveMessage() *Message {
-    buff := make([]byte, 8)
-    _, err := io.ReadFull(client.conn, buff)
-    if err != nil {
-        return nil
-    }
-    var len int32
-    buffer := bytes.NewBuffer(buff)
-    binary.Read(buffer, binary.BigEndian, &len)
-    cmd, _ := buffer.ReadByte()
-
-    if len < 0 || len > 64*1024 {
-        log.Println("invalid len:", len)
-        return nil
-    }
-    buff = make([]byte, len)
-    _, err = io.ReadFull(client.conn, buff)
-    if err != nil {
-        return nil
-    }
-    
-    if cmd == MSG_AUTH {
-        buffer := bytes.NewBuffer(buff)
-        var uid int64
-        binary.Read(buffer, binary.BigEndian, &uid)
-        log.Println("uid:", uid)
-        return &Message{MSG_AUTH, &Authentication{uid}}
-    } else if cmd == MSG_IM {
-        buffer := bytes.NewBuffer(buff)
-        im := &IMMessage{}
-        binary.Read(buffer, binary.BigEndian, &im.sender)
-        binary.Read(buffer, binary.BigEndian, &im.receiver)
-        im.content = string(buff[16:])
-        return &Message{MSG_IM, im}
-    } else {
-        return nil
-    }
-}
-
-func (client *Client) WriteHeader(len int32, cmd byte, buffer *bytes.Buffer) {
-    binary.Write(buffer, binary.BigEndian, len)
-    buffer.WriteByte(cmd)
-    buffer.WriteByte(byte(0))
-    buffer.WriteByte(byte(0))
-    buffer.WriteByte(byte(0))
-}
-
-func (client *Client) WriteMessage(message *IMMessage) {
-    var length int32 = int32(len(message.content) + 16)
-    buffer := new(bytes.Buffer)
-    client.WriteHeader(length, MSG_IM, buffer)
-    binary.Write(buffer, binary.BigEndian, message.sender)
-    binary.Write(buffer, binary.BigEndian, message.receiver)
-    buffer.Write([]byte(message.content))
-    buf := buffer.Bytes()
-
-    n, err := client.conn.Write(buf)
-    if err != nil || n != len(buf) {
-        log.Println("sock write error")
-    }
-}
-
-func (client *Client) WriteAuthStatus(auth *AuthenticationStatus) {
-    var length int32  = 4
-    buffer := new(bytes.Buffer)
-    client.WriteHeader(length, MSG_AUTH, buffer)
-    binary.Write(buffer, binary.BigEndian, auth.status)
-    buf := buffer.Bytes()
-    n, err := client.conn.Write(buf)
-    if err != nil || n != len(buf) {
-        log.Println("sock write error")
-    }
-}
-
 func (client *Client) Write() {
+    seq := 0
     for {
         msg := <- client.wt
         if msg == nil {
             log.Println("socket closed")
             break
         }
-        if msg.cmd == MSG_AUTH {
-            client.WriteAuthStatus(msg.body.(*AuthenticationStatus))
-        } else if msg.cmd == MSG_IM {
-            client.WriteMessage(msg.body.(*IMMessage))
-        } else {
-            log.Println("unknow cmd", msg.cmd)
-        }
+        seq++
+        msg.seq = seq
+        SendMessage(client.conn, msg)
     }
 }
 
