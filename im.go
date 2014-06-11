@@ -10,6 +10,7 @@ import "github.com/jimlawless/cfg"
 
 var route *Route
 var cluster *Cluster 
+var storage *Storage
 
 var PORT = 23000
 var PEER_ADDRS []*net.TCPAddr
@@ -100,6 +101,8 @@ func main() {
     read_cfg(os.Args[1])
     cluster = NewCluster(PEER_ADDRS)
     cluster.Start()
+    storage = NewStorage()
+    storage.Start()
     go ListenPeerClient()
     ListenClient()
 }

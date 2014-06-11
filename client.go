@@ -46,7 +46,13 @@ func (client *Client) HandleAuth(login *Authentication) {
 
     route.AddClient(client)
     cluster.AddClient(client.uid)
-    client.LoadMessage()
+    c := storage.LoadOfflineMessage(client.uid)
+    if c != nil {
+        for m := range c {
+            client.wt <- &Message{cmd:MSG_IM, body:m}
+        }
+        storage.ClearOfflineMessage(client.uid)
+    }
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage) {
@@ -58,19 +64,9 @@ func (client *Client) HandleIMMessage(msg *IMMessage) {
         if peer != nil {
             peer.wt <- &Message{cmd:MSG_IM, body:msg}
         } else {
-            client.SaveMessage(msg)
+            storage.SaveOfflineMessage(msg)
         }
     }
-}
-
-//加载离线消息
-func (client *Client) LoadMessage() {
-    
-}
-
-//存储离线消息
-func (client *Client) SaveMessage(message *IMMessage) {
-    
 }
 
 func (client *Client) Write() {
