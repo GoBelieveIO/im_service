@@ -1,12 +1,16 @@
 package main
 import "net"
+import "time"
+import "log"
 
 type Cluster struct {
     peers map[int64]*Peer
+    c chan *Message
 }
 
 func NewCluster(addrs []*net.TCPAddr) *Cluster {
     cluster := new(Cluster)
+    cluster.c = make(chan *Message)
     cluster.peers = make(map[int64]*Peer)
     for _, addr := range addrs {
         peer := new(Peer)
@@ -22,18 +26,30 @@ func (cluster *Cluster) Start() {
     for _, peer := range cluster.peers {
         peer.Start()
     }
+    go cluster.Run()
+}
+
+func (cluster *Cluster) Run() {
+    for {
+        select {
+        case msg := <- cluster.c:
+            for _, peer := range cluster.peers {
+                select {
+                case peer.wt <- msg:
+                case <-time.After(1*time.Second):
+                    log.Println("peer recieve message timeout")
+                }
+            }
+        }
+    }
 }
 
 func (cluster *Cluster) AddClient(uid int64) {
     msg := &Message{cmd:MSG_ADD_CLIENT, body:uid}
-    for _, peer := range cluster.peers {
-        peer.wt <- msg
-    }
+    cluster.c <- msg
 }
 
 func (cluster *Cluster) RemoveClient(uid int64) {
     msg := &Message{cmd:MSG_REMOVE_CLIENT, body:uid}
-    for _, peer := range cluster.peers {
-        peer.wt <- msg
-    }
+    cluster.c <- msg
 }
