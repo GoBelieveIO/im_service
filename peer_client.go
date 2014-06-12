@@ -30,6 +30,8 @@ func (peer *PeerClient) Read() {
         log.Println("msg:", msg.cmd)
         if msg.cmd == MSG_ADD_CLIENT {
             peer.HandleAddClient(msg.body.(int64))
+        } else if msg.cmd == MSG_REMOVE_CLIENT {
+            peer.HandleRemoveClient(msg.body.(int64))
         } else if msg.cmd == MSG_HEARTBEAT {
             peer.HandleRemoveClient(msg.body.(int64))
         }
@@ -51,7 +53,15 @@ func (peer *PeerClient) HandleAddClient(uid int64) {
         log.Printf("uid:%d exists\n", uid)
         return
     }
+    log.Println("add uid:", uid)
     peer.uids[uid] = struct{}{}
+    c := storage.LoadOfflineMessage(uid)
+    if c != nil {
+        for m := range c {
+            peer.wt <- &Message{cmd:MSG_IM, body:m}
+        }
+        storage.ClearOfflineMessage(uid)
+    }
 }
 
 func (peer *PeerClient) HandleRemoveClient(uid int64) {
@@ -61,6 +71,7 @@ func (peer *PeerClient) HandleRemoveClient(uid int64) {
         log.Printf("uid:%d non exists\n", uid)
         return
     }
+    log.Println("remove uid:", uid)
     delete(peer.uids, uid)
 }
 
