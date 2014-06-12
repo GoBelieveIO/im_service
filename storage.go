@@ -20,12 +20,12 @@ type Storage struct {
     root string
 }
 
-func NewStorage() *Storage {
+func NewStorage(root string) *Storage {
     storage := new(Storage)
     storage.ic = make(chan *IMMessage)
     storage.cc = make(chan int64)
     storage.files = make(map[int64]*os.File)
-    storage.root = "/tmp"
+    storage.root = root
     path := fmt.Sprintf("%s/%s", storage.root, OFFLINE)
     err := os.Mkdir(path, 0755)
     if err != nil && !os.IsExist(err) {

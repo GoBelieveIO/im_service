@@ -8,6 +8,7 @@ import "log"
 const MSG_HEARTBEAT = 1
 const MSG_AUTH = 2
 const MSG_IM = 3
+const MSG_ACK = 4
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -17,6 +18,8 @@ type IMMessage struct {
     receiver int64
     content string
 }
+
+type MessageACK int32
 
 type Authentication struct {
     uid int64
@@ -31,7 +34,6 @@ type Message struct {
     seq int
     body interface{}
 }
-
 
 func ReceiveMessage(conn *net.TCPConn) *Message {
     buff := make([]byte, 12)
@@ -77,6 +79,11 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
         var uid int64
         binary.Read(buffer, binary.BigEndian, &uid)
         return &Message{int(cmd), int(seq), uid}
+    } else if cmd == MSG_ACK {
+        buffer := bytes.NewBuffer(buff)
+        var ack int32
+        binary.Read(buffer, binary.BigEndian, &ack)
+        return &Message{int(cmd), int(seq), MessageACK(ack)}
     } else {
         return nil
     }
@@ -143,6 +150,18 @@ func WriteRemoveClient(conn *net.TCPConn, seq int, uid int64) {
     }
 }
 
+func WriteACK(conn *net.TCPConn, seq int, ack MessageACK) {
+    var length int32  = 4
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_ACK, buffer)
+    binary.Write(buffer, binary.BigEndian, int32(ack))
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
 func SendMessage(conn *net.TCPConn, msg *Message) {
     if msg.cmd == MSG_AUTH {
         WriteAuthStatus(conn, msg.seq, msg.body.(*AuthenticationStatus))
@@ -152,6 +171,8 @@ func SendMessage(conn *net.TCPConn, msg *Message) {
         WriteAddClient(conn, msg.seq, msg.body.(int64))
     } else if msg.cmd == MSG_REMOVE_CLIENT {
         WriteRemoveClient(conn, msg.seq, msg.body.(int64))
+    } else if msg.cmd == MSG_ACK {
+        WriteACK(conn, msg.seq, msg.body.(MessageACK))
     } else {
         log.Println("unknow cmd", msg.cmd)
     }

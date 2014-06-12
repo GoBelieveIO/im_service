@@ -36,7 +36,7 @@ func (peer *Peer) HandleIMMessage(msg *IMMessage) {
     if other != nil {
         other.wt <- &Message{cmd:MSG_IM, body:msg}
     } else {
-        log.Println("can't find client")
+        log.Println("can't find client:", msg.receiver)
         storage.SaveOfflineMessage(msg)
     }
 }

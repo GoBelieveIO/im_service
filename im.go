@@ -12,6 +12,7 @@ var route *Route
 var cluster *Cluster 
 var storage *Storage
 
+var STORAGE_ROOT = "/tmp"
 var PORT = 23000
 var PEER_ADDRS []*net.TCPAddr
 
@@ -49,6 +50,11 @@ func read_cfg(cfg_path string) {
     }
     PORT = nport
     fmt.Println("port:", PORT)
+    root, present := app_cfg["storage_root"]
+    if present {
+        STORAGE_ROOT = root
+    }
+    fmt.Println("storage root:", STORAGE_ROOT)
     peers, present := app_cfg["peers"]
     if !present {
         return
@@ -101,7 +107,7 @@ func main() {
     read_cfg(os.Args[1])
     cluster = NewCluster(PEER_ADDRS)
     cluster.Start()
-    storage = NewStorage()
+    storage = NewStorage(STORAGE_ROOT)
     storage.Start()
     go ListenPeerClient()
     ListenClient()
