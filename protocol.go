@@ -7,8 +7,9 @@ import "log"
 
 const MSG_HEARTBEAT = 1
 const MSG_AUTH = 2
-const MSG_IM = 3
-const MSG_ACK = 4
+const MSG_AUTH_STATUS = 3
+const MSG_IM = 4
+const MSG_ACK = 5
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -64,6 +65,11 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
         binary.Read(buffer, binary.BigEndian, &uid)
         log.Println("uid:", uid)
         return &Message{MSG_AUTH, int(seq), &Authentication{uid}}
+    } else if cmd == MSG_AUTH_STATUS {
+        buffer := bytes.NewBuffer(buff)
+        var status int32
+        binary.Read(buffer, binary.BigEndian, &status)
+        return &Message{MSG_AUTH_STATUS, int(seq), &AuthenticationStatus{status}}
     } else if cmd == MSG_IM {
         if len < 16 {
             return nil
@@ -114,10 +120,22 @@ func WriteMessage(conn *net.TCPConn, seq int, message *IMMessage) {
     }
 }
 
+func WriteAuth(conn *net.TCPConn, seq int, auth *Authentication) {
+    var length int32  = 8
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_AUTH, buffer)
+    binary.Write(buffer, binary.BigEndian, auth.uid)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
 func  WriteAuthStatus(conn *net.TCPConn, seq int, auth *AuthenticationStatus) {
     var length int32  = 4
     buffer := new(bytes.Buffer)
-    WriteHeader(length, int32(seq), MSG_AUTH, buffer)
+    WriteHeader(length, int32(seq), MSG_AUTH_STATUS, buffer)
     binary.Write(buffer, binary.BigEndian, auth.status)
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
@@ -164,6 +182,8 @@ func WriteACK(conn *net.TCPConn, seq int, ack MessageACK) {
 
 func SendMessage(conn *net.TCPConn, msg *Message) {
     if msg.cmd == MSG_AUTH {
+        WriteAuth(conn, msg.seq, msg.body.(*Authentication))
+    } else if msg.cmd == MSG_AUTH_STATUS {
         WriteAuthStatus(conn, msg.seq, msg.body.(*AuthenticationStatus))
     } else if msg.cmd == MSG_IM {
         WriteMessage(conn, msg.seq, msg.body.(*IMMessage))

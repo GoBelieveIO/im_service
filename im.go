@@ -7,6 +7,7 @@ import "net"
 import "fmt"
 import "os"
 import "github.com/jimlawless/cfg"
+import "runtime"
 
 var route *Route
 var cluster *Cluster 
@@ -99,6 +100,7 @@ func ListenPeerClient() {
 }
 
 func main() {
+    runtime.GOMAXPROCS(runtime.NumCPU())
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
     if len(os.Args) < 2 {
         fmt.Println("usage: im config")

@@ -43,21 +43,27 @@ func (client *Client) Read() {
     }
 }
     
+func (client *Client) SendOfflineMessage() {
+    go func() {
+        c := storage.LoadOfflineMessage(client.uid)
+        if c != nil {
+            for m := range c {
+                client.wt <- &Message{cmd:MSG_IM, body:m}
+            }
+            storage.ClearOfflineMessage(client.uid)
+        }
+    }()
+}
+
 func (client *Client) HandleAuth(login *Authentication) {
     client.uid = login.uid
     log.Println("auth:", login.uid)
-    msg := &Message{cmd:MSG_AUTH, body:&AuthenticationStatus{0}}
+    msg := &Message{cmd:MSG_AUTH_STATUS, body:&AuthenticationStatus{0}}
     client.wt <- msg
 
     route.AddClient(client)
     cluster.AddClient(client.uid)
-    c := storage.LoadOfflineMessage(client.uid)
-    if c != nil {
-        for m := range c {
-            client.wt <- &Message{cmd:MSG_IM, body:m}
-        }
-        storage.ClearOfflineMessage(client.uid)
-    }
+    client.SendOfflineMessage()
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
