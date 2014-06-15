@@ -41,6 +41,7 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
     buff := make([]byte, 12)
     _, err := io.ReadFull(conn, buff)
     if err != nil {
+        log.Println("sock read error:", err)
         return nil
     }
     var len int32
@@ -49,7 +50,7 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
     binary.Read(buffer, binary.BigEndian, &len)
     binary.Read(buffer, binary.BigEndian, &seq)
     cmd, _ := buffer.ReadByte()
-
+    log.Println("cmd:", cmd)
     if len < 0 || len > 64*1024 {
         log.Println("invalid len:", len)
         return nil
@@ -57,6 +58,7 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
     buff = make([]byte, len)
     _, err = io.ReadFull(conn, buff)
     if err != nil {
+        log.Println("sock read error:", err)
         return nil
     }
     
@@ -91,6 +93,8 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
         var ack int32
         binary.Read(buffer, binary.BigEndian, &ack)
         return &Message{int(cmd), int(seq), MessageACK(ack)}
+    } else if cmd == MSG_HEARTBEAT {
+        return &Message{int(cmd), int(seq), nil}
     } else {
         return nil
     }
@@ -192,6 +196,17 @@ func WriteRST(conn *net.TCPConn, seq int) {
     }
 }
 
+func WriteHeartbeat(conn *net.TCPConn, seq int) {
+    var length int32 = 0
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_HEARTBEAT, buffer)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
 func SendMessage(conn *net.TCPConn, msg *Message) {
     if msg.cmd == MSG_AUTH {
         WriteAuth(conn, msg.seq, msg.body.(*Authentication))
@@ -207,6 +222,8 @@ func SendMessage(conn *net.TCPConn, msg *Message) {
         WriteACK(conn, msg.seq, msg.body.(MessageACK))
     } else if msg.cmd == MSG_RST {
         WriteRST(conn, msg.seq)
+    } else if msg.cmd == MSG_HEARTBEAT {
+        WriteHeartbeat(conn, msg.seq)
     } else {
         log.Println("unknow cmd", msg.cmd)
     }

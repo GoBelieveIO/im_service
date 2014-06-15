@@ -42,15 +42,29 @@ func (peer *Peer) HandleIMMessage(msg *IMMessage) {
 }
 
 func (peer *Peer) Write() {
+    ticker := time.NewTicker(10*time.Second)
+    seq := 0
     for {
-        msg := <- peer.wt
-        if msg == nil {
-            log.Println("socket closed")
-            peer.conn = nil
+        select {
+        case msg := <- peer.wt:
+            if msg == nil {
+                log.Println("socket closed")
+                peer.conn = nil
+                break
+            } 
+            seq++
+            msg.seq = seq
+            log.Println("peer msg:", msg.cmd)
+            SendMessage(peer.conn, msg)
+        case <- ticker.C:
+            log.Println("peer send heartbeat")
+            seq++
+            m := &Message{cmd:MSG_HEARTBEAT, seq:seq}
+            SendMessage(peer.conn, m)
+        }
+        if peer.conn == nil {
             break
         }
-        log.Println("peer msg:", msg.cmd)
-        SendMessage(peer.conn, msg)
     }
 }
 
@@ -80,13 +94,14 @@ func (peer *Peer) Connect() {
             if err != nil {
                 log.Println("connect error:", ip, " ", peer.port)
             } else {
+                log.Printf("peer:%s port:%d connected", ip, peer.port)
                 peer.conn = conn
                 go peer.Read()
                 go peer.Write()
                 peer.AddAllClient()
             }
         }
-        timer := time.NewTimer(60*time.Second)
+        timer := time.NewTimer(20*time.Second)
         <- timer.C
     }
 }

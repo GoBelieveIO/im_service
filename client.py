@@ -38,11 +38,11 @@ def send_message(cmd, seq, msg, sock):
 def recv_message(sock):
     buf = sock.recv(12)
     if len(buf) != 12:
-        return 0, None
+        return 0, 0, None
     length, seq, cmd = struct.unpack("!iib", buf[:9])
     content = sock.recv(length)
     if len(content) != length:
-        return 0, None
+        return 0, 0, None
 
     if cmd == MSG_AUTH_STATUS:
         status, = struct.unpack("!i", content)
@@ -56,8 +56,9 @@ def recv_message(sock):
         return cmd, seq, content
 
 
+task = 0
 
-def recv_rst(uid):
+def connect_server(uid, port):
     seq = 0
     address = ("127.0.0.1", 23000)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
@@ -68,18 +69,37 @@ def recv_rst(uid):
     send_message(MSG_AUTH, seq, auth, sock)
     cmd, _, msg = recv_message(sock)
     if cmd != MSG_AUTH_STATUS or msg != 0:
-        return
+        return None, 0
     print "auth success"
+    return sock, seq
 
-    cmd, s, msg = recv_message(sock)
+def recv_rst(uid):
+    global task
+    sock1, seq1 = connect_server(uid, 23000)
+    sock2, seq2 = connect_server(uid, 23000)
+
+    cmd, s, msg = recv_message(sock1)
     print "cmd", cmd
-    assert(cmd == MSG_RST)
+    if cmd == MSG_RST:
+        task += 1
 
-count = 1000000
+def recv_cluster_rst(uid):
+    global task
+    sock1, seq1 = connect_server(uid, 23000)
+    time.sleep(2)
+    sock2, seq2 = connect_server(uid, 24000)
+
+    cmd, s, msg = recv_message(sock1)
+    print "cmd", cmd
+    if cmd == MSG_RST:
+        task += 1
+
+count = 1
     
-def recv_client(uid):
+def recv_client(uid, port=23000):
+    global task
     seq = 0
-    address = ("127.0.0.1", 23000)
+    address = ("127.0.0.1", port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
     sock.connect(address)
     auth = Authentication()
@@ -95,10 +115,11 @@ def recv_client(uid):
         print "cmd:", cmd, msg.content, msg.sender, msg.receiver
         seq += 1
         send_message(MSG_ACK, seq, s, sock)
-
+    task += 1
     print "recv success"
     
 def send_client(uid, receiver):
+    global task
     seq = 0
     address = ("127.0.0.1", 23000)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
@@ -119,35 +140,81 @@ def send_client(uid, receiver):
         seq += 1
         send_message(MSG_IM, seq, im, sock)
         recv_message(sock)
-
+    task += 1
     print "send success"
 
-def TestSendAndRecv():
-    t3 = threading.Thread(target=recv_client, args=(13635273142,))
-    t2.setDaemon(True)
+def TestCluster():
+    global task
+    task = 0
+    t3 = threading.Thread(target=recv_client, args=(13635273142, 24000))
+    t3.setDaemon(True)
     t3.start()
-
+    
+    time.sleep(2)
     t2 = threading.Thread(target=send_client, args=(13635273143,13635273142))
     t2.setDaemon(True)
     t2.start()
 
-    while True:
+    while task < 2:
         time.sleep(1)
+
+    print "test cluster completed"
+
+def TestSendAndRecv():
+    global task
+    task = 0
+    t3 = threading.Thread(target=recv_client, args=(13635273142,))
+    t3.setDaemon(True)
+    t3.start()
+    
+    t2 = threading.Thread(target=send_client, args=(13635273143,13635273142))
+    t2.setDaemon(True)
+    t2.start()
+
+    while task < 2:
+        time.sleep(1)
+    print "test single completed"
     
 def TestMultiLogin():
+    global task
+    task = 0
     t3 = threading.Thread(target=recv_rst, args=(13635273142,))
     t3.setDaemon(True)
     t3.start()
 
-    t2 = threading.Thread(target=recv_rst, args=(13635273142,))
-    t2.setDaemon(True)
-    t2.start()
-    while True:
+    while task < 1:
         time.sleep(1)
+    print "test multi login completed"
 
+def TestClusterMultiLogin():
+    global task
+    task = 0
+    t3 = threading.Thread(target=recv_cluster_rst, args=(13635273142,))
+    t3.setDaemon(True)
+    t3.start()
+
+    while task < 1:
+        time.sleep(1)
+    print "test cluster multi login completed"
     
+def TestTimeout():
+    sock, seq = connect_server(13635273142, 23000)
+    print "waiting timeout"
+    r = sock.recv(1024)
+    if len(r) == 0:
+        print "test timeout completed"
+
+
 def main():
     TestMultiLogin()
+    time.sleep(1)
+    TestClusterMultiLogin()
+    time.sleep(1)
+    TestSendAndRecv()
+    time.sleep(1)
+    TestCluster()
+    time.sleep(1)
+    TestTimeout()
 
 if __name__ == "__main__":
     main()

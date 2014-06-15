@@ -2,7 +2,9 @@ package main
 import "net"
 import "log"
 import "sync"
+import "time"
 
+const CLIENT_TIMEOUT = 20
 type Client struct {
     wt chan *Message
     uid int64
@@ -21,6 +23,7 @@ func NewClient(conn *net.TCPConn) *Client {
 
 func (client *Client) Read() {
     for {
+        client.conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT*time.Second))
         msg := ReceiveMessage(client.conn)
         if msg == nil {
             route.RemoveClient(client)
@@ -133,8 +136,9 @@ func (client *Client) Write() {
     for {
         msg := <- client.wt
         if msg == nil {
-            log.Println("socket closed")
             client.SaveUnAckMessage()
+            client.conn.Close()
+            log.Println("socket closed")
             break
         }
         seq++

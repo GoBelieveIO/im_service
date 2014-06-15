@@ -2,7 +2,9 @@ package main
 import "net"
 import "sync"
 import "log"
+import "time"
 
+const PEER_TIMEOUT = 20
 type PeerClient struct {
     wt chan *Message
     conn *net.TCPConn
@@ -21,6 +23,7 @@ func NewPeerClient(conn *net.TCPConn) *PeerClient {
 
 func (peer *PeerClient) Read() {
     for {
+        peer.conn.SetDeadline(time.Now().Add(PEER_TIMEOUT*time.Second))
         msg := ReceiveMessage(peer.conn)
         if msg == nil {
             route.RemovePeerClient(peer)
@@ -33,7 +36,7 @@ func (peer *PeerClient) Read() {
         } else if msg.cmd == MSG_REMOVE_CLIENT {
             peer.HandleRemoveClient(msg.body.(int64))
         } else if msg.cmd == MSG_HEARTBEAT {
-            peer.HandleRemoveClient(msg.body.(int64))
+            log.Println("peer heartbeat")
         }
     }
 }
