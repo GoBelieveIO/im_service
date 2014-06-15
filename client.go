@@ -55,11 +55,21 @@ func (client *Client) SendOfflineMessage() {
     }()
 }
 
+func (client *Client) ResetClient(uid int64) {
+	//单点登录
+    c := route.FindClient(client.uid)
+    if c != nil {
+        c.wt <- &Message{cmd:MSG_RST}
+    }
+}
+
 func (client *Client) HandleAuth(login *Authentication) {
     client.uid = login.uid
     log.Println("auth:", login.uid)
     msg := &Message{cmd:MSG_AUTH_STATUS, body:&AuthenticationStatus{0}}
     client.wt <- msg
+
+    client.ResetClient(client.uid)
 
     route.AddClient(client)
     cluster.AddClient(client.uid)
@@ -119,6 +129,7 @@ func (client *Client) SaveUnAckMessage() {
 
 func (client *Client) Write() {
     seq := 0
+    rst := false
     for {
         msg := <- client.wt
         if msg == nil {
@@ -131,7 +142,14 @@ func (client *Client) Write() {
         if msg.cmd == MSG_IM {
             client.AddUnAckMessage(msg)
         }
+		if rst {
+			continue
+		}
         SendMessage(client.conn, msg)
+        if msg.cmd == MSG_RST {
+            client.conn.Close()
+            rst = true
+        }
     }
 }
 

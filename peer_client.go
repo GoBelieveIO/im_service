@@ -46,6 +46,14 @@ func (peer *PeerClient) ContainUid(uid int64) bool {
     return ok
 }
 
+func (peer *PeerClient) ResetClient(uid int64) {
+	//单点登录
+    c := route.FindClient(uid)
+    if c != nil {
+        c.wt <- &Message{cmd:MSG_RST}
+    }
+}
+
 func (peer *PeerClient) HandleAddClient(uid int64) {
     peer.mutex.Lock()
     defer peer.mutex.Unlock()
@@ -55,6 +63,9 @@ func (peer *PeerClient) HandleAddClient(uid int64) {
     }
     log.Println("add uid:", uid)
     peer.uids[uid] = struct{}{}
+
+    peer.ResetClient(uid)
+
     c := storage.LoadOfflineMessage(uid)
     if c != nil {
         for m := range c {

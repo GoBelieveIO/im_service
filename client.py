@@ -7,6 +7,7 @@ MSG_AUTH = 2
 MSG_AUTH_STATUS = 3
 MSG_IM = 4
 MSG_ACK = 5
+MSG_RST = 6
 class Authentication:
     def __init__(self):
         self.uid = 0
@@ -55,6 +56,25 @@ def recv_message(sock):
         return cmd, seq, content
 
 
+
+def recv_rst(uid):
+    seq = 0
+    address = ("127.0.0.1", 23000)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
+    sock.connect(address)
+    auth = Authentication()
+    auth.uid = uid
+    seq = seq + 1
+    send_message(MSG_AUTH, seq, auth, sock)
+    cmd, _, msg = recv_message(sock)
+    if cmd != MSG_AUTH_STATUS or msg != 0:
+        return
+    print "auth success"
+
+    cmd, s, msg = recv_message(sock)
+    print "cmd", cmd
+    assert(cmd == MSG_RST)
+
 count = 1000000
     
 def recv_client(uid):
@@ -72,7 +92,7 @@ def recv_client(uid):
     print "auth success"
     for _ in range(count):
         cmd, s, msg = recv_message(sock)
-        #print "cmd:", cmd, msg.content, msg.sender, msg.receiver
+        print "cmd:", cmd, msg.content, msg.sender, msg.receiver
         seq += 1
         send_message(MSG_ACK, seq, s, sock)
 
@@ -102,15 +122,32 @@ def send_client(uid, receiver):
 
     print "send success"
 
-    
-def main():
-
+def TestSendAndRecv():
     t3 = threading.Thread(target=recv_client, args=(13635273142,))
+    t2.setDaemon(True)
     t3.start()
 
     t2 = threading.Thread(target=send_client, args=(13635273143,13635273142))
+    t2.setDaemon(True)
     t2.start()
 
+    while True:
+        time.sleep(1)
+    
+def TestMultiLogin():
+    t3 = threading.Thread(target=recv_rst, args=(13635273142,))
+    t3.setDaemon(True)
+    t3.start()
+
+    t2 = threading.Thread(target=recv_rst, args=(13635273142,))
+    t2.setDaemon(True)
+    t2.start()
+    while True:
+        time.sleep(1)
+
+    
+def main():
+    TestMultiLogin()
 
 if __name__ == "__main__":
     main()

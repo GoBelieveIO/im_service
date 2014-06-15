@@ -10,6 +10,7 @@ const MSG_AUTH = 2
 const MSG_AUTH_STATUS = 3
 const MSG_IM = 4
 const MSG_ACK = 5
+const MSG_RST = 6
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -180,6 +181,17 @@ func WriteACK(conn *net.TCPConn, seq int, ack MessageACK) {
     }
 }
 
+func WriteRST(conn *net.TCPConn, seq int) {
+    var length int32 = 0
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_RST, buffer)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
 func SendMessage(conn *net.TCPConn, msg *Message) {
     if msg.cmd == MSG_AUTH {
         WriteAuth(conn, msg.seq, msg.body.(*Authentication))
@@ -193,6 +205,8 @@ func SendMessage(conn *net.TCPConn, msg *Message) {
         WriteRemoveClient(conn, msg.seq, msg.body.(int64))
     } else if msg.cmd == MSG_ACK {
         WriteACK(conn, msg.seq, msg.body.(MessageACK))
+    } else if msg.cmd == MSG_RST {
+        WriteRST(conn, msg.seq)
     } else {
         log.Println("unknow cmd", msg.cmd)
     }
