@@ -17,6 +17,10 @@ func (peer *Peer) PeerID() int64 {
     return i << 32 | int64(peer.port)
 }
 
+func (peer *Peer) Connected() bool {
+    return peer.conn != nil
+}
+
 func (peer *Peer) Read() {
     for {
         msg := ReceiveMessage(peer.conn)

@@ -34,6 +34,9 @@ func (cluster *Cluster) Run() {
         select {
         case msg := <- cluster.c:
             for _, peer := range cluster.peers {
+                if !peer.Connected() {
+                    continue
+                }
                 select {
                 case peer.wt <- msg:
                 case <-time.After(1*time.Second):
