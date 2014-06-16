@@ -44,8 +44,9 @@ func (cluster *Cluster) Run() {
     }
 }
 
-func (cluster *Cluster) AddClient(uid int64) {
-    msg := &Message{cmd:MSG_ADD_CLIENT, body:uid}
+func (cluster *Cluster) AddClient(uid int64, ts int32) {
+    ac := &MessageAddClient{uid, ts}
+    msg := &Message{cmd:MSG_ADD_CLIENT, body:ac}
     cluster.c <- msg
 }
 

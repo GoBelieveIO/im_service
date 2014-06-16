@@ -32,7 +32,7 @@ func (peer *PeerClient) Read() {
         }
         log.Println("msg:", msg.cmd)
         if msg.cmd == MSG_ADD_CLIENT {
-            peer.HandleAddClient(msg.body.(int64))
+            peer.HandleAddClient(msg.body.(*MessageAddClient))
         } else if msg.cmd == MSG_REMOVE_CLIENT {
             peer.HandleRemoveClient(msg.body.(int64))
         } else if msg.cmd == MSG_HEARTBEAT {
@@ -49,17 +49,20 @@ func (peer *PeerClient) ContainUid(uid int64) bool {
     return ok
 }
 
-func (peer *PeerClient) ResetClient(uid int64) {
+func (peer *PeerClient) ResetClient(uid int64, ts int32) {
 	//单点登录
     c := route.FindClient(uid)
     if c != nil {
-        c.wt <- &Message{cmd:MSG_RST}
+        if c.tm.Unix() <= int64(ts) {
+            c.wt <- &Message{cmd:MSG_RST}
+        }
     }
 }
 
-func (peer *PeerClient) HandleAddClient(uid int64) {
+func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
     peer.mutex.Lock()
     defer peer.mutex.Unlock()
+    uid := ac.uid
     if _, ok := peer.uids[uid]; ok {
         log.Printf("uid:%d exists\n", uid)
         return
@@ -67,7 +70,7 @@ func (peer *PeerClient) HandleAddClient(uid int64) {
     log.Println("add uid:", uid)
     peer.uids[uid] = struct{}{}
 
-    peer.ResetClient(uid)
+    peer.ResetClient(uid, ac.timestamp)
 
     c := storage.LoadOfflineMessage(uid)
     if c != nil {

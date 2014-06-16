@@ -77,14 +77,12 @@ func (route *Route) FindClient(uid int64) *Client{
     }
 }
 
-func (route *Route) GetClientUids() []int64 {
+func (route *Route) GetClientUids() map[int64]int32 {
     route.mutex.Lock()
     defer route.mutex.Unlock()
-    uids := make([]int64, len(route.clients))
-    i := 0
-    for uid := range route.clients {
-        uids[i] = uid
-        i++
+    uids := make(map[int64]int32)
+    for uid, c := range route.clients {
+        uids[uid] = int32(c.tm.Unix())
     }
     return uids
 }

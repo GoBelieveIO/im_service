@@ -79,8 +79,9 @@ func (peer *Peer) Stop() {
 
 func (peer *Peer) AddAllClient() {
     uids := route.GetClientUids()
-    for _, uid := range uids {
-        msg := &Message{cmd:MSG_ADD_CLIENT, body:uid}
+    for uid, ts := range uids {
+        ac := &MessageAddClient{uid, ts}
+        msg := &Message{cmd:MSG_ADD_CLIENT, body:ac}
         peer.wt <- msg
     }
 }

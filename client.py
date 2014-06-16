@@ -78,10 +78,12 @@ def recv_rst(uid):
     sock1, seq1 = connect_server(uid, 23000)
     sock2, seq2 = connect_server(uid, 23000)
 
-    cmd, s, msg = recv_message(sock1)
-    print "cmd", cmd
-    if cmd == MSG_RST:
-        task += 1
+    while True:
+        cmd, s, msg = recv_message(sock1)
+        print "cmd", cmd
+        if cmd == MSG_RST:
+            task += 1
+            break
 
 def recv_cluster_rst(uid):
     global task
@@ -89,10 +91,12 @@ def recv_cluster_rst(uid):
     time.sleep(2)
     sock2, seq2 = connect_server(uid, 24000)
 
-    cmd, s, msg = recv_message(sock1)
-    print "cmd", cmd
-    if cmd == MSG_RST:
-        task += 1
+    while True:
+        cmd, s, msg = recv_message(sock1)
+        print "cmd", cmd
+        if cmd == MSG_RST:
+            task += 1
+            break
 
 count = 1
     

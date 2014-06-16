@@ -31,6 +31,11 @@ type AuthenticationStatus struct {
     status int32
 }
 
+type MessageAddClient struct {
+    uid int64
+    timestamp int32
+}
+
 type Message struct {
     cmd int
     seq int
@@ -83,7 +88,13 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
         binary.Read(buffer, binary.BigEndian, &im.receiver)
         im.content = string(buff[16:])
         return &Message{MSG_IM, int(seq), im}
-    } else if cmd == MSG_ADD_CLIENT || cmd == MSG_REMOVE_CLIENT{
+    } else if cmd == MSG_ADD_CLIENT {
+        buffer := bytes.NewBuffer(buff)
+        ac := &MessageAddClient{}
+        binary.Read(buffer, binary.BigEndian, &ac.uid)
+        binary.Read(buffer, binary.BigEndian, &ac.timestamp)
+        return &Message{int(cmd), int(seq), ac}
+    } else if cmd == MSG_REMOVE_CLIENT{
         buffer := bytes.NewBuffer(buff)
         var uid int64
         binary.Read(buffer, binary.BigEndian, &uid)
@@ -149,11 +160,12 @@ func  WriteAuthStatus(conn *net.TCPConn, seq int, auth *AuthenticationStatus) {
     }
 }
 
-func WriteAddClient(conn *net.TCPConn, seq int, uid int64) {
-    var length int32  = 8
+func WriteAddClient(conn *net.TCPConn, seq int, ac *MessageAddClient) {
+    var length int32  = 12
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_ADD_CLIENT, buffer)
-    binary.Write(buffer, binary.BigEndian, uid)
+    binary.Write(buffer, binary.BigEndian, ac.uid)
+    binary.Write(buffer, binary.BigEndian, ac.timestamp)
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
@@ -215,7 +227,7 @@ func SendMessage(conn *net.TCPConn, msg *Message) {
     } else if msg.cmd == MSG_IM {
         WriteMessage(conn, msg.seq, msg.body.(*IMMessage))
     } else if msg.cmd == MSG_ADD_CLIENT {
-        WriteAddClient(conn, msg.seq, msg.body.(int64))
+        WriteAddClient(conn, msg.seq, msg.body.(*MessageAddClient))
     } else if msg.cmd == MSG_REMOVE_CLIENT {
         WriteRemoveClient(conn, msg.seq, msg.body.(int64))
     } else if msg.cmd == MSG_ACK {

@@ -6,6 +6,7 @@ import "time"
 
 const CLIENT_TIMEOUT = 20
 type Client struct {
+    tm time.Time
     wt chan *Message
     uid int64
     conn *net.TCPConn
@@ -67,6 +68,7 @@ func (client *Client) ResetClient(uid int64) {
 }
 
 func (client *Client) HandleAuth(login *Authentication) {
+    client.tm = time.Now()
     client.uid = login.uid
     log.Println("auth:", login.uid)
     msg := &Message{cmd:MSG_AUTH_STATUS, body:&AuthenticationStatus{0}}
@@ -75,7 +77,7 @@ func (client *Client) HandleAuth(login *Authentication) {
     client.ResetClient(client.uid)
 
     route.AddClient(client)
-    cluster.AddClient(client.uid)
+    cluster.AddClient(client.uid, int32(client.tm.Unix()))
     client.SendOfflineMessage()
 }
 
