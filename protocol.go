@@ -1,7 +1,6 @@
 package main
 import "encoding/binary"
 import "io"
-import "net"
 import "bytes"
 import "log"
 
@@ -12,6 +11,7 @@ const MSG_IM = 4
 const MSG_ACK = 5
 const MSG_RST = 6
 const MSG_GROUP_NOTIFICATION = 7
+const MSG_GROUP_IM = 8
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -32,7 +32,6 @@ type AuthenticationStatus struct {
     status int32
 }
 
-
 type GroupNotification string
 
 type MessageAddClient struct {
@@ -46,7 +45,7 @@ type Message struct {
     body interface{}
 }
 
-func ReceiveMessage(conn *net.TCPConn) *Message {
+func ReceiveMessage(conn io.Reader) *Message {
     buff := make([]byte, 12)
     _, err := io.ReadFull(conn, buff)
     if err != nil {
@@ -82,7 +81,7 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
         var status int32
         binary.Read(buffer, binary.BigEndian, &status)
         return &Message{MSG_AUTH_STATUS, int(seq), &AuthenticationStatus{status}}
-    } else if cmd == MSG_IM {
+    } else if cmd == MSG_IM || cmd == MSG_GROUP_IM{
         if len < 16 {
             return nil
         }
@@ -91,7 +90,7 @@ func ReceiveMessage(conn *net.TCPConn) *Message {
         binary.Read(buffer, binary.BigEndian, &im.sender)
         binary.Read(buffer, binary.BigEndian, &im.receiver)
         im.content = string(buff[16:])
-        return &Message{MSG_IM, int(seq), im}
+        return &Message{int(cmd), int(seq), im}
     } else if cmd == MSG_ADD_CLIENT {
         buffer := bytes.NewBuffer(buff)
         ac := &MessageAddClient{}
@@ -125,7 +124,7 @@ func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {
     buffer.WriteByte(byte(0))
 }
 
-func WriteMessage(conn *net.TCPConn, seq int, message *IMMessage) {
+func WriteMessage(conn io.Writer, seq int, message *IMMessage) {
     var length int32 = int32(len(message.content) + 16)
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_IM, buffer)
@@ -140,7 +139,7 @@ func WriteMessage(conn *net.TCPConn, seq int, message *IMMessage) {
     }
 }
 
-func WriteAuth(conn *net.TCPConn, seq int, auth *Authentication) {
+func WriteAuth(conn io.Writer, seq int, auth *Authentication) {
     var length int32  = 8
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_AUTH, buffer)
@@ -152,7 +151,7 @@ func WriteAuth(conn *net.TCPConn, seq int, auth *Authentication) {
     }
 }
 
-func  WriteAuthStatus(conn *net.TCPConn, seq int, auth *AuthenticationStatus) {
+func  WriteAuthStatus(conn io.Writer, seq int, auth *AuthenticationStatus) {
     var length int32  = 4
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_AUTH_STATUS, buffer)
@@ -164,7 +163,7 @@ func  WriteAuthStatus(conn *net.TCPConn, seq int, auth *AuthenticationStatus) {
     }
 }
 
-func WriteAddClient(conn *net.TCPConn, seq int, ac *MessageAddClient) {
+func WriteAddClient(conn io.Writer, seq int, ac *MessageAddClient) {
     var length int32  = 12
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_ADD_CLIENT, buffer)
@@ -177,7 +176,7 @@ func WriteAddClient(conn *net.TCPConn, seq int, ac *MessageAddClient) {
     }
 }
 
-func WriteRemoveClient(conn *net.TCPConn, seq int, uid int64) {
+func WriteRemoveClient(conn io.Writer, seq int, uid int64) {
     var length int32  = 8
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_REMOVE_CLIENT, buffer)
@@ -189,7 +188,7 @@ func WriteRemoveClient(conn *net.TCPConn, seq int, uid int64) {
     }
 }
 
-func WriteACK(conn *net.TCPConn, seq int, ack MessageACK) {
+func WriteACK(conn io.Writer, seq int, ack MessageACK) {
     var length int32  = 4
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_ACK, buffer)
@@ -201,7 +200,7 @@ func WriteACK(conn *net.TCPConn, seq int, ack MessageACK) {
     }
 }
 
-func WriteRST(conn *net.TCPConn, seq int) {
+func WriteRST(conn io.Writer, seq int) {
     var length int32 = 0
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_RST, buffer)
@@ -212,7 +211,7 @@ func WriteRST(conn *net.TCPConn, seq int) {
     }
 }
 
-func WriteHeartbeat(conn *net.TCPConn, seq int) {
+func WriteHeartbeat(conn io.Writer, seq int) {
     var length int32 = 0
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_HEARTBEAT, buffer)
@@ -223,12 +222,12 @@ func WriteHeartbeat(conn *net.TCPConn, seq int) {
     }
 }
 
-func SendMessage(conn *net.TCPConn, msg *Message) {
+func SendMessage(conn io.Writer, msg *Message) {
     if msg.cmd == MSG_AUTH {
         WriteAuth(conn, msg.seq, msg.body.(*Authentication))
     } else if msg.cmd == MSG_AUTH_STATUS {
         WriteAuthStatus(conn, msg.seq, msg.body.(*AuthenticationStatus))
-    } else if msg.cmd == MSG_IM {
+    } else if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
         WriteMessage(conn, msg.seq, msg.body.(*IMMessage))
     } else if msg.cmd == MSG_ADD_CLIENT {
         WriteAddClient(conn, msg.seq, msg.body.(*MessageAddClient))

@@ -167,17 +167,37 @@ def TestCluster():
 def TestSendAndRecv():
     global task
     task = 0
+ 
     t3 = threading.Thread(target=recv_client, args=(13635273142,))
     t3.setDaemon(True)
     t3.start()
+
     
     t2 = threading.Thread(target=send_client, args=(13635273143,13635273142))
     t2.setDaemon(True)
     t2.start()
-
+    
     while task < 2:
         time.sleep(1)
     print "test single completed"
+
+def TestOffline():
+    global task
+    task = 0
+    t2 = threading.Thread(target=send_client, args=(13635273143,13635273142))
+    t2.setDaemon(True)
+    t2.start()
+    
+    time.sleep(1)
+
+    t3 = threading.Thread(target=recv_client, args=(13635273142,))
+    t3.setDaemon(True)
+    t3.start()
+
+    while task < 2:
+        time.sleep(1)
+
+    print "test offline completed"
     
 def TestMultiLogin():
     global task
@@ -215,6 +235,8 @@ def main():
     TestClusterMultiLogin()
     time.sleep(1)
     TestSendAndRecv()
+    time.sleep(1)
+    TestOffline()
     time.sleep(1)
     TestCluster()
     time.sleep(1)

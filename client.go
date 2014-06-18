@@ -52,7 +52,7 @@ func (client *Client) SendOfflineMessage() {
         c := storage.LoadOfflineMessage(client.uid)
         if c != nil {
             for m := range c {
-                client.wt <- &Message{cmd:MSG_IM, body:m}
+                client.wt <- m
             }
             storage.ClearOfflineMessage(client.uid)
         }
@@ -90,8 +90,34 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
         if peer != nil {
             peer.wt <- &Message{cmd:MSG_IM, body:msg}
         } else {
-            storage.SaveOfflineMessage(msg)
+            storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
         }
+    }
+    client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
+}
+
+func (client *Client) SendGroupMessage(uid int64, msg *IMMessage) {
+    other := route.FindClient(uid)
+    if other != nil {
+        other.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
+    } else {
+        peer := route.FindPeerClient(uid)
+        if peer != nil {
+            peer.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
+        } else {
+            //storage.SaveOfflineMessage(msg)
+        }
+    }
+}
+
+func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
+    group := group_manager.FindGroup(msg.receiver)
+    if group != nil {
+        log.Println("can't find group:", msg.receiver)
+        return
+    }
+    for member := range group.Members() {
+        client.SendGroupMessage(member, msg)
     }
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
 }
@@ -128,7 +154,7 @@ func (client *Client) SaveUnAckMessage() {
     client.mutex.Lock()
     defer client.mutex.Unlock()
     for _, msg := range client.unacks {
-        storage.SaveOfflineMessage(msg.body.(*IMMessage))
+        storage.SaveOfflineMessage(client.uid, msg)
     }
 }
 
@@ -145,9 +171,10 @@ func (client *Client) Write() {
         }
         seq++
         msg.seq = seq
-        if msg.cmd == MSG_IM {
+        if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
             client.AddUnAckMessage(msg)
         }
+
 		if rst {
 			continue
 		}

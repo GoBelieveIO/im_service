@@ -12,17 +12,21 @@ const VERSION = 1<<16 //1.0
 
 const OFFLINE = "offline"
 
+type OfflineMessage struct {
+    receiver int64
+    message *Message
+}
 //离线消息存储
 type Storage struct {
     files map[int64]*os.File
-    ic chan *IMMessage 
+    ic chan *OfflineMessage 
     cc chan int64
     root string
 }
 
 func NewStorage(root string) *Storage {
     storage := new(Storage)
-    storage.ic = make(chan *IMMessage)
+    storage.ic = make(chan *OfflineMessage)
     storage.cc = make(chan int64)
     storage.files = make(map[int64]*os.File)
     storage.root = root
@@ -38,8 +42,8 @@ func (storage *Storage) Start() {
     go storage.Run()
 }
 
-func (storage *Storage) SaveOfflineMessage(message *IMMessage) {
-    storage.ic <- message
+func (storage *Storage) SaveOfflineMessage(receiver int64, message *Message) {
+    storage.ic <- &OfflineMessage{receiver, message}
     log.Println("save off line message")
 }
 
@@ -47,7 +51,7 @@ func (storage *Storage) ClearOfflineMessage(uid int64) {
     storage.cc <- uid
 }
 
-func (storage *Storage) LoadOfflineMessage(uid int64) chan *IMMessage {
+func (storage *Storage) LoadOfflineMessage(uid int64) chan *Message {
     path := storage.GetOfflinePath(uid)
     file, err := os.Open(path)
     if err != nil {
@@ -72,7 +76,7 @@ func (storage *Storage) LoadOfflineMessage(uid int64) chan *IMMessage {
         return nil
     }
 
-    c := make(chan *IMMessage)
+    c := make(chan *Message)
     go func() {
         for {
             msg := storage.ReadMessage(file)
@@ -91,54 +95,12 @@ func (storage *Storage) GetOfflinePath(uid int64) string {
     return fmt.Sprintf("%s/%s/%d", storage.root, OFFLINE, uid)
 }
 
-func (storage *Storage) ReadMessage(file *os.File) *IMMessage {
-    var size int32
-    err := binary.Read(file, binary.BigEndian, &size)
-    if err != nil {
-        return nil
-    }
-    if size < 16 {
-        return nil
-    }
-    var sender int64
-    var receiver int64
-    err = binary.Read(file, binary.BigEndian, &sender)
-    if err != nil {
-        return nil
-    }
-    
-    err = binary.Read(file, binary.BigEndian, &receiver)
-    if err != nil {
-        return nil
-    }
-    
-    buf := make([]byte, size - 16)
-    n, err := file.Read(buf)
-    if err != nil || n != int(size - 16) {
-        return nil
-    }
-    return &IMMessage{sender, receiver, string(buf)}
+func (storage *Storage) ReadMessage(file *os.File) *Message {
+    return ReceiveMessage(file)
 }
 
-func (storage *Storage) WriteMessage(file *os.File, message *IMMessage) {
-    var size int32 = int32(16 + len(message.content))
-    err := binary.Write(file, binary.BigEndian, size)
-    if err != nil {
-        log.Println("file:", file)
-        log.Panicln(err)
-    }
-    err = binary.Write(file, binary.BigEndian, message.sender)
-    if err != nil {
-        log.Panicln(err)
-    }
-    err = binary.Write(file, binary.BigEndian, message.receiver)
-    if err != nil {
-        log.Panicln(err)
-    }
-    n, err := file.Write([]byte(message.content))
-    if err != nil || n != len(message.content) {
-        log.Panicln(err)
-    }
+func (storage *Storage) WriteMessage(file *os.File, message *Message) {
+    SendMessage(file,message)
 }
 
 func (storage *Storage) ReadHeader(file *os.File) (magic int, version int) {
@@ -175,7 +137,7 @@ func (storage *Storage) WriteHeader(file *os.File) {
 }
 
 //保存离线消息
-func (storage *Storage) SaveMessage(msg *IMMessage) {
+func (storage *Storage) SaveMessage(msg *OfflineMessage) {
     _, ok := storage.files[msg.receiver]
     if !ok {
         path := storage.GetOfflinePath(msg.receiver)
@@ -201,7 +163,7 @@ func (storage *Storage) SaveMessage(msg *IMMessage) {
         }
         storage.files[msg.receiver] = file
     }
-    storage.WriteMessage(storage.files[msg.receiver], msg)
+    storage.WriteMessage(storage.files[msg.receiver], msg.message)
 }
 
 //清空离线消息
