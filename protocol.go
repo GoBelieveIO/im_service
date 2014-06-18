@@ -11,6 +11,7 @@ const MSG_AUTH_STATUS = 3
 const MSG_IM = 4
 const MSG_ACK = 5
 const MSG_RST = 6
+const MSG_GROUP_NOTIFICATION = 7
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -30,6 +31,9 @@ type Authentication struct {
 type AuthenticationStatus struct {
     status int32
 }
+
+
+type GroupNotification string
 
 type MessageAddClient struct {
     uid int64

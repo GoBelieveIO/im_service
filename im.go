@@ -12,6 +12,8 @@ import "runtime"
 var route *Route
 var cluster *Cluster 
 var storage *Storage
+var group_manager *GroupManager
+var group_server *GroupServer
 
 var STORAGE_ROOT = "/tmp"
 var PORT = 23000
@@ -111,6 +113,11 @@ func main() {
     cluster.Start()
     storage = NewStorage(STORAGE_ROOT)
     storage.Start()
+    group_server = NewGroupServer(PORT+2)
+    group_server.Start()
+    group_manager = NewGroupManager()
+    group_manager.Start()
+
     go ListenPeerClient()
     ListenClient()
 }

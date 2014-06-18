@@ -1,0 +1,306 @@
+package main
+import "github.com/gorilla/mux"
+import "log"
+import "fmt"
+import "net/http"
+import "strconv"
+import "io/ioutil"
+import "encoding/json"
+import "github.com/garyburd/redigo/redis"
+
+type GroupServer struct {
+    port int
+}
+
+func NewGroupServer(port int) *GroupServer {
+    server := new(GroupServer)
+    server.port = port
+    return server
+}
+
+func (group_server *GroupServer) SendMessage(receiver int64, msg *Message) {
+    other := route.FindClient(receiver)
+    if other != nil {
+        other.wt <- msg
+    } else {
+        peer := route.FindPeerClient(receiver)
+        if peer != nil {
+            peer.wt <- msg
+        } else {
+            //storage.SaveOfflineMessage(msg)
+        }
+    }
+}
+
+func (group_server *GroupServer) PublishMessage(channel string, msg string) {
+    c, err := redis.Dial("tcp", "127.0.0.1:6379")
+    if err != nil {
+        log.Println("error:", err)
+        return
+    }
+    _, err = c.Do("PUBLISH", channel, msg)
+    if err != nil {
+        log.Println("error:", err)
+        return
+    }
+    log.Println("publish message:", channel, " ", msg)
+}
+
+func (group_server *GroupServer) CreateGroup(gname string, 
+	master int64, members []int64) int64 {
+    
+    gid := CreateGroup(master, gname)
+    if gid == 0 {
+        return 0
+    }
+    for _, member := range members {
+        AddGroupMember(gid, member)
+    }
+
+    v := make(map[string]interface{})
+    v["group_id"] = gid
+    v["master"] = master
+    v["name"] = gname
+    v["members"] = members
+    op := make(map[string]interface{})
+    op["create"] = v
+    b, _ := json.Marshal(op)
+    msg := &Message{cmd:MSG_GROUP_NOTIFICATION, body:string(b)}
+    for _, member := range members {
+        group_server.SendMessage(member, msg)
+    }
+    content := fmt.Sprintf("%d", gid)
+    group_server.PublishMessage("group_create", content)
+    for _, member := range members {
+        content = fmt.Sprintf("%d,%d", gid, member)
+        group_server.PublishMessage("group_member_add", content)
+    }
+	return gid
+}
+
+func (group_server *GroupServer) DisbandGroup(gid int64) bool {
+    if !DeleteGroup(gid) {
+        return false
+    }
+    content := fmt.Sprintf("%d", gid)
+    group_server.PublishMessage("group_disband", content)
+
+	group := group_manager.FindGroup(gid)
+    if group == nil {
+        log.Println("can't find group:", gid)
+        return true
+    }
+    v := make(map[string]interface{})
+    v["group_id"] = gid
+    op := make(map[string]interface{})
+    op["disband"] = v
+    b, _ := json.Marshal(op)
+    msg := &Message{cmd:MSG_GROUP_NOTIFICATION, body:string(b)}
+    for member := range group.Members() {
+        group_server.SendMessage(member, msg)        
+    }
+    
+    return true
+}
+
+func (group_server *GroupServer) AddGroupMember(gid int64, uid int64) bool {
+    if !AddGroupMember(gid, uid) {
+        return false
+    }
+    content := fmt.Sprintf("%d,%d", gid, uid)
+    group_server.PublishMessage("group_member_add", content)
+
+	group := group_manager.FindGroup(gid)
+    if group == nil {
+        log.Println("can't find group:", gid)
+        return true
+    }
+    v := make(map[string]interface{})
+    v["group_id"] = gid
+    v["member_id"] = uid
+    op := make(map[string]interface{})
+    op["add_member"] = v
+    b, _ := json.Marshal(op)
+    msg := &Message{cmd:MSG_GROUP_NOTIFICATION, body:string(b)}
+    for member := range group.Members() {
+        group_server.SendMessage(member, msg)        
+    }
+    return true
+}
+
+func (group_server *GroupServer) QuitGroup(gid int64, uid int64) bool {
+    if !RemoveGroupMember(gid, uid) {
+        return false
+    }
+    content := fmt.Sprintf("%d,%d", gid, uid)
+    group_server.PublishMessage("group_member_remove", content)
+
+	group := group_manager.FindGroup(gid)
+    if group == nil {
+        log.Println("can't find group:", gid)
+        return true
+    }
+    v := make(map[string]interface{})
+    v["group_id"] = gid
+    v["member_id"] = uid
+    op := make(map[string]interface{})
+    op["quit_group"] = v
+    b, _ := json.Marshal(op)
+    msg := &Message{cmd:MSG_GROUP_NOTIFICATION, body:string(b)}
+    for member := range group.Members() {
+        group_server.SendMessage(member, msg)        
+    }
+    return true
+}
+
+func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Request) {
+    body, err := ioutil.ReadAll(r.Body)
+    if err != nil {
+        w.WriteHeader(400)
+        return
+    }
+    var v map[string]interface{}
+    err = json.Unmarshal(body, &v)
+    if err != nil {
+        log.Println("error:", err)
+        w.WriteHeader(400)
+        return
+    }
+    if v["master"] == nil || v["members"] == nil || v["name"] == nil {
+        log.Println("error:", err)
+        w.WriteHeader(400)
+        return
+    }
+    if _, ok := v["master"].(float64); !ok {
+        log.Println("error:", err)
+        w.WriteHeader(400)
+        return
+    }
+    master := int64(v["master"].(float64))
+    if _, ok := v["members"].([]interface{}); !ok {
+        w.WriteHeader(400)
+        return
+    }
+    if _, ok := v["name"].(string); !ok {
+        w.WriteHeader(400)
+        return
+    }
+    name := v["name"].(string)
+
+    ms := v["members"].([]interface{})
+    members := make([]int64, len(ms))
+    for i, m := range ms {
+        if _, ok := m.(float64); !ok {
+            w.WriteHeader(400)
+            return
+        }
+        members[i] = int64(m.(float64))
+    }
+    log.Println("create group master:", master, " members:", members)
+
+    gid := group_server.CreateGroup(name, master, members)
+    if gid == 0 {
+        w.WriteHeader(500)
+        return
+    }
+    v = make(map[string]interface{})
+    v["group_id"] = gid
+    b, _ := json.Marshal(v)
+    w.Write(b)
+}
+
+func (group_server *GroupServer) HandleDisband(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    gid, err := strconv.ParseInt(vars["gid"], 10, 64)
+    if err != nil {
+        w.WriteHeader(400)
+        return
+    }
+
+    log.Println("disband", gid)
+    res := group_server.DisbandGroup(gid)
+    if !res {
+        w.WriteHeader(500)
+    } else {
+        w.WriteHeader(200)
+    }
+}
+
+func (group_server *GroupServer) HandleAddGroupMember(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    gid, err := strconv.ParseInt(vars["gid"], 10, 64)
+    if err != nil {
+        w.WriteHeader(400)
+        return
+    }
+
+    body, err := ioutil.ReadAll(r.Body)
+    if err != nil {
+        w.WriteHeader(400)
+        return
+    }
+
+    var v map[string]float64
+    err = json.Unmarshal(body, &v)
+    if err != nil {
+        w.WriteHeader(400)
+        return
+    }
+    if v["uid"] == 0 {
+        w.WriteHeader(400)
+        return
+    }
+    uid := int64(v["uid"])
+    log.Printf("gid:%d add member:%d\n", gid, uid)
+    res := group_server.AddGroupMember(gid, uid)
+    if !res {
+        w.WriteHeader(500)
+    } else {
+        w.WriteHeader(200)
+    }
+}
+
+func (group_server *GroupServer) HandleQuitGroup(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    gid, _ := strconv.ParseInt(vars["gid"], 10, 64)
+    mid, _ := strconv.ParseInt(vars["mid"], 10, 64)
+    log.Println("quit group", gid, " ", mid)
+
+    res := group_server.QuitGroup(gid, mid)
+    if !res {
+        w.WriteHeader(500)
+    } else {
+        w.WriteHeader(200)
+    }
+}
+
+func (group_server *GroupServer) Run() {
+    r := mux.NewRouter()
+    r.HandleFunc("/groups/", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleCreate(w, r)
+	}).Methods("POST")
+
+    r.HandleFunc("/groups/{gid}", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleDisband(w, r)
+	}).Methods("DELETE")
+
+    r.HandleFunc("/groups/{gid}", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleAddGroupMember(w, r)
+	}).Methods("POST")
+    
+    r.HandleFunc("/groups/{gid}/{mid}", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleQuitGroup(w, r)
+	}).Methods("DELETE")
+
+    http.Handle("/", r)
+
+
+    var PORT = group_server.port
+    var BIND_ADDR = ""
+    addr := fmt.Sprintf("%s:%d", BIND_ADDR, PORT)
+	http.ListenAndServe(addr, nil)
+}
+
+func (group_server *GroupServer) Start() {
+    go group_server.Run()
+}
