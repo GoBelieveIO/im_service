@@ -8,13 +8,21 @@ import "io/ioutil"
 import "encoding/json"
 import "github.com/garyburd/redigo/redis"
 
+type BroadcastMessage struct {
+    channel string
+    msg string
+}
+
 type GroupServer struct {
     port int
+    c chan *BroadcastMessage
+    redis redis.Conn
 }
 
 func NewGroupServer(port int) *GroupServer {
     server := new(GroupServer)
     server.port = port
+    server.c = make(chan *BroadcastMessage)
     return server
 }
 
@@ -27,23 +35,13 @@ func (group_server *GroupServer) SendMessage(receiver int64, msg *Message) {
         if peer != nil {
             peer.wt <- msg
         } else {
-            //storage.SaveOfflineMessage(msg)
+            storage.SaveOfflineMessage(receiver, msg)
         }
     }
 }
 
 func (group_server *GroupServer) PublishMessage(channel string, msg string) {
-    c, err := redis.Dial("tcp", "127.0.0.1:6379")
-    if err != nil {
-        log.Println("error:", err)
-        return
-    }
-    _, err = c.Do("PUBLISH", channel, msg)
-    if err != nil {
-        log.Println("error:", err)
-        return
-    }
-    log.Println("publish message:", channel, " ", msg)
+    group_server.c <- &BroadcastMessage{channel, msg}
 }
 
 func (group_server *GroupServer) CreateGroup(gname string, 
@@ -301,6 +299,32 @@ func (group_server *GroupServer) Run() {
 	http.ListenAndServe(addr, nil)
 }
 
+func (group_server *GroupServer) Publish(channel string, msg string) bool {
+    if group_server.redis == nil {
+        c, err := redis.Dial("tcp", "127.0.0.1:6379")
+        if err != nil {
+            log.Println("error:", err)
+            return false
+        }
+        group_server.redis = c
+    }
+    _, err := group_server.redis.Do("PUBLISH", channel, msg)
+    if err != nil {
+        log.Println("error:", err)
+        group_server.redis = nil
+        return false
+    }
+    log.Println("publish message:", channel, " ", msg)
+    return true
+}
+
+func (group_server *GroupServer) RunPublish() {
+    for {
+        m := <- group_server.c
+        group_server.Publish(m.channel, m.msg)
+    }
+}
 func (group_server *GroupServer) Start() {
+    go group_server.RunPublish()
     go group_server.Run()
 }

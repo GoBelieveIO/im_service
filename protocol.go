@@ -32,8 +32,6 @@ type AuthenticationStatus struct {
     status int32
 }
 
-type GroupNotification string
-
 type MessageAddClient struct {
     uid int64
     timestamp int32
@@ -109,6 +107,8 @@ func ReceiveMessage(conn io.Reader) *Message {
         return &Message{int(cmd), int(seq), MessageACK(ack)}
     } else if cmd == MSG_HEARTBEAT {
         return &Message{int(cmd), int(seq), nil}
+    } else if cmd == MSG_GROUP_NOTIFICATION {
+        return &Message{int(cmd), int(seq), string(buff)}
     } else {
         return nil
     }
@@ -124,10 +124,10 @@ func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {
     buffer.WriteByte(byte(0))
 }
 
-func WriteMessage(conn io.Writer, seq int, message *IMMessage) {
+func WriteMessage(conn io.Writer, cmd byte, seq int, message *IMMessage) {
     var length int32 = int32(len(message.content) + 16)
     buffer := new(bytes.Buffer)
-    WriteHeader(length, int32(seq), MSG_IM, buffer)
+    WriteHeader(length, int32(seq), cmd, buffer)
     binary.Write(buffer, binary.BigEndian, message.sender)
     binary.Write(buffer, binary.BigEndian, message.receiver)
     buffer.Write([]byte(message.content))
@@ -222,13 +222,25 @@ func WriteHeartbeat(conn io.Writer, seq int) {
     }
 }
 
+func WriteGroupNotification(conn io.Writer, seq int, notification string) {
+    var length int32 = int32(len(notification))
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_GROUP_NOTIFICATION, buffer)
+    buffer.Write([]byte(notification))
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
 func SendMessage(conn io.Writer, msg *Message) {
     if msg.cmd == MSG_AUTH {
         WriteAuth(conn, msg.seq, msg.body.(*Authentication))
     } else if msg.cmd == MSG_AUTH_STATUS {
         WriteAuthStatus(conn, msg.seq, msg.body.(*AuthenticationStatus))
     } else if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-        WriteMessage(conn, msg.seq, msg.body.(*IMMessage))
+        WriteMessage(conn, byte(msg.cmd), msg.seq, msg.body.(*IMMessage))
     } else if msg.cmd == MSG_ADD_CLIENT {
         WriteAddClient(conn, msg.seq, msg.body.(*MessageAddClient))
     } else if msg.cmd == MSG_REMOVE_CLIENT {
@@ -239,6 +251,8 @@ func SendMessage(conn io.Writer, msg *Message) {
         WriteRST(conn, msg.seq)
     } else if msg.cmd == MSG_HEARTBEAT {
         WriteHeartbeat(conn, msg.seq)
+    } else if msg.cmd == MSG_GROUP_NOTIFICATION {
+        WriteGroupNotification(conn, msg.seq, msg.body.(string))
     } else {
         log.Println("unknow cmd", msg.cmd)
     }

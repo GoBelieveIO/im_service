@@ -31,6 +31,8 @@ func (peer *Peer) Read() {
         log.Println("msg:", msg.cmd)
         if msg.cmd == MSG_IM {
             peer.HandleIMMessage(msg.body.(*IMMessage))
+        } else if msg.cmd == MSG_GROUP_IM {
+            peer.HandleGroupIMMessage(msg.body.(*IMMessage))
         }
     }
 }
@@ -42,6 +44,22 @@ func (peer *Peer) HandleIMMessage(msg *IMMessage) {
     } else {
         log.Println("can't find client:", msg.receiver)
         storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
+    }
+}
+
+func (peer *Peer) HandleGroupIMMessage(msg *IMMessage) {
+    group := group_manager.FindGroup(msg.receiver)
+    if group == nil {
+        log.Println("can't find group:", msg.receiver)
+        return
+    }
+    for member := range group.Members() {
+        other := route.FindClient(member)
+        if other != nil {
+            other.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
+        } else {
+            storage.SaveOfflineMessage(member, &Message{cmd:MSG_GROUP_IM, body:msg})
+        }
     }
 }
 

@@ -39,6 +39,8 @@ func (client *Client) Read() {
             client.HandleAuth(msg.body.(*Authentication))
         } else if msg.cmd == MSG_IM {
             client.HandleIMMessage(msg.body.(*IMMessage), msg.seq)
+        } else if msg.cmd == MSG_GROUP_IM {
+            client.HandleGroupIMMessage(msg.body.(*IMMessage), msg.seq)
         } else if msg.cmd == MSG_ACK {
             client.HandleACK(msg.body.(MessageACK))
         } else if msg.cmd == MSG_HEARTBEAT {
@@ -96,28 +98,28 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
 }
 
-func (client *Client) SendGroupMessage(uid int64, msg *IMMessage) {
-    other := route.FindClient(uid)
-    if other != nil {
-        other.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
-    } else {
-        peer := route.FindPeerClient(uid)
-        if peer != nil {
-            peer.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
-        } else {
-            //storage.SaveOfflineMessage(msg)
-        }
-    }
-}
-
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
     group := group_manager.FindGroup(msg.receiver)
-    if group != nil {
+    if group == nil {
         log.Println("can't find group:", msg.receiver)
         return
     }
+    peers := make(map[*PeerClient]struct{})
     for member := range group.Members() {
-        client.SendGroupMessage(member, msg)
+        other := route.FindClient(member)
+        if other != nil {
+            other.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
+        } else {
+            peer := route.FindPeerClient(member)
+            if peer != nil {
+                peers[peer] = struct{}{}
+            } else {
+                storage.SaveOfflineMessage(member, &Message{cmd:MSG_GROUP_IM, body:msg})           
+            }
+        }
+    }
+    for peer, _ := range peers {
+        peer.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
     }
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
 }
