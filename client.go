@@ -106,6 +106,10 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
     }
     peers := make(map[*PeerClient]struct{})
     for member := range group.Members() {
+        //群消息不再发送给自己
+        if member == client.uid {
+            continue
+        }
         other := route.FindClient(member)
         if other != nil {
             other.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
@@ -139,11 +143,12 @@ func (client *Client) RemoveUnAckMessage(ack MessageACK) {
             break
         }
     }
-    client.unacks = client.unacks[pos+1:]
     if pos == -1 {
         log.Println("invalid ack seq:", ack)
+    } else {
+        client.unacks = client.unacks[pos+1:]
+        log.Println("remove unack msg:", len(client.unacks))
     }
-    log.Println("remove unack msg:", len(client.unacks))
 }
 
 func (client *Client) AddUnAckMessage(msg *Message) {

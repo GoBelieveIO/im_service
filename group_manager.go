@@ -40,7 +40,7 @@ func (group_manager *GroupManager) HandleCreate(data string) {
         log.Printf("group:%d exists\n", gid)
     }
     log.Println("create group:", gid)
-    group_manager.groups[gid] = NewGroup(gid)
+    group_manager.groups[gid] = NewGroup(gid, nil)
 }
 
 func (group_manager *GroupManager) HandleDisband(data string) {

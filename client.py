@@ -58,6 +58,9 @@ def recv_message(sock):
         im.sender, im.receiver = struct.unpack("!qq", content[:16])
         im.content = content[16:]
         return cmd, seq, im
+    elif cmd == MSG_ACK:
+        ack, = struct.unpack("!i", content)
+        return cmd, seq, ack
     else:
         return cmd, seq, content
 
@@ -143,7 +146,12 @@ def recv_group_message_client(uid, port=23000):
 def notification_recv_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_GROUP_NOTIFICATION:
-            return True
+            notification = json.loads(msg)
+            print "cmd:", cmd, " ", msg
+            if notification.has_key("create"):
+                return True
+            else:
+                return False
         else:
             return False
     recv_client(uid, port, handle_message)
@@ -162,7 +170,12 @@ def send_client(uid, receiver, msg_type):
             im.content = "test group %d"%(i,)
         seq += 1
         send_message(msg_type, seq, im, sock)
-        recv_message(sock)
+        while True:
+            cmd, _, msg = recv_message(sock)
+            if cmd == MSG_ACK and msg == seq:
+                break
+            else:
+                print "cmd:", cmd, " ", msg
     task += 1
     print "send success"
 
@@ -252,17 +265,17 @@ def TestGroup():
 
     url = URL + "/groups/"
 
-    group = {"master":100,"members":[1,2], "name":"test"}
+    group = {"master":13635273142,"members":[13635273142], "name":"test"}
     r = requests.post(url, data=json.dumps(group))
     print r.status_code, r.text
     obj = json.loads(r.content)
     group_id = obj["group_id"]
 
     url = URL + "/groups/%s"%str(group_id)
-    r = requests.post(url, data=json.dumps({"uid":1000}))
+    r = requests.post(url, data=json.dumps({"uid":13635273143}))
     print r.status_code, r.text
 
-    url = URL + "/groups/%s/1000"%str(group_id)
+    url = URL + "/groups/%s/13635273143"%str(group_id)
     r = requests.delete(url)
     print r.status_code, r.text
 
@@ -331,6 +344,12 @@ def TestGroupNotification():
 
     print "test group notification completed"    
 def main():
+    TestGroup()
+    time.sleep(1)
+    TestGroupNotification()
+    time.sleep(1)
+    TestGroupMessage()
+    time.sleep(1)
     TestMultiLogin()
     time.sleep(1)
     TestClusterMultiLogin()
@@ -343,12 +362,7 @@ def main():
     time.sleep(1)
     TestTimeout()
     time.sleep(1)
-    TestGroup()
-    time.sleep(1)
-    TestGroupMessage()
-    time.sleep(1)
-    TestGroupNotification()
-    time.sleep(1)
+
 
 if __name__ == "__main__":
     main()

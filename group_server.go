@@ -7,6 +7,8 @@ import "strconv"
 import "io/ioutil"
 import "encoding/json"
 import "github.com/garyburd/redigo/redis"
+import "database/sql"
+import _ "github.com/go-sql-driver/mysql"
 
 type BroadcastMessage struct {
     channel string
@@ -44,15 +46,25 @@ func (group_server *GroupServer) PublishMessage(channel string, msg string) {
     group_server.c <- &BroadcastMessage{channel, msg}
 }
 
+func (group_server *GroupServer) OpenDB() (*sql.DB, error) {
+    db, err := sql.Open("mysql", "root:123456@tcp(127.0.0.1:3306)/im")
+    return db, err
+}
+
 func (group_server *GroupServer) CreateGroup(gname string, 
 	master int64, members []int64) int64 {
-    
-    gid := CreateGroup(master, gname)
+    db, err := group_server.OpenDB()
+    if err != nil {
+        log.Println("error:", err)
+        return 0
+    }
+    defer db.Close()
+    gid := CreateGroup(db, master, gname)
     if gid == 0 {
         return 0
     }
     for _, member := range members {
-        AddGroupMember(gid, member)
+        AddGroupMember(db, gid, member)
     }
 
     v := make(map[string]interface{})
@@ -77,7 +89,14 @@ func (group_server *GroupServer) CreateGroup(gname string,
 }
 
 func (group_server *GroupServer) DisbandGroup(gid int64) bool {
-    if !DeleteGroup(gid) {
+    db, err := group_server.OpenDB()
+    if err != nil {
+        log.Println("error:", err)
+        return false
+    }
+    defer db.Close()
+
+    if !DeleteGroup(db, gid) {
         return false
     }
     content := fmt.Sprintf("%d", gid)
@@ -102,7 +121,14 @@ func (group_server *GroupServer) DisbandGroup(gid int64) bool {
 }
 
 func (group_server *GroupServer) AddGroupMember(gid int64, uid int64) bool {
-    if !AddGroupMember(gid, uid) {
+    db, err := group_server.OpenDB()
+    if err != nil {
+        log.Println("error:", err)
+        return false
+    }
+    defer db.Close()
+
+    if !AddGroupMember(db, gid, uid) {
         return false
     }
     content := fmt.Sprintf("%d,%d", gid, uid)
@@ -127,7 +153,15 @@ func (group_server *GroupServer) AddGroupMember(gid int64, uid int64) bool {
 }
 
 func (group_server *GroupServer) QuitGroup(gid int64, uid int64) bool {
-    if !RemoveGroupMember(gid, uid) {
+    db, err := group_server.OpenDB()
+    if err != nil {
+        log.Println("error:", err)
+        return false
+    }
+    defer db.Close()
+
+
+    if !RemoveGroupMember(db, gid, uid) {
         return false
     }
     content := fmt.Sprintf("%d,%d", gid, uid)

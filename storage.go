@@ -44,7 +44,7 @@ func (storage *Storage) Start() {
 
 func (storage *Storage) SaveOfflineMessage(receiver int64, message *Message) {
     storage.ic <- &OfflineMessage{receiver, message}
-    log.Println("save off line message")
+    log.Println("save off line message:", receiver, " ", message.cmd)
 }
 
 func (storage *Storage) ClearOfflineMessage(uid int64) {
