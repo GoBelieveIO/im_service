@@ -263,7 +263,7 @@ def TestTimeout():
 def TestGroup():
     URL = "http://127.0.0.1:23002"
 
-    url = URL + "/groups/"
+    url = URL + "/groups"
 
     group = {"master":13635273142,"members":[13635273142], "name":"test"}
     r = requests.post(url, data=json.dumps(group))
@@ -271,11 +271,11 @@ def TestGroup():
     obj = json.loads(r.content)
     group_id = obj["group_id"]
 
-    url = URL + "/groups/%s"%str(group_id)
+    url = URL + "/groups/%s/members"%str(group_id)
     r = requests.post(url, data=json.dumps({"uid":13635273143}))
     print r.status_code, r.text
 
-    url = URL + "/groups/%s/13635273143"%str(group_id)
+    url = URL + "/groups/%s/members/13635273143"%str(group_id)
     r = requests.delete(url)
     print r.status_code, r.text
 
@@ -287,7 +287,7 @@ def TestGroup():
 def TestGroupMessage():
     URL = "http://127.0.0.1:23002"
 
-    url = URL + "/groups/"
+    url = URL + "/groups"
 
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
     r = requests.post(url, data=json.dumps(group))
@@ -327,7 +327,7 @@ def TestGroupNotification():
 
     URL = "http://127.0.0.1:23002"
 
-    url = URL + "/groups/"
+    url = URL + "/groups"
 
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
     r = requests.post(url, data=json.dumps(group))

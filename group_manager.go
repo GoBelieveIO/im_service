@@ -5,6 +5,8 @@ import "log"
 import "strconv"
 import "strings"
 import "time"
+import "database/sql"
+import _ "github.com/go-sql-driver/mysql"
 
 type GroupManager struct {
 	mutex sync.Mutex
@@ -110,14 +112,34 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
     }
 }
 
+func (group_manager *GroupManager) Reload() {
+    db, err := sql.Open("mysql", MYSQLDB_DATASOURCE)
+    if err != nil {
+        log.Println("error:", err)
+        return
+    }
+    defer db.Close()
+
+    groups, err := LoadAllGroup(db)
+    if err != nil {
+        log.Println("error:", err)
+        return
+    }
+
+    group_manager.mutex.Lock()
+    defer group_manager.mutex.Unlock()
+    group_manager.groups = groups
+}
+
 func (group_manager *GroupManager) RunOnce() bool{
-    c, err := redis.Dial("tcp", "127.0.0.1:6379")
+    c, err := redis.Dial("tcp", REDIS_ADDRESS)
     if err != nil {
         log.Println("dial redis error:", err)
         return false
     }
     psc := redis.PubSubConn{c}
     psc.Subscribe("group_create", "group_disband", "group_member_add", "group_member_remove")
+    group_manager.Reload()
     for {
         switch v := psc.Receive().(type) {
         case redis.Message:
@@ -139,8 +161,8 @@ func (group_manager *GroupManager) RunOnce() bool{
             return true
         }
     }
-
 }
+
 func (group_manager *GroupManager) Run() {
     nsleep := 1
     for {

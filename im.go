@@ -17,6 +17,8 @@ var group_server *GroupServer
 
 var STORAGE_ROOT = "/tmp"
 var PORT = 23000
+var MYSQLDB_DATASOURCE = ""
+var REDIS_ADDRESS = ""
 var PEER_ADDRS []*net.TCPAddr
 
 func init() {
@@ -53,6 +55,18 @@ func read_cfg(cfg_path string) {
     }
     PORT = nport
     fmt.Println("port:", PORT)
+    if db_src, present := app_cfg["mysqldb_source"]; present {
+        MYSQLDB_DATASOURCE = db_src
+    } else {
+        os.Exit(1)
+    }
+
+    if addr, present := app_cfg["redis_address"]; present {
+        REDIS_ADDRESS = addr
+    } else {
+        os.Exit(1)
+    }
+    
     root, present := app_cfg["storage_root"]
     if present {
         STORAGE_ROOT = root

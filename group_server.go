@@ -47,7 +47,7 @@ func (group_server *GroupServer) PublishMessage(channel string, msg string) {
 }
 
 func (group_server *GroupServer) OpenDB() (*sql.DB, error) {
-    db, err := sql.Open("mysql", "root:123456@tcp(127.0.0.1:3306)/im")
+    db, err := sql.Open("mysql", MYSQLDB_DATASOURCE)
     return db, err
 }
 
@@ -308,7 +308,7 @@ func (group_server *GroupServer) HandleQuitGroup(w http.ResponseWriter, r *http.
 
 func (group_server *GroupServer) Run() {
     r := mux.NewRouter()
-    r.HandleFunc("/groups/", func(w http.ResponseWriter, r *http.Request) {
+    r.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
 		group_server.HandleCreate(w, r)
 	}).Methods("POST")
 
@@ -316,11 +316,11 @@ func (group_server *GroupServer) Run() {
 		group_server.HandleDisband(w, r)
 	}).Methods("DELETE")
 
-    r.HandleFunc("/groups/{gid}", func(w http.ResponseWriter, r *http.Request) {
+    r.HandleFunc("/groups/{gid}/members", func(w http.ResponseWriter, r *http.Request) {
 		group_server.HandleAddGroupMember(w, r)
 	}).Methods("POST")
     
-    r.HandleFunc("/groups/{gid}/{mid}", func(w http.ResponseWriter, r *http.Request) {
+    r.HandleFunc("/groups/{gid}/members/{mid}", func(w http.ResponseWriter, r *http.Request) {
 		group_server.HandleQuitGroup(w, r)
 	}).Methods("DELETE")
 
@@ -335,7 +335,7 @@ func (group_server *GroupServer) Run() {
 
 func (group_server *GroupServer) Publish(channel string, msg string) bool {
     if group_server.redis == nil {
-        c, err := redis.Dial("tcp", "127.0.0.1:6379")
+        c, err := redis.Dial("tcp", REDIS_ADDRESS)
         if err != nil {
             log.Println("error:", err)
             return false

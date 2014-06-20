@@ -144,7 +144,7 @@ func RemoveGroupMember(db *sql.DB, group_id int64, uid int64) bool {
     return true
 }
 
-func LoadAllGroup(db *sql.DB) ([]*Group, error) {
+func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
     stmtIns, err := db.Prepare("SELECT id FROM im_group")
     if err != nil {
         log.Println("error:", err)
@@ -152,7 +152,7 @@ func LoadAllGroup(db *sql.DB) ([]*Group, error) {
     }
 
     defer stmtIns.Close() 
-    groups := make([]*Group, 0, 4)
+    groups := make(map[int64]*Group)
     rows, err := stmtIns.Query()
     for rows.Next() {
         var id int64
@@ -163,7 +163,7 @@ func LoadAllGroup(db *sql.DB) ([]*Group, error) {
             continue
         }
         group := NewGroup(id, members)
-        groups = append(groups, group)
+        groups[group.gid] = group
     }
     return groups, nil
 }
