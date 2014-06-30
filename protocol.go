@@ -12,6 +12,7 @@ const MSG_ACK = 5
 const MSG_RST = 6
 const MSG_GROUP_NOTIFICATION = 7
 const MSG_GROUP_IM = 8
+const MSG_PEER_ACK = 9
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -19,11 +20,16 @@ const MSG_REMOVE_CLIENT = 129
 type IMMessage struct {
     sender int64
     receiver int64
+    msgid int32
     content string
 }
 
 type MessageACK int32
 
+type MessagePeerACK struct {
+    uid int64
+    msgid int32
+}
 type Authentication struct {
     uid int64
 }
@@ -80,13 +86,14 @@ func ReceiveMessage(conn io.Reader) *Message {
         binary.Read(buffer, binary.BigEndian, &status)
         return &Message{MSG_AUTH_STATUS, int(seq), &AuthenticationStatus{status}}
     } else if cmd == MSG_IM || cmd == MSG_GROUP_IM{
-        if len < 16 {
+        if len < 20 {
             return nil
         }
         buffer := bytes.NewBuffer(buff)
         im := &IMMessage{}
         binary.Read(buffer, binary.BigEndian, &im.sender)
         binary.Read(buffer, binary.BigEndian, &im.receiver)
+        binary.Read(buffer, binary.BigEndian, &im.msgid)
         im.content = string(buff[16:])
         return &Message{int(cmd), int(seq), im}
     } else if cmd == MSG_ADD_CLIENT {
@@ -125,11 +132,12 @@ func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {
 }
 
 func WriteMessage(conn io.Writer, cmd byte, seq int, message *IMMessage) {
-    var length int32 = int32(len(message.content) + 16)
+    var length int32 = int32(len(message.content) + 20)
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), cmd, buffer)
     binary.Write(buffer, binary.BigEndian, message.sender)
     binary.Write(buffer, binary.BigEndian, message.receiver)
+    binary.Write(buffer, binary.BigEndian, message.msgid)
     buffer.Write([]byte(message.content))
     buf := buffer.Bytes()
 
@@ -200,6 +208,19 @@ func WriteACK(conn io.Writer, seq int, ack MessageACK) {
     }
 }
 
+func WritePeerACK(conn io.Writer, seq int, ack *MessagePeerACK) {
+    var length int32  = 12
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_PEER_ACK, buffer)
+    binary.Write(buffer, binary.BigEndian, ack.uid)
+    binary.Write(buffer, binary.BigEndian, ack.msgid)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
 func WriteRST(conn io.Writer, seq int) {
     var length int32 = 0
     buffer := new(bytes.Buffer)
@@ -247,6 +268,8 @@ func SendMessage(conn io.Writer, msg *Message) {
         WriteRemoveClient(conn, msg.seq, msg.body.(int64))
     } else if msg.cmd == MSG_ACK {
         WriteACK(conn, msg.seq, msg.body.(MessageACK))
+    } else if msg.cmd == MSG_PEER_ACK {
+        WritePeerACK(conn, msg.seq, msg.body.(*MessagePeerACK))
     } else if msg.cmd == MSG_RST {
         WriteRST(conn, msg.seq)
     } else if msg.cmd == MSG_HEARTBEAT {

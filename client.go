@@ -129,10 +129,26 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 }
 
 func (client *Client) HandleACK(ack MessageACK) {
-    client.RemoveUnAckMessage(ack)
+    msg := client.RemoveUnAckMessage(ack)
+    if msg == nil {
+        return
+    }
+    if msg.cmd == MSG_IM {
+        im := msg.body.(*IMMessage)
+        other := route.FindClient(im.sender)
+        ack := &MessagePeerACK{im.receiver, im.msgid}
+        if other != nil {
+            other.wt <- &Message{cmd:MSG_PEER_ACK, body:ack}
+        } else {
+            peer := route.FindPeerClient(im.sender)
+            if peer != nil {
+                peer.wt <- &Message{cmd:MSG_PEER_ACK, body:ack}
+            }
+        }
+    }
 }
 
-func (client *Client) RemoveUnAckMessage(ack MessageACK) {
+func (client *Client) RemoveUnAckMessage(ack MessageACK) *Message {
     client.mutex.Lock()
     defer client.mutex.Unlock()
 
@@ -145,9 +161,12 @@ func (client *Client) RemoveUnAckMessage(ack MessageACK) {
     }
     if pos == -1 {
         log.Println("invalid ack seq:", ack)
+        return nil
     } else {
+        m := client.unacks[pos]
         client.unacks = client.unacks[pos+1:]
         log.Println("remove unack msg:", len(client.unacks))
+        return m
     }
 }
 
