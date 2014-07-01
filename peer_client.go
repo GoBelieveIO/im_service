@@ -28,6 +28,7 @@ func (peer *PeerClient) Read() {
         if msg == nil {
             route.RemovePeerClient(peer)
             peer.wt <- nil
+            peer.PublishOffline()
             break
         }
         log.Println("msg:", msg.cmd)
@@ -57,6 +58,38 @@ func (peer *PeerClient) ResetClient(uid int64, ts int32) {
     }
 }
 
+func (peer *PeerClient) PublishOffline() {
+    peer.mutex.Lock()
+    defer peer.mutex.Unlock()
+
+    for uid, _ := range peer.uids {
+        peer.PublishState(uid, false)
+    }
+}
+func (peer *PeerClient) PublishState(uid int64, online bool) {
+    subs := state_center.FindSubsriber(uid)
+    state := &MessageOnlineState{uid, 0}
+    if online {
+        state.online = 1
+    }
+
+    log.Println("publish online state")
+    set := NewIntSet()
+    msg := &Message{cmd:MSG_ONLINE_STATE, body:state}
+    for _, sub := range subs {
+        log.Println("send online state:", sub)
+        other := route.FindClient(sub)
+        if other != nil {
+            other.wt <- msg
+        } else {
+            set.Add(sub)
+        }
+    }
+    if len(set) > 0 {
+        state_center.Unsubscribe(uid, set)
+    }
+}
+
 func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
     peer.mutex.Lock()
     defer peer.mutex.Unlock()
@@ -69,6 +102,7 @@ func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
     peer.uids.Add(uid)
 
     peer.ResetClient(uid, ac.timestamp)
+    peer.PublishState(uid, true)
 
     c := storage.LoadOfflineMessage(uid)
     if c != nil {
@@ -83,6 +117,7 @@ func (peer *PeerClient) HandleRemoveClient(uid int64) {
     peer.mutex.Lock()
     defer peer.mutex.Unlock()
     peer.uids.Remove(uid)
+    peer.PublishState(uid, false)
     log.Println("remove uid:", uid)
 }
 
