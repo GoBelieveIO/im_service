@@ -103,8 +103,10 @@ func (client *Client) PublishState(online bool) {
     msg := &Message{cmd:MSG_ONLINE_STATE, body:state}
     for _, sub := range subs {
         log.Println("send online state:", sub)
-        r := client.SendMessage(sub, msg)
-        if !r {
+        other := route.FindClient(sub)
+        if other != nil {
+            other.wt <- msg
+        } else {
             set.Add(sub)
         }
     }
