@@ -10,14 +10,14 @@ type PeerClient struct {
     conn *net.TCPConn
 
     mutex sync.Mutex
-    uids map[int64]struct{}
+    uids IntSet
 }
 
 func NewPeerClient(conn *net.TCPConn) *PeerClient {
     client := new(PeerClient)
     client.wt = make(chan *Message)
     client.conn = conn
-    client.uids = make(map[int64]struct{})
+    client.uids = NewIntSet()
     return client
 }
 
@@ -44,9 +44,7 @@ func (peer *PeerClient) Read() {
 func (peer *PeerClient) ContainUid(uid int64) bool {
     peer.mutex.Lock()
     defer peer.mutex.Unlock()
-
-    _, ok := peer.uids[uid]
-    return ok
+    return peer.uids.IsMember(uid)
 }
 
 func (peer *PeerClient) ResetClient(uid int64, ts int32) {
@@ -63,12 +61,12 @@ func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
     peer.mutex.Lock()
     defer peer.mutex.Unlock()
     uid := ac.uid
-    if _, ok := peer.uids[uid]; ok {
+    if peer.uids.IsMember(uid) {
         log.Printf("uid:%d exists\n", uid)
         return
     }
     log.Println("add uid:", uid)
-    peer.uids[uid] = struct{}{}
+    peer.uids.Add(uid)
 
     peer.ResetClient(uid, ac.timestamp)
 
@@ -84,12 +82,8 @@ func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
 func (peer *PeerClient) HandleRemoveClient(uid int64) {
     peer.mutex.Lock()
     defer peer.mutex.Unlock()
-    if _, ok := peer.uids[uid]; !ok {
-        log.Printf("uid:%d non exists\n", uid)
-        return
-    }
+    peer.uids.Remove(uid)
     log.Println("remove uid:", uid)
-    delete(peer.uids, uid)
 }
 
 func (peer *PeerClient) Write() {

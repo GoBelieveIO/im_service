@@ -7,15 +7,15 @@ import _ "github.com/go-sql-driver/mysql"
 type Group struct {
 	gid int64
 	mutex sync.Mutex
-	members map[int64]struct{}
+	members IntSet
 }
 
 func NewGroup(gid int64, members []int64) *Group {
     group := new(Group)
     group.gid = gid
-    group.members = make(map[int64]struct{})
+    group.members = NewIntSet()
     for _, m := range members {
-        group.members[m] = struct{}{}
+        group.members.Add(m)
     }
     return group
 }
@@ -36,21 +36,13 @@ func (group *Group) Members() chan int64{
 func (group *Group) AddMember(uid int64) {
     group.mutex.Lock()
     defer group.mutex.Unlock()
-    if _, ok := group.members[uid]; ok {
-        log.Printf("group member:%d exists\n", uid)
-    } else {
-        group.members[uid] = struct{}{}
-    }
+    group.members.Add(uid)
 }
 
 func (group *Group) RemoveMember(uid int64) {
     group.mutex.Lock()
     defer group.mutex.Unlock()
-    if _, ok := group.members[uid]; ok {
-        delete(group.members, uid)
-    } else {
-        log.Println("group no member:", uid)
-    }
+    group.members.Remove(uid)
 }
 
 func CreateGroup(db *sql.DB, master int64, name string) int64 {

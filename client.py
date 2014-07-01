@@ -420,7 +420,6 @@ def main():
     time.sleep(1)
     TestGroupMessage()
     time.sleep(1)
-    return
     TestMultiLogin()
     time.sleep(1)
     TestClusterMultiLogin()
