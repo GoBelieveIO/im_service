@@ -13,6 +13,9 @@ const MSG_RST = 6
 const MSG_GROUP_NOTIFICATION = 7
 const MSG_GROUP_IM = 8
 const MSG_PEER_ACK = 9
+const MSG_INPUTING = 10
+const MSG_SUBSCRIBE_ONLINE_STATE = 11
+const MSG_ONLINE_STATE = 12
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -24,10 +27,25 @@ type IMMessage struct {
     content string
 }
 
+type MessageInputing struct {
+    sender int64
+    receiver int64
+}
+
+type MessageSubsribeState struct {
+    uids []int64
+}
+
+type MessageOnlineState struct {
+    sender int64
+    online int32
+}
+
 type MessageACK int32
 
 type MessagePeerACK struct {
-    uid int64
+    sender int64
+    receiver int64
     msgid int32
 }
 type Authentication struct {
@@ -114,13 +132,41 @@ func ReceiveMessage(conn io.Reader) *Message {
         return &Message{int(cmd), int(seq), MessageACK(ack)}
     } else if cmd == MSG_HEARTBEAT {
         return &Message{int(cmd), int(seq), nil}
+    } else if cmd == MSG_INPUTING {
+        if len < 16 {
+            return nil
+        }
+        buffer := bytes.NewBuffer(buff)
+        inputing := &MessageInputing{}
+        binary.Read(buffer, binary.BigEndian, &inputing.sender)
+        binary.Read(buffer, binary.BigEndian, &inputing.receiver)
+        return &Message{int(cmd), int(seq), inputing}
     } else if cmd == MSG_GROUP_NOTIFICATION {
         return &Message{int(cmd), int(seq), string(buff)}
+    } else if cmd == MSG_PEER_ACK {
+        if len < 20 {
+            return nil;
+        }
+        buffer := bytes.NewBuffer(buff)
+        ack := &MessagePeerACK{}
+        binary.Read(buffer, binary.BigEndian, &ack.sender)
+        binary.Read(buffer, binary.BigEndian, &ack.receiver)
+        binary.Read(buffer, binary.BigEndian, &ack.msgid)
+        return &Message{int(cmd), int(seq), ack}
+    } else if cmd == MSG_SUBSCRIBE_ONLINE_STATE {
+        sub := &MessageSubsribeState{}
+        buffer := bytes.NewBuffer(buff)
+        var count int32
+        binary.Read(buffer, binary.BigEndian, &count)
+        sub.uids = make([]int64, count)
+        for i := 0; i < int(count); i++ {
+            binary.Read(buffer, binary.BigEndian, &sub.uids[i])
+        }
+        return &Message{int(cmd), int(seq), sub}
     } else {
         return nil
     }
 }
-
 
 func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {
     binary.Write(buffer, binary.BigEndian, len)
@@ -209,10 +255,11 @@ func WriteACK(conn io.Writer, seq int, ack MessageACK) {
 }
 
 func WritePeerACK(conn io.Writer, seq int, ack *MessagePeerACK) {
-    var length int32  = 12
+    var length int32  = 20
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_PEER_ACK, buffer)
-    binary.Write(buffer, binary.BigEndian, ack.uid)
+    binary.Write(buffer, binary.BigEndian, ack.sender)
+    binary.Write(buffer, binary.BigEndian, ack.receiver)
     binary.Write(buffer, binary.BigEndian, ack.msgid)
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
@@ -243,11 +290,38 @@ func WriteHeartbeat(conn io.Writer, seq int) {
     }
 }
 
+func WriteInputing(conn io.Writer, seq int, inputing *MessageInputing) {
+    var length int32 = 16
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_INPUTING, buffer)
+    binary.Write(buffer, binary.BigEndian, inputing.sender)
+    binary.Write(buffer, binary.BigEndian, inputing.receiver)
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
+
 func WriteGroupNotification(conn io.Writer, seq int, notification string) {
     var length int32 = int32(len(notification))
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_GROUP_NOTIFICATION, buffer)
     buffer.Write([]byte(notification))
+    buf := buffer.Bytes()
+    n, err := conn.Write(buf)
+    if err != nil || n != len(buf) {
+        log.Println("sock write error")
+    }
+}
+
+func WriteState(conn io.Writer, seq int, state *MessageOnlineState) {
+    var length int32 = 12
+    buffer := new(bytes.Buffer)
+    WriteHeader(length, int32(seq), MSG_ONLINE_STATE, buffer)
+    binary.Write(buffer, binary.BigEndian, state.sender)
+    binary.Write(buffer, binary.BigEndian, state.online)
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
@@ -274,8 +348,12 @@ func SendMessage(conn io.Writer, msg *Message) {
         WriteRST(conn, msg.seq)
     } else if msg.cmd == MSG_HEARTBEAT {
         WriteHeartbeat(conn, msg.seq)
+    } else if msg.cmd == MSG_INPUTING {
+        WriteInputing(conn, msg.seq, msg.body.(*MessageInputing))
     } else if msg.cmd == MSG_GROUP_NOTIFICATION {
         WriteGroupNotification(conn, msg.seq, msg.body.(string))
+    } else if msg.cmd == MSG_ONLINE_STATE {
+        WriteState(conn, msg.seq, msg.body.(*MessageOnlineState))
     } else {
         log.Println("unknow cmd", msg.cmd)
     }

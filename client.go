@@ -32,6 +32,7 @@ func (client *Client) Read() {
                 cluster.RemoveClient(client.uid)
             }
             client.wt <- nil
+            client.PublishState(false)
             break
         }
         log.Println("msg:", msg.cmd)
@@ -45,6 +46,12 @@ func (client *Client) Read() {
             client.HandleACK(msg.body.(MessageACK))
         } else if msg.cmd == MSG_HEARTBEAT {
             
+        } else if msg.cmd == MSG_INPUTING {
+            client.HandleInputing(msg.body.(*MessageInputing))
+        } else if msg.cmd == MSG_SUBSCRIBE_ONLINE_STATE {
+            client.HandleSubsribe(msg.body.(*MessageSubsribeState))
+        } else {
+            log.Println("unknown msg:", msg.cmd)
         }
     }
 }
@@ -69,6 +76,43 @@ func (client *Client) ResetClient(uid int64) {
     }
 }
 
+func (client *Client) SendMessage(uid int64, msg *Message) bool {
+    other := route.FindClient(uid)
+    if other != nil {
+        other.wt <- msg
+        return true
+    } else {
+        peer := route.FindPeerClient(uid)
+        if peer != nil {
+            peer.wt <- msg
+            return true
+        }
+    }
+    return false
+}
+
+func (client *Client) PublishState(online bool) {
+    subs := state_center.FindSubsriber(client.uid)
+    state := &MessageOnlineState{client.uid, 0}
+    if online {
+        state.online = 1
+    }
+
+    log.Println("publish online state")
+    set := NewIntSet()
+    msg := &Message{cmd:MSG_ONLINE_STATE, body:state}
+    for _, sub := range subs {
+        log.Println("send online state:", sub)
+        r := client.SendMessage(sub, msg)
+        if !r {
+            set.Add(sub)
+        }
+    }
+    if len(set) > 0 {
+        state_center.Unsubscribe(client.uid, set)
+    }
+}
+
 func (client *Client) HandleAuth(login *Authentication) {
     client.tm = time.Now()
     client.uid = login.uid
@@ -80,20 +124,28 @@ func (client *Client) HandleAuth(login *Authentication) {
 
     route.AddClient(client)
     cluster.AddClient(client.uid, int32(client.tm.Unix()))
+    client.PublishState(true)
     client.SendOfflineMessage()
 }
 
+func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
+    if client.uid == 0 {
+        return
+    }
+
+    set := NewIntSet()
+    for _, uid := range msg.uids {
+        set.Add(uid)
+        log.Println(client.uid, " subscribe:", uid)
+    }
+    state_center.Subscribe(client.uid, set)
+}
+
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
-    other := route.FindClient(msg.receiver)
-    if other != nil {
-        other.wt <- &Message{cmd:MSG_IM, body:msg}
-    } else {
-        peer := route.FindPeerClient(msg.receiver)
-        if peer != nil {
-            peer.wt <- &Message{cmd:MSG_IM, body:msg}
-        } else {
-            storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
-        }
+    m := &Message{cmd:MSG_IM, body:msg}
+    r := client.SendMessage(msg.receiver, m)
+    if !r {
+        storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
     }
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
 }
@@ -128,6 +180,11 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
 }
 
+func (client *Client) HandleInputing(inputing *MessageInputing) {
+    msg := &Message{cmd:MSG_INPUTING, body:inputing}
+    client.SendMessage(inputing.receiver, msg)
+}
+
 func (client *Client) HandleACK(ack MessageACK) {
     msg := client.RemoveUnAckMessage(ack)
     if msg == nil {
@@ -135,16 +192,9 @@ func (client *Client) HandleACK(ack MessageACK) {
     }
     if msg.cmd == MSG_IM {
         im := msg.body.(*IMMessage)
-        other := route.FindClient(im.sender)
-        ack := &MessagePeerACK{im.receiver, im.msgid}
-        if other != nil {
-            other.wt <- &Message{cmd:MSG_PEER_ACK, body:ack}
-        } else {
-            peer := route.FindPeerClient(im.sender)
-            if peer != nil {
-                peer.wt <- &Message{cmd:MSG_PEER_ACK, body:ack}
-            }
-        }
+        ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
+        m := &Message{cmd:MSG_PEER_ACK, body:ack}
+        client.SendMessage(im.sender, m)
     }
 }
 

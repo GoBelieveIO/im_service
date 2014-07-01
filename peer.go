@@ -33,7 +33,25 @@ func (peer *Peer) Read() {
             peer.HandleIMMessage(msg.body.(*IMMessage))
         } else if msg.cmd == MSG_GROUP_IM {
             peer.HandleGroupIMMessage(msg.body.(*IMMessage))
+        } else if msg.cmd == MSG_PEER_ACK {
+            peer.HandlePeerACK(msg.body.(*MessagePeerACK))
+        } else if msg.cmd == MSG_INPUTING {
+            peer.HandleInputing(msg.body.(*MessageInputing))
         }
+    }
+}
+
+func (peer *Peer) HandleInputing(msg *MessageInputing) {
+    other := route.FindClient(msg.receiver)
+    if other != nil {
+        other.wt <- &Message{cmd:MSG_INPUTING, body:msg}
+    }
+}
+
+func (peer *Peer) HandlePeerACK(msg *MessagePeerACK) {
+    other := route.FindClient(msg.receiver)
+    if other != nil {
+        other.wt <- &Message{cmd:MSG_PEER_ACK, body:msg}
     }
 }
 

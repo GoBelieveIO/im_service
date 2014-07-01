@@ -14,6 +14,7 @@ var cluster *Cluster
 var storage *Storage
 var group_manager *GroupManager
 var group_server *GroupServer
+var state_center *StateCenter
 
 var STORAGE_ROOT = "/tmp"
 var PORT = 23000
@@ -23,6 +24,7 @@ var PEER_ADDRS []*net.TCPAddr
 
 func init() {
     route = NewRoute()
+    state_center = NewStateCenter()
     PEER_ADDRS = make([]*net.TCPAddr, 0)
 }
 

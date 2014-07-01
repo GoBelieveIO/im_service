@@ -13,6 +13,10 @@ MSG_ACK = 5
 MSG_RST = 6
 MSG_GROUP_NOTIFICATION = 7
 MSG_GROUP_IM = 8
+MSG_EER_ACK = 9
+MSG_INPUTING = 10
+MSG_SUBSCRIBE_ONLINE_STATE = 11
+MSG_ONLINE_STATE = 12
 
 class Authentication:
     def __init__(self):
@@ -24,6 +28,10 @@ class IMMessage:
         self.receiver = 0
         self.msgid = 0
         self.content = ""
+
+class SubsribeState:
+    def __init__(self):
+        self.uids = []
 
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH:
@@ -38,6 +46,12 @@ def send_message(cmd, seq, msg, sock):
     elif cmd == MSG_ACK:
         h = struct.pack("!iibbbb", 4, seq, cmd, 0, 0, 0)
         b = struct.pack("!i", msg)
+        sock.sendall(h + b)
+    elif cmd == MSG_SUBSCRIBE_ONLINE_STATE:
+        b = struct.pack("!i", len(msg.uids))
+        for u in msg.uids:
+            b += struct.pack("!q", u)
+        h = struct.pack("!iibbbb", len(b), seq, cmd, 0, 0, 0)
         sock.sendall(h + b)
     else:
         print "eeeeee"
@@ -62,6 +76,9 @@ def recv_message(sock):
     elif cmd == MSG_ACK:
         ack, = struct.unpack("!i", content)
         return cmd, seq, ack
+    elif cmd == MSG_ONLINE_STATE:
+        sender, state = struct.unpack("!qi", content)
+        return cmd, seq, (sender, state)
     else:
         return cmd, seq, content
 
@@ -144,6 +161,7 @@ def recv_group_message_client(uid, port=23000):
     recv_client(uid, port, handle_message)
     print "recv group message success"
 
+
 def notification_recv_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_GROUP_NOTIFICATION:
@@ -161,24 +179,53 @@ def notification_recv_client(uid, port=23000):
 def send_client(uid, receiver, msg_type):
     global task
     sock, seq =  connect_server(uid, 23000)
-    for i in range(count):
-        im = IMMessage()
-        im.sender = uid
-        im.receiver = receiver
-        if msg_type == MSG_IM:
-            im.content = "test%d"%(i,)
+    im = IMMessage()
+    im.sender = uid
+    im.receiver = receiver
+    if msg_type == MSG_IM:
+        im.content = "test im"
+    else:
+        im.content = "test group im"
+    seq += 1
+    send_message(msg_type, seq, im, sock)
+    while True:
+        cmd, _, msg = recv_message(sock)
+        if cmd == MSG_ACK and msg == seq:
+            break
         else:
-            im.content = "test group %d"%(i,)
-        seq += 1
-        send_message(msg_type, seq, im, sock)
-        while True:
-            cmd, _, msg = recv_message(sock)
-            if cmd == MSG_ACK and msg == seq:
-                break
-            else:
-                print "cmd:", cmd, " ", msg
+            print "cmd:", cmd, " ", msg
     task += 1
     print "send success"
+
+def publish_state(uid, port):
+    global task
+    connect_server(uid, port)
+    task += 1
+    print "publish success"
+
+def subscribe_state(uid, target):
+    global task
+    sock, seq =  connect_server(uid, 23000)
+    sub = SubsribeState()
+    sub.uids.append(target)
+    seq += 1
+    send_message(MSG_SUBSCRIBE_ONLINE_STATE, seq, sub, sock)
+
+    while True:
+        cmd, _, msg = recv_message(sock)
+        if cmd == MSG_ONLINE_STATE:
+            print "online:", msg
+        elif cmd == 0:
+            assert(False)
+        else:
+            print "cmd:", cmd, " ", msg
+
+        if cmd == MSG_ONLINE_STATE and msg[1] == 0:
+            break
+
+    task += 1
+    print "subscribe state success"
+
 
 def TestCluster():
     global task
@@ -343,14 +390,37 @@ def TestGroupNotification():
     r = requests.delete(url)
     print r.status_code, r.text
 
-    print "test group notification completed"    
+    print "test group notification completed"  
+
+def TestSubscribeState():
+    global task
+    task = 0
+    t2 = threading.Thread(target=subscribe_state, args=(13635273143,13635273142))
+    t2.setDaemon(True)
+    t2.start()
+
+    time.sleep(1)
+
+    t3 = threading.Thread(target=publish_state, args=(13635273142, 23000))
+    t3.setDaemon(True)
+    t3.start()
+
+    while task < 2:
+        time.sleep(1)
+
+    print "test subsribe state completed"
+    
+    
 def main():
+    TestSubscribeState()
+    time.sleep(1)
     TestGroup()
     time.sleep(1)
     TestGroupNotification()
     time.sleep(1)
     TestGroupMessage()
     time.sleep(1)
+    return
     TestMultiLogin()
     time.sleep(1)
     TestClusterMultiLogin()
