@@ -115,6 +115,19 @@ func (client *Client) PublishState(online bool) {
     }
 }
 
+func (client *Client) IsOnline(uid int64) bool {
+    other := route.FindClient(uid)
+    if other != nil {
+        return true
+    } else {
+        peer := route.FindPeerClient(uid)
+        if peer != nil {
+            return true
+        }
+    }
+    return false
+}
+
 func (client *Client) HandleAuth(login *Authentication) {
     client.tm = time.Now()
     client.uid = login.uid
@@ -133,6 +146,17 @@ func (client *Client) HandleAuth(login *Authentication) {
 func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
     if client.uid == 0 {
         return
+    }
+
+    for _, uid := range msg.uids {
+        online := client.IsOnline(uid)
+        var on int32
+        if online {
+            on = 1
+        }
+        state := &MessageOnlineState{uid, on}
+        m := &Message{cmd:MSG_ONLINE_STATE, body:state}
+        client.wt <- m
     }
 
     set := NewIntSet()

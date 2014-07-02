@@ -13,7 +13,7 @@ MSG_ACK = 5
 MSG_RST = 6
 MSG_GROUP_NOTIFICATION = 7
 MSG_GROUP_IM = 8
-MSG_EER_ACK = 9
+MSG_PEER_ACK = 9
 MSG_INPUTING = 10
 MSG_SUBSCRIBE_ONLINE_STATE = 11
 MSG_ONLINE_STATE = 12
@@ -53,6 +53,11 @@ def send_message(cmd, seq, msg, sock):
             b += struct.pack("!q", u)
         h = struct.pack("!iibbbb", len(b), seq, cmd, 0, 0, 0)
         sock.sendall(h + b)
+    elif cmd == MSG_INPUTING:
+        sender, receiver = msg
+        h = struct.pack("!iibbbb", 16, seq, cmd, 0, 0, 0)
+        b = struct.pack("!qq", sender, receiver)
+        sock.sendall(h + b)
     else:
         print "eeeeee"
 
@@ -79,6 +84,9 @@ def recv_message(sock):
     elif cmd == MSG_ONLINE_STATE:
         sender, state = struct.unpack("!qi", content)
         return cmd, seq, (sender, state)
+    elif cmd == MSG_INPUTING:
+        sender, receiver = struct.unpack("!qq", content)
+        return cmd, seq, (sender, receiver)
     else:
         return cmd, seq, content
 
@@ -87,7 +95,7 @@ task = 0
 
 def connect_server(uid, port):
     seq = 0
-    address = ("127.0.0.1", 23000)
+    address = ("127.0.0.1", port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
     sock.connect(address)
     auth = Authentication()
@@ -115,7 +123,6 @@ def recv_cluster_rst(uid):
     sock1, seq1 = connect_server(uid, 23000)
     time.sleep(2)
     sock2, seq2 = connect_server(uid, 24000)
-
     while True:
         cmd, s, msg = recv_message(sock1)
         if cmd == MSG_RST:
@@ -135,6 +142,16 @@ def recv_client(uid, port, handler):
             break
     task += 1
 
+def recv_inputing(uid, port=23000):
+    def handle_message(cmd, s, msg):
+        if cmd == MSG_INPUTING:
+            print "inputting cmd:", cmd, msg
+            return True
+        else:
+            return False
+
+    recv_client(uid, port, handle_message)
+    print "recv inputing success"
     
 def recv_message_client(uid, port=23000):
     def handle_message(cmd, s, msg):
@@ -197,6 +214,33 @@ def send_client(uid, receiver, msg_type):
     task += 1
     print "send success"
 
+def send_wait_peer_ack_client(uid, receiver):
+    global task
+    sock, seq =  connect_server(uid, 23000)
+    im = IMMessage()
+    im.sender = uid
+    im.receiver = receiver
+    im.content = "test im"
+    seq += 1
+    send_message(MSG_IM, seq, im, sock)
+    while True:
+        cmd, _, msg = recv_message(sock)
+        if cmd == MSG_PEER_ACK:
+            break
+        else:
+            print "cmd:", cmd, " ", msg
+    task += 1
+    print "peer ack received"
+
+def send_inputing(uid, receiver):
+    global task
+    sock, seq =  connect_server(uid, 23000)
+
+    m = (uid, receiver)
+    seq += 1
+    send_message(MSG_INPUTING, seq, m, sock)
+    task += 1
+    
 def publish_state(uid, port):
     global task
     connect_server(uid, port)
@@ -211,6 +255,7 @@ def subscribe_state(uid, target):
     seq += 1
     send_message(MSG_SUBSCRIBE_ONLINE_STATE, seq, sub, sock)
 
+    connected = False
     while True:
         cmd, _, msg = recv_message(sock)
         if cmd == MSG_ONLINE_STATE:
@@ -220,7 +265,10 @@ def subscribe_state(uid, target):
         else:
             print "cmd:", cmd, " ", msg
 
-        if cmd == MSG_ONLINE_STATE and msg[1] == 0:
+        if cmd == MSG_ONLINE_STATE and msg[1] == 1:
+            connected = True
+
+        if cmd == MSG_ONLINE_STATE and msg[1] == 0 and connected:
             break
 
     task += 1
@@ -278,7 +326,49 @@ def TestOffline():
         time.sleep(1)
 
     print "test offline completed"
-    
+
+def TestInputing():
+    global task
+    task = 0
+
+    t3 = threading.Thread(target=recv_inputing, args=(13635273142,24000))
+    t3.setDaemon(True)
+    t3.start()
+
+    time.sleep(1)
+
+    t2 = threading.Thread(target=send_inputing, args=(13635273143,13635273142))
+    t2.setDaemon(True)
+    t2.start()
+
+
+    while task < 2:
+        time.sleep(1)
+
+    print "test inputting completed"
+
+def TestPeerACK():
+    global task
+    task = 0
+
+    t3 = threading.Thread(target=recv_message_client, args=(13635273142,24000))
+    t3.setDaemon(True)
+    t3.start()
+
+    time.sleep(1)
+
+    t2 = threading.Thread(target=send_wait_peer_ack_client, args=(13635273143,13635273142))
+    t2.setDaemon(True)
+    t2.start()
+
+
+    while task < 2:
+        time.sleep(1)
+
+    print "test peer ack completed"
+
+
+
 def TestMultiLogin():
     global task
     task = 0
@@ -421,6 +511,10 @@ def main():
     TestGroupMessage()
     time.sleep(1)
     TestMultiLogin()
+    time.sleep(1)
+    TestPeerACK()
+    time.sleep(1)
+    TestInputing()
     time.sleep(1)
     TestClusterMultiLogin()
     time.sleep(1)
