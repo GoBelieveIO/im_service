@@ -112,7 +112,7 @@ func ReceiveMessage(conn io.Reader) *Message {
         binary.Read(buffer, binary.BigEndian, &im.sender)
         binary.Read(buffer, binary.BigEndian, &im.receiver)
         binary.Read(buffer, binary.BigEndian, &im.msgid)
-        im.content = string(buff[16:])
+        im.content = string(buff[20:])
         return &Message{int(cmd), int(seq), im}
     } else if cmd == MSG_ADD_CLIENT {
         buffer := bytes.NewBuffer(buff)
