@@ -3,13 +3,14 @@ import "net"
 import "log"
 import "runtime"
 import "time"
+import "os"
+import "strconv"
 
 const HOST = "127.0.0.1"
 const PORT = 23000
 
 var c chan bool
-const concurrent = 5
-const count = 10000
+
 
 func receive(uid int64) {
     ip := net.ParseIP(HOST)
@@ -25,8 +26,7 @@ func receive(uid int64) {
     SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid}})
     ReceiveMessage(conn)
 
-    total := count
-    for i := 0; i < count; i++ {
+    for {
         conn.SetDeadline(time.Now().Add(60*8*time.Second))
         msg := ReceiveMessage(conn)
         if msg == nil {
@@ -42,22 +42,30 @@ func receive(uid int64) {
     }
     conn.Close()
     c <- true
-    log.Printf("%d received:%d", uid, total)
 }
+
+
 
 func main() {
     runtime.GOMAXPROCS(4)
 
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
     c = make(chan bool, 100)
-    u := int64(13635273140)
     var i int64
 
-    for i = 0; i < concurrent; i++ {
-        go receive(u+concurrent+i)
+    if len(os.Args) < 3 {
+        log.Println("benchmark_connection first last")
+        return
+    }
+
+    first, _ := strconv.ParseInt(os.Args[1], 10, 64)
+    last, _ := strconv.ParseInt(os.Args[2], 10, 64)
+
+    for i = first; i < last; i++ {
+        go receive(i)
     }
   
-    for i = 0; i < concurrent; i++ {
+    for i = first; i < last; i++ {
         <- c
     }
 }
