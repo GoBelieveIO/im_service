@@ -4,7 +4,7 @@ import "log"
 import "sync"
 import "time"
 
-const CLIENT_TIMEOUT = 20
+const CLIENT_TIMEOUT = (60*10)
 type Client struct {
     tm time.Time
     wt chan *Message

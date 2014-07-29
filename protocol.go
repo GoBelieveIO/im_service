@@ -286,7 +286,7 @@ func WriteHeartbeat(conn io.Writer, seq int) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Println("sock write error", err)
     }
 }
 
@@ -312,7 +312,7 @@ func WriteGroupNotification(conn io.Writer, seq int, notification string) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Println("sock write error", err)
     }
 }
 
@@ -325,7 +325,7 @@ func WriteState(conn io.Writer, seq int, state *MessageOnlineState) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Println("sock write error", err)
     }
 }
 
