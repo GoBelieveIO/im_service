@@ -19,17 +19,22 @@ func receive(uid int64) {
     conn, err := net.DialTCP("tcp4", nil, &addr)
     if err != nil {
         log.Println("connect error")
+        c <- false
         return
     }
     seq := 1
 
     SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid}})
     ReceiveMessage(conn)
-
     for {
+        begin := time.Now().Unix()
         conn.SetDeadline(time.Now().Add(60*8*time.Second))
         msg := ReceiveMessage(conn)
         if msg == nil {
+            end := time.Now().Unix()
+            if end - begin < 60*7 {
+                break
+            }
             log.Println("send heartbeat message")
             seq++
             conn.SetDeadline(time.Now().Add(60*8*time.Second))
@@ -52,6 +57,7 @@ func main() {
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
     c = make(chan bool, 100)
     var i int64
+    var j int64
 
     if len(os.Args) < 3 {
         log.Println("benchmark_connection first last")
@@ -61,8 +67,12 @@ func main() {
     first, _ := strconv.ParseInt(os.Args[1], 10, 64)
     last, _ := strconv.ParseInt(os.Args[2], 10, 64)
 
-    for i = first; i < last; i++ {
-        go receive(i)
+    log.Printf("first:%d last:%d", first, last)
+    for i = first; i < last; i+= 1000 {
+        for j = i; j < i+1000 && j < last; j++ {
+            go receive(j)
+        }
+        time.Sleep(2*time.Second)
     }
   
     for i = first; i < last; i++ {
