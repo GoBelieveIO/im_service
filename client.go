@@ -263,12 +263,38 @@ func (client *Client) SaveUnAckMessage() {
     }
 }
 
+//unack消息重新发送給新登录的客户端
+func (client *Client) ResendUnAckMessage() {
+    client.mutex.Lock()
+    defer client.mutex.Unlock()
+
+    other := route.FindClient(client.uid)
+    if other != nil {
+        //assert(other != client)
+        for _, msg := range client.unacks {
+            other.wt <- msg
+        }
+        client.unacks = client.unacks[0:0]
+    } else {
+        peer := route.FindPeerClient(client.uid)
+        if peer != nil {
+            for _, msg := range client.unacks {
+                peer.wt <- msg
+            }
+            client.unacks = client.unacks[0:0]
+        }
+    }
+}
+
 func (client *Client) Write() {
     seq := 0
     rst := false
     for {
         msg := <- client.wt
         if msg == nil {
+            if rst {
+                client.ResendUnAckMessage()
+            }
             client.SaveUnAckMessage()
             client.conn.Close()
             log.Println("socket closed")
