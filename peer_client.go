@@ -107,7 +107,7 @@ func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
     c := storage.LoadOfflineMessage(uid)
     if c != nil {
         for m := range c {
-            peer.wt <- &Message{cmd:MSG_IM, body:m}
+            peer.wt <- m
         }
         storage.ClearOfflineMessage(uid)
     }
