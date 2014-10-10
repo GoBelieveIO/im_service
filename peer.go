@@ -52,6 +52,9 @@ func (peer *Peer) HandlePeerACK(msg *MessagePeerACK) {
     other := route.FindClient(msg.receiver)
     if other != nil {
         other.wt <- &Message{cmd:MSG_PEER_ACK, body:msg}
+    } else {
+        log.Println("can't find client:", msg.receiver)
+        storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_PEER_ACK, body:msg})
     }
 }
 

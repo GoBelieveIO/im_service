@@ -220,7 +220,10 @@ func (client *Client) HandleACK(ack MessageACK) {
         im := msg.body.(*IMMessage)
         ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
         m := &Message{cmd:MSG_PEER_ACK, body:ack}
-        client.SendMessage(im.sender, m)
+        r := client.SendMessage(im.sender, m)
+        if !r {
+            storage.SaveOfflineMessage(im.sender, m)
+        }
     }
 }
 
