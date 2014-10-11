@@ -17,7 +17,7 @@ type Client struct {
 func NewClient(conn *net.TCPConn) *Client {
     client := new(Client)
     client.conn = conn
-    client.wt = make(chan *Message)
+    client.wt = make(chan *Message, 10)
     client.unacks = make([]*Message, 0, 4)
     return client
 }
