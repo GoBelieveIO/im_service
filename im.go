@@ -6,8 +6,10 @@ import "log"
 import "net"
 import "fmt"
 import "os"
-import "github.com/jimlawless/cfg"
+import "time"
 import "runtime"
+import "github.com/jimlawless/cfg"
+import "github.com/garyburd/redigo/redis"
 
 var route *Route
 var cluster *Cluster 
@@ -15,6 +17,7 @@ var storage *Storage
 var group_manager *GroupManager
 var group_server *GroupServer
 var state_center *StateCenter
+var redis_pool *redis.Pool
 
 var STORAGE_ROOT = "/tmp"
 var PORT = 23000
@@ -117,6 +120,28 @@ func ListenPeerClient() {
     Listen(handle_peer_client, PORT + 1)
 }
 
+
+func NewRedisPool(server, password string) *redis.Pool {
+    return &redis.Pool{
+        MaxIdle: 100,
+        MaxActive:500,
+        IdleTimeout: 480 * time.Second,
+        Dial: func () (redis.Conn, error) {
+            c, err := redis.Dial("tcp", server)
+            if err != nil {
+                return nil, err
+            }
+            if len(password) > 0 {
+                if _, err := c.Do("AUTH", password); err != nil {
+                    c.Close()
+                    return nil, err
+                }
+            }
+            return c, err
+        },
+    }
+}
+
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU())
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
@@ -133,6 +158,8 @@ func main() {
     group_server.Start()
     group_manager = NewGroupManager()
     group_manager.Start()
+
+    redis_pool = NewRedisPool(REDIS_ADDRESS, "")
 
     go ListenPeerClient()
     ListenClient()

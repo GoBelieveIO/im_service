@@ -3,6 +3,7 @@ import "net"
 import "log"
 import "sync"
 import "time"
+import "fmt"
 
 const CLIENT_TIMEOUT = (60*10)
 type Client struct {
@@ -128,6 +129,18 @@ func (client *Client) IsOnline(uid int64) bool {
     return false
 }
 
+func (client *Client) SetUpTimestamp() {
+    conn := redis_pool.Get()
+    defer conn.Close()
+
+    key := fmt.Sprintf("users_%d", client.uid)
+    _, err := conn.Do("HSET", key, "up_timestamp", client.tm.Unix())
+    if err != nil {
+        log.Println("hset err:", err)
+        return
+    }
+}
+
 func (client *Client) HandleAuth(login *Authentication) {
     client.tm = time.Now()
     client.uid = login.uid
@@ -141,6 +154,8 @@ func (client *Client) HandleAuth(login *Authentication) {
     cluster.AddClient(client.uid, int32(client.tm.Unix()))
     client.PublishState(true)
     client.SendOfflineMessage()
+
+    client.SetUpTimestamp()
 }
 
 func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
