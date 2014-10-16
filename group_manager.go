@@ -113,7 +113,7 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
 }
 
 func (group_manager *GroupManager) Reload() {
-    db, err := sql.Open("mysql", MYSQLDB_DATASOURCE)
+    db, err := sql.Open("mysql", config.mysqldb_datasource)
     if err != nil {
         log.Println("error:", err)
         return
@@ -132,7 +132,7 @@ func (group_manager *GroupManager) Reload() {
 }
 
 func (group_manager *GroupManager) RunOnce() bool{
-    c, err := redis.Dial("tcp", REDIS_ADDRESS)
+    c, err := redis.Dial("tcp", config.redis_address)
     if err != nil {
         log.Println("dial redis error:", err)
         return false

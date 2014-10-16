@@ -175,7 +175,7 @@ func (storage *Storage) PublishMessage(msg *OfflineMessage) {
         return;
     }
     if storage.redis == nil {
-        c, err := redis.Dial("tcp", REDIS_ADDRESS)
+        c, err := redis.Dial("tcp", config.redis_address)
         if err != nil {
             log.Println("error:", err)
             return;

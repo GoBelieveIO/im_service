@@ -47,7 +47,7 @@ func (group_server *GroupServer) PublishMessage(channel string, msg string) {
 }
 
 func (group_server *GroupServer) OpenDB() (*sql.DB, error) {
-    db, err := sql.Open("mysql", MYSQLDB_DATASOURCE)
+    db, err := sql.Open("mysql", config.mysqldb_datasource)
     return db, err
 }
 
@@ -335,7 +335,7 @@ func (group_server *GroupServer) Run() {
 
 func (group_server *GroupServer) Publish(channel string, msg string) bool {
     if group_server.redis == nil {
-        c, err := redis.Dial("tcp", REDIS_ADDRESS)
+        c, err := redis.Dial("tcp", config.redis_address)
         if err != nil {
             log.Println("error:", err)
             return false

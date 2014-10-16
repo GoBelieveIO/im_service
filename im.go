@@ -1,14 +1,11 @@
 package main
 
-import "strconv"
-import "strings"
 import "log"
 import "net"
 import "fmt"
 import "os"
 import "time"
 import "runtime"
-import "github.com/jimlawless/cfg"
 import "github.com/garyburd/redigo/redis"
 
 var route *Route
@@ -18,17 +15,11 @@ var group_manager *GroupManager
 var group_server *GroupServer
 var state_center *StateCenter
 var redis_pool *redis.Pool
-
-var STORAGE_ROOT = "/tmp"
-var PORT = 23000
-var MYSQLDB_DATASOURCE = ""
-var REDIS_ADDRESS = ""
-var PEER_ADDRS []*net.TCPAddr
+var config *Config
 
 func init() {
     route = NewRoute()
     state_center = NewStateCenter()
-    PEER_ADDRS = make([]*net.TCPAddr, 0)
 }
 
 func handle_client(conn *net.TCPConn) {
@@ -41,58 +32,6 @@ func handle_peer_client(conn *net.TCPConn) {
     client.Run()
 }
 
-func read_cfg(cfg_path string) {
-    app_cfg := make(map[string]string)
-	err := cfg.Load(cfg_path, app_cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-    port, present := app_cfg["port"]
-    if !present {
-        fmt.Println("need config listen port")
-        os.Exit(1)
-    }
-    nport, err := strconv.Atoi(port)
-    if err != nil {
-        fmt.Println("need config listen port")
-        os.Exit(1)
-    }
-    PORT = nport
-    fmt.Println("port:", PORT)
-    if db_src, present := app_cfg["mysqldb_source"]; present {
-        MYSQLDB_DATASOURCE = db_src
-    } else {
-        os.Exit(1)
-    }
-
-    if addr, present := app_cfg["redis_address"]; present {
-        REDIS_ADDRESS = addr
-    } else {
-        os.Exit(1)
-    }
-    
-    root, present := app_cfg["storage_root"]
-    if present {
-        STORAGE_ROOT = root
-    }
-    fmt.Println("storage root:", STORAGE_ROOT)
-    peers, present := app_cfg["peers"]
-    if !present {
-        return
-    }
-    arr := strings.Split(peers, ",")
-    for _, item := range arr {
-        t := strings.Split(item, ":")
-        host := t[0]
-        port, _ := strconv.Atoi(t[1])
-        ip := net.ParseIP(host)
-        addr := &net.TCPAddr{ip, port, ""}
-        PEER_ADDRS = append(PEER_ADDRS, addr)
-    }
-
-    fmt.Println("addrs:", PEER_ADDRS)
-}
 
 func Listen(f func(*net.TCPConn), port int) {
 	ip := net.ParseIP("0.0.0.0")
@@ -113,13 +52,12 @@ func Listen(f func(*net.TCPConn), port int) {
     
 }
 func ListenClient() {
-    Listen(handle_client, PORT)
+    Listen(handle_client, config.port)
 }
 
 func ListenPeerClient() {
-    Listen(handle_peer_client, PORT + 1)
+    Listen(handle_peer_client, config.port + 1)
 }
-
 
 func NewRedisPool(server, password string) *redis.Pool {
     return &redis.Pool{
@@ -149,17 +87,18 @@ func main() {
         fmt.Println("usage: im config")
         return
     }
-    read_cfg(os.Args[1])
-    cluster = NewCluster(PEER_ADDRS)
+    config = read_cfg(os.Args[1])
+
+    cluster = NewCluster(config.peer_addrs)
     cluster.Start()
-    storage = NewStorage(STORAGE_ROOT)
+    storage = NewStorage(config.storage_root)
     storage.Start()
-    group_server = NewGroupServer(PORT+2)
+    group_server = NewGroupServer(config.port+2)
     group_server.Start()
     group_manager = NewGroupManager()
     group_manager.Start()
 
-    redis_pool = NewRedisPool(REDIS_ADDRESS, "")
+    redis_pool = NewRedisPool(config.redis_address, "")
 
     go ListenPeerClient()
     ListenClient()
