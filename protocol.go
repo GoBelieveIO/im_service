@@ -21,6 +21,10 @@ const MSG_ONLINE_STATE = 12
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
 
+
+const PLATFORM_IOS = 1
+const PLATFORM_ANDROID = 2
+
 type IMMessage struct {
     sender int64
     receiver int64
@@ -51,6 +55,8 @@ type MessagePeerACK struct {
 }
 type Authentication struct {
     uid int64
+    platform_id int8
+    device_token []byte
 }
 
 type AuthenticationStatus struct {
@@ -94,11 +100,15 @@ func ReceiveMessage(conn io.Reader) *Message {
     }
     
     if cmd == MSG_AUTH {
-        buffer := bytes.NewBuffer(buff)
-        var uid int64
-        binary.Read(buffer, binary.BigEndian, &uid)
-        log.Info("uid:", uid)
-        return &Message{MSG_AUTH, int(seq), &Authentication{uid}}
+        if len < 9 {
+            return nil
+        }
+        auth := &Authentication{}
+        buffer := bytes.NewBuffer(buff[:9])
+        binary.Read(buffer, binary.BigEndian, &auth.uid)
+        binary.Read(buffer, binary.BigEndian, &auth.platform_id)
+        auth.device_token = buff[9:]
+        return &Message{MSG_AUTH, int(seq), auth}
     } else if cmd == MSG_AUTH_STATUS {
         buffer := bytes.NewBuffer(buff)
         var status int32
@@ -195,10 +205,12 @@ func WriteMessage(conn io.Writer, cmd byte, seq int, message *IMMessage) {
 }
 
 func WriteAuth(conn io.Writer, seq int, auth *Authentication) {
-    var length int32  = 8
+    var length int32  = int32(9 + len(auth.device_token))
     buffer := new(bytes.Buffer)
     WriteHeader(length, int32(seq), MSG_AUTH, buffer)
     binary.Write(buffer, binary.BigEndian, auth.uid)
+    binary.Write(buffer, binary.BigEndian, auth.platform_id)
+    buffer.Write(auth.device_token)
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {

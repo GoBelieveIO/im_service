@@ -21,8 +21,8 @@ func send(uid int64, receiver int64) {
         return
     }
     seq := 1
-
-    SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid}})
+    
+    SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid:uid, platform_id:PLATFORM_IOS}})
     ReceiveMessage(conn)
 
     for i := 0; i < count; i++ {
@@ -53,7 +53,7 @@ func receive(uid int64) {
     }
     seq := 1
 
-    SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid}})
+    SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid:uid, platform_id:PLATFORM_IOS}})
     ReceiveMessage(conn)
 
     total := count

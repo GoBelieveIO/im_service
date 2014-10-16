@@ -145,7 +145,7 @@ func (storage *Storage) SaveMessage(msg *OfflineMessage) {
     _, ok := storage.files[msg.receiver]
     if !ok {
         path := storage.GetOfflinePath(msg.receiver)
-        fmt.Println("path:", path)
+        log.Info("path:", path)
         file , err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
         if err != nil {
             log.Fatal("open file")

@@ -24,7 +24,7 @@ func receive(uid int64) {
     }
     seq := 1
 
-    SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid}})
+    SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid:uid, platform_id:PLATFORM_IOS}})
     ReceiveMessage(conn)
     for {
         begin := time.Now().Unix()

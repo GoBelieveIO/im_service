@@ -3,6 +3,7 @@ import "net"
 import "sync"
 import "time"
 import "fmt"
+import "encoding/hex"
 import log "github.com/golang/glog"
 
 const CLIENT_TIMEOUT = (60*10)
@@ -134,6 +135,7 @@ func (client *Client) SetUpTimestamp() {
     defer conn.Close()
 
     key := fmt.Sprintf("users_%d", client.uid)
+
     _, err := conn.Do("HSET", key, "up_timestamp", client.tm.Unix())
     if err != nil {
         log.Info("hset err:", err)
@@ -141,10 +143,36 @@ func (client *Client) SetUpTimestamp() {
     }
 }
 
+func (client *Client) SetDeviceToken(platform_id int8, device_token []byte) {
+    if len(device_token) == 0 {
+        return
+    }
+    conn := redis_pool.Get()
+    defer conn.Close()
+
+    key := fmt.Sprintf("users_%d", client.uid)
+    token := hex.EncodeToString(device_token)
+    if platform_id == PLATFORM_IOS {
+        _, err := conn.Do("HSET", key, "ios_device_token", token)
+        if err != nil {
+            log.Info("hset err:", err)
+        }
+    } else if platform_id == PLATFORM_ANDROID {
+        _, err := conn.Do("HSET", key, "android_device_token", token)
+        if err != nil {
+            log.Info("hset err:", err)
+        }
+    }
+}
+
+
 func (client *Client) HandleAuth(login *Authentication) {
     client.tm = time.Now()
     client.uid = login.uid
     log.Info("auth:", login.uid)
+
+    client.SetUpTimestamp()
+    client.SetDeviceToken(login.platform_id, login.device_token)
     msg := &Message{cmd:MSG_AUTH_STATUS, body:&AuthenticationStatus{0}}
     client.wt <- msg
 
@@ -154,8 +182,6 @@ func (client *Client) HandleAuth(login *Authentication) {
     cluster.AddClient(client.uid, int32(client.tm.Unix()))
     client.PublishState(true)
     client.SendOfflineMessage()
-
-    client.SetUpTimestamp()
 }
 
 func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
