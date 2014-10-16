@@ -58,7 +58,6 @@ type MessagePeerACK struct {
 type Authentication struct {
     uid int64
     platform_id int8
-    device_token []byte
 }
 
 type AuthenticationStatus struct {
@@ -200,20 +199,18 @@ func WriteAuth(auth *Authentication) []byte {
     buffer := new(bytes.Buffer)
     binary.Write(buffer, binary.BigEndian, auth.uid)
     binary.Write(buffer, binary.BigEndian, auth.platform_id)
-    buffer.Write(auth.device_token)
     buf := buffer.Bytes()
     return buf
 }
 
 func ReadAuth(buff []byte) (*Authentication, bool) {
-    if len(buff) < 9 {
+    if len(buff) != 9 {
         return nil, false
     }
     auth := &Authentication{}
-    buffer := bytes.NewBuffer(buff[:9])
+    buffer := bytes.NewBuffer(buff)
     binary.Read(buffer, binary.BigEndian, &auth.uid)
     binary.Read(buffer, binary.BigEndian, &auth.platform_id)
-    auth.device_token = buff[9:]    
     return auth, true
 }
 

@@ -27,7 +27,6 @@ class Authentication:
     def __init__(self):
         self.uid = 0
         self.platform_id = PLATFORM_ANDROID
-        self.device_token = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
 class IMMessage:
     def __init__(self):
@@ -42,10 +41,10 @@ class SubsribeState:
 
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH:
-        l = 9 + len(msg.device_token)
+        l = 9
         h = struct.pack("!iibbbb", l, seq, cmd, 0, 0, 0)
         b = struct.pack("!qB", msg.uid, msg.platform_id)
-        sock.sendall(h + b + msg.device_token)
+        sock.sendall(h + b)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         length = 20 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
