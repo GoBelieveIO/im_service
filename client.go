@@ -6,7 +6,7 @@ import "fmt"
 import "encoding/hex"
 import log "github.com/golang/glog"
 
-const CLIENT_TIMEOUT = (60*10)
+const CLIENT_TIMEOUT = (60*3)
 type Client struct {
     tm time.Time
     wt chan *Message
@@ -48,6 +48,8 @@ func (client *Client) Read() {
             client.HandleACK(msg.body.(MessageACK))
         } else if msg.cmd == MSG_HEARTBEAT {
             
+        } else if msg.cmd == MSG_PING {
+            client.HandlePing()
         } else if msg.cmd == MSG_INPUTING {
             client.HandleInputing(msg.body.(*MessageInputing))
         } else if msg.cmd == MSG_SUBSCRIBE_ONLINE_STATE {
@@ -266,6 +268,11 @@ func (client *Client) HandleACK(ack MessageACK) {
             storage.SaveOfflineMessage(im.sender, m)
         }
     }
+}
+
+func (client *Client) HandlePing() {
+    m := &Message{cmd:MSG_PONG}
+    client.wt <- m
 }
 
 func (client *Client) RemoveUnAckMessage(ack MessageACK) *Message {

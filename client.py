@@ -17,6 +17,8 @@ MSG_PEER_ACK = 9
 MSG_INPUTING = 10
 MSG_SUBSCRIBE_ONLINE_STATE = 11
 MSG_ONLINE_STATE = 12
+MSG_PING = 13
+MSG_PONG = 14
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -64,6 +66,9 @@ def send_message(cmd, seq, msg, sock):
         h = struct.pack("!iibbbb", 16, seq, cmd, 0, 0, 0)
         b = struct.pack("!qq", sender, receiver)
         sock.sendall(h + b)
+    elif cmd == MSG_PING:
+        h = struct.pack("!iibbbb", 0, seq, cmd, 0, 0, 0)
+        sock.sendall(h)
     else:
         print "eeeeee"
 
@@ -93,6 +98,8 @@ def recv_message(sock):
     elif cmd == MSG_INPUTING:
         sender, receiver = struct.unpack("!qq", content)
         return cmd, seq, (sender, receiver)
+    elif cmd == MSG_PONG:
+        return cmd, seq, None
     else:
         return cmd, seq, content
 
@@ -404,6 +411,18 @@ def TestTimeout():
     if len(r) == 0:
         print "test timeout completed"
 
+def TestPingPong():
+    uid = 13635273142
+    sock, seq =  connect_server(uid, 23000)
+    seq += 1
+    send_message(MSG_PING, seq, None, sock)
+    cmd, _, msg = recv_message(sock)
+    if cmd == MSG_PONG:
+        print "test ping/pong completed"
+    else:
+        print "test ping/pong fail"
+
+    
 def TestGroup():
     URL = "http://127.0.0.1:23002"
 
@@ -529,6 +548,8 @@ def main():
     TestOffline()
     time.sleep(1)
     TestCluster()
+    time.sleep(1)
+    TestPingPong()
     time.sleep(1)
     TestTimeout()
     time.sleep(1)
