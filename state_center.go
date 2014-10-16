@@ -1,6 +1,6 @@
 package main
 import "sync"
-import "log"
+import log "github.com/golang/glog"
 
 type StateCenter struct {
     mutex sync.Mutex
@@ -16,9 +16,9 @@ func NewStateCenter() *StateCenter {
 func (center *StateCenter) Subscribe(uid int64, targets IntSet) {
     center.mutex.Lock()
     defer center.mutex.Unlock()
-    log.Println("targets:", targets)
+    log.Info("targets:", targets)
     for target, _ := range targets {
-        log.Println("target:", target)
+        log.Info("target:", target)
         if s, ok := center.subscribers[target]; ok {
             s.Add(uid)
         } else {
@@ -53,20 +53,3 @@ func (center *StateCenter) FindSubsriber(uid int64) []int64 {
     }
     return s
 }
-
-
-//func main() {
-//    center := NewStateCenter()
-//    set := NewIntSet()
-//    set.Add(1)
-//    log.Println(set.IsMember(1))
-//    set.Remove(1)
-//    log.Println(set.IsMember(1))
-//    set.Add(13635273143)
-//    center.Subscribe(13635273142, set)
-//    subs := center.FindSubsriber(13635273143)
-//    for _, sub := range subs {
-//        log.Println("sub:", sub)
-//    }
-//    log.Println("sss:", center.subscribers)
-//}

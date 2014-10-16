@@ -1,8 +1,6 @@
 package main
 import "sync"
-import "log"
-
-
+import log "github.com/golang/glog"
 
 type PeerClientSet struct {
     peers map[*PeerClient]bool    
@@ -27,7 +25,7 @@ func (set *PeerClientSet) Remove(peer *PeerClient) {
     if _, ok := set.peers[peer]; ok {
         delete(set.peers, peer)
     } else {
-        log.Println("peer client no exists")
+        log.Info("peer client no exists")
     }
 }
 
@@ -48,7 +46,7 @@ func (route *Route) AddClient(client *Client) {
     route.mutex.Lock()
     defer route.mutex.Unlock()
     if _, ok := route.clients[client.uid]; ok {
-        log.Println("client exists")
+        log.Info("client exists")
     }
     route.clients[client.uid] = client
 }
@@ -62,7 +60,7 @@ func (route *Route) RemoveClient(client *Client) {
             return
         }
     }
-    log.Println("client non exists")
+    log.Info("client non exists")
 }
 
 func (route *Route) FindClient(uid int64) *Client{

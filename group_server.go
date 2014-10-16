@@ -1,14 +1,15 @@
 package main
-import "github.com/gorilla/mux"
-import "log"
+
 import "fmt"
 import "net/http"
 import "strconv"
 import "io/ioutil"
 import "encoding/json"
+import "github.com/gorilla/mux"
 import "github.com/garyburd/redigo/redis"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
+import log "github.com/golang/glog"
 
 type BroadcastMessage struct {
     channel string
@@ -55,7 +56,7 @@ func (group_server *GroupServer) CreateGroup(gname string,
 	master int64, members []int64) int64 {
     db, err := group_server.OpenDB()
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return 0
     }
     defer db.Close()
@@ -91,7 +92,7 @@ func (group_server *GroupServer) CreateGroup(gname string,
 func (group_server *GroupServer) DisbandGroup(gid int64) bool {
     db, err := group_server.OpenDB()
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return false
     }
     defer db.Close()
@@ -104,7 +105,7 @@ func (group_server *GroupServer) DisbandGroup(gid int64) bool {
 
 	group := group_manager.FindGroup(gid)
     if group == nil {
-        log.Println("can't find group:", gid)
+        log.Info("can't find group:", gid)
         return true
     }
     v := make(map[string]interface{})
@@ -123,7 +124,7 @@ func (group_server *GroupServer) DisbandGroup(gid int64) bool {
 func (group_server *GroupServer) AddGroupMember(gid int64, uid int64) bool {
     db, err := group_server.OpenDB()
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return false
     }
     defer db.Close()
@@ -136,7 +137,7 @@ func (group_server *GroupServer) AddGroupMember(gid int64, uid int64) bool {
 
 	group := group_manager.FindGroup(gid)
     if group == nil {
-        log.Println("can't find group:", gid)
+        log.Info("can't find group:", gid)
         return true
     }
     v := make(map[string]interface{})
@@ -155,7 +156,7 @@ func (group_server *GroupServer) AddGroupMember(gid int64, uid int64) bool {
 func (group_server *GroupServer) QuitGroup(gid int64, uid int64) bool {
     db, err := group_server.OpenDB()
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return false
     }
     defer db.Close()
@@ -169,7 +170,7 @@ func (group_server *GroupServer) QuitGroup(gid int64, uid int64) bool {
 
 	group := group_manager.FindGroup(gid)
     if group == nil {
-        log.Println("can't find group:", gid)
+        log.Info("can't find group:", gid)
         return true
     }
     v := make(map[string]interface{})
@@ -194,17 +195,17 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
     var v map[string]interface{}
     err = json.Unmarshal(body, &v)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         w.WriteHeader(400)
         return
     }
     if v["master"] == nil || v["members"] == nil || v["name"] == nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         w.WriteHeader(400)
         return
     }
     if _, ok := v["master"].(float64); !ok {
-        log.Println("error:", err)
+        log.Info("error:", err)
         w.WriteHeader(400)
         return
     }
@@ -228,7 +229,7 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
         }
         members[i] = int64(m.(float64))
     }
-    log.Println("create group master:", master, " members:", members)
+    log.Info("create group master:", master, " members:", members)
 
     gid := group_server.CreateGroup(name, master, members)
     if gid == 0 {
@@ -249,7 +250,7 @@ func (group_server *GroupServer) HandleDisband(w http.ResponseWriter, r *http.Re
         return
     }
 
-    log.Println("disband", gid)
+    log.Info("disband", gid)
     res := group_server.DisbandGroup(gid)
     if !res {
         w.WriteHeader(500)
@@ -283,7 +284,7 @@ func (group_server *GroupServer) HandleAddGroupMember(w http.ResponseWriter, r *
         return
     }
     uid := int64(v["uid"])
-    log.Printf("gid:%d add member:%d\n", gid, uid)
+    log.Infof("gid:%d add member:%d\n", gid, uid)
     res := group_server.AddGroupMember(gid, uid)
     if !res {
         w.WriteHeader(500)
@@ -296,7 +297,7 @@ func (group_server *GroupServer) HandleQuitGroup(w http.ResponseWriter, r *http.
     vars := mux.Vars(r)
     gid, _ := strconv.ParseInt(vars["gid"], 10, 64)
     mid, _ := strconv.ParseInt(vars["mid"], 10, 64)
-    log.Println("quit group", gid, " ", mid)
+    log.Info("quit group", gid, " ", mid)
 
     res := group_server.QuitGroup(gid, mid)
     if !res {
@@ -337,18 +338,18 @@ func (group_server *GroupServer) Publish(channel string, msg string) bool {
     if group_server.redis == nil {
         c, err := redis.Dial("tcp", config.redis_address)
         if err != nil {
-            log.Println("error:", err)
+            log.Info("error:", err)
             return false
         }
         group_server.redis = c
     }
     _, err := group_server.redis.Do("PUBLISH", channel, msg)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         group_server.redis = nil
         return false
     }
-    log.Println("publish message:", channel, " ", msg)
+    log.Info("publish message:", channel, " ", msg)
     return true
 }
 

@@ -1,7 +1,7 @@
 package main
 import "net"
 import "time"
-import "log"
+import log "github.com/golang/glog"
 
 type Cluster struct {
     peers map[int64]*Peer
@@ -40,7 +40,7 @@ func (cluster *Cluster) Run() {
                 select {
                 case peer.wt <- msg:
                 case <-time.After(1*time.Second):
-                    log.Println("peer recieve message timeout")
+                    log.Info("peer recieve message timeout")
                 }
             }
         }

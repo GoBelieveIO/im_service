@@ -1,7 +1,7 @@
 package main
 import "time"
 import "net"
-import "log"
+import log "github.com/golang/glog"
 
 type Peer struct {
     host string
@@ -28,7 +28,7 @@ func (peer *Peer) Read() {
             peer.wt <- nil
             break
         }
-        log.Println("msg:", msg.cmd)
+        log.Info("msg:", msg.cmd)
         if msg.cmd == MSG_IM {
             peer.HandleIMMessage(msg.body.(*IMMessage))
         } else if msg.cmd == MSG_GROUP_IM {
@@ -53,7 +53,7 @@ func (peer *Peer) HandlePeerACK(msg *MessagePeerACK) {
     if other != nil {
         other.wt <- &Message{cmd:MSG_PEER_ACK, body:msg}
     } else {
-        log.Println("can't find client:", msg.receiver)
+        log.Info("can't find client:", msg.receiver)
         storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_PEER_ACK, body:msg})
     }
 }
@@ -63,7 +63,7 @@ func (peer *Peer) HandleIMMessage(msg *IMMessage) {
     if other != nil {
         other.wt <- &Message{cmd:MSG_IM, body:msg}
     } else {
-        log.Println("can't find client:", msg.receiver)
+        log.Info("can't find client:", msg.receiver)
         storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
     }
 }
@@ -71,7 +71,7 @@ func (peer *Peer) HandleIMMessage(msg *IMMessage) {
 func (peer *Peer) HandleGroupIMMessage(msg *IMMessage) {
     group := group_manager.FindGroup(msg.receiver)
     if group == nil {
-        log.Println("can't find group:", msg.receiver)
+        log.Info("can't find group:", msg.receiver)
         return
     }
     for member := range group.Members() {
@@ -91,16 +91,16 @@ func (peer *Peer) Write() {
         select {
         case msg := <- peer.wt:
             if msg == nil {
-                log.Println("socket closed")
+                log.Info("socket closed")
                 peer.conn = nil
                 break
             } 
             seq++
             msg.seq = seq
-            log.Println("peer msg:", msg.cmd)
+            log.Info("peer msg:", msg.cmd)
             SendMessage(peer.conn, msg)
         case <- ticker.C:
-            log.Println("peer send heartbeat")
+            log.Info("peer send heartbeat")
             seq++
             m := &Message{cmd:MSG_HEARTBEAT, seq:seq}
             SendMessage(peer.conn, m)
@@ -136,9 +136,9 @@ func (peer *Peer) Connect() {
         if peer.conn == nil && peer.alive {
             conn, err := net.DialTCP("tcp4", nil, &addr)
             if err != nil {
-                log.Println("connect error:", ip, " ", peer.port)
+                log.Info("connect error:", ip, " ", peer.port)
             } else {
-                log.Printf("peer:%s port:%d connected", ip, peer.port)
+                log.Infof("peer:%s port:%d connected", ip, peer.port)
                 peer.conn = conn
                 go peer.Read()
                 go peer.Write()

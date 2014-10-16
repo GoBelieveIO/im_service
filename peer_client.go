@@ -1,8 +1,8 @@
 package main
 import "net"
 import "sync"
-import "log"
 import "time"
+import log "github.com/golang/glog"
 
 const PEER_TIMEOUT = 20
 type PeerClient struct {
@@ -31,13 +31,13 @@ func (peer *PeerClient) Read() {
             peer.PublishOffline()
             break
         }
-        log.Println("msg:", msg.cmd)
+        log.Info("msg:", msg.cmd)
         if msg.cmd == MSG_ADD_CLIENT {
             peer.HandleAddClient(msg.body.(*MessageAddClient))
         } else if msg.cmd == MSG_REMOVE_CLIENT {
             peer.HandleRemoveClient(msg.body.(int64))
         } else if msg.cmd == MSG_HEARTBEAT {
-            log.Println("peer heartbeat")
+            log.Info("peer heartbeat")
         }
     }
 }
@@ -73,11 +73,11 @@ func (peer *PeerClient) PublishState(uid int64, online bool) {
         state.online = 1
     }
 
-    log.Println("publish online state")
+    log.Info("publish online state")
     set := NewIntSet()
     msg := &Message{cmd:MSG_ONLINE_STATE, body:state}
     for _, sub := range subs {
-        log.Println("send online state:", sub)
+        log.Info("send online state:", sub)
         other := route.FindClient(sub)
         if other != nil {
             other.wt <- msg
@@ -95,10 +95,10 @@ func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
     defer peer.mutex.Unlock()
     uid := ac.uid
     if peer.uids.IsMember(uid) {
-        log.Printf("uid:%d exists\n", uid)
+        log.Infof("uid:%d exists\n", uid)
         return
     }
-    log.Println("add uid:", uid)
+    log.Info("add uid:", uid)
     peer.uids.Add(uid)
 
     peer.ResetClient(uid, ac.timestamp)
@@ -118,14 +118,14 @@ func (peer *PeerClient) HandleRemoveClient(uid int64) {
     defer peer.mutex.Unlock()
     peer.uids.Remove(uid)
     peer.PublishState(uid, false)
-    log.Println("remove uid:", uid)
+    log.Info("remove uid:", uid)
 }
 
 func (peer *PeerClient) Write() {
     for {
         msg := <- peer.wt
         if msg == nil {
-            log.Println("socket closed")
+            log.Info("socket closed")
             break
         }
         SendMessage(peer.conn, msg)

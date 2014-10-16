@@ -1,9 +1,9 @@
 package main
 import "net"
-import "log"
 import "sync"
 import "time"
 import "fmt"
+import log "github.com/golang/glog"
 
 const CLIENT_TIMEOUT = (60*10)
 type Client struct {
@@ -36,7 +36,7 @@ func (client *Client) Read() {
             client.PublishState(false)
             break
         }
-        log.Println("msg:", msg.cmd)
+        log.Info("msg:", msg.cmd)
         if msg.cmd == MSG_AUTH {
             client.HandleAuth(msg.body.(*Authentication))
         } else if msg.cmd == MSG_IM {
@@ -52,7 +52,7 @@ func (client *Client) Read() {
         } else if msg.cmd == MSG_SUBSCRIBE_ONLINE_STATE {
             client.HandleSubsribe(msg.body.(*MessageSubsribeState))
         } else {
-            log.Println("unknown msg:", msg.cmd)
+            log.Info("unknown msg:", msg.cmd)
         }
     }
 }
@@ -99,11 +99,11 @@ func (client *Client) PublishState(online bool) {
         state.online = 1
     }
 
-    log.Println("publish online state")
+    log.Info("publish online state")
     set := NewIntSet()
     msg := &Message{cmd:MSG_ONLINE_STATE, body:state}
     for _, sub := range subs {
-        log.Println("send online state:", sub)
+        log.Info("send online state:", sub)
         other := route.FindClient(sub)
         if other != nil {
             other.wt <- msg
@@ -136,7 +136,7 @@ func (client *Client) SetUpTimestamp() {
     key := fmt.Sprintf("users_%d", client.uid)
     _, err := conn.Do("HSET", key, "up_timestamp", client.tm.Unix())
     if err != nil {
-        log.Println("hset err:", err)
+        log.Info("hset err:", err)
         return
     }
 }
@@ -144,7 +144,7 @@ func (client *Client) SetUpTimestamp() {
 func (client *Client) HandleAuth(login *Authentication) {
     client.tm = time.Now()
     client.uid = login.uid
-    log.Println("auth:", login.uid)
+    log.Info("auth:", login.uid)
     msg := &Message{cmd:MSG_AUTH_STATUS, body:&AuthenticationStatus{0}}
     client.wt <- msg
 
@@ -177,7 +177,7 @@ func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
     set := NewIntSet()
     for _, uid := range msg.uids {
         set.Add(uid)
-        log.Println(client.uid, " subscribe:", uid)
+        log.Info(client.uid, " subscribe:", uid)
     }
     state_center.Subscribe(client.uid, set)
 }
@@ -194,7 +194,7 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
     group := group_manager.FindGroup(msg.receiver)
     if group == nil {
-        log.Println("can't find group:", msg.receiver)
+        log.Info("can't find group:", msg.receiver)
         return
     }
     peers := make(map[*PeerClient]struct{})
@@ -254,12 +254,12 @@ func (client *Client) RemoveUnAckMessage(ack MessageACK) *Message {
         }
     }
     if pos == -1 {
-        log.Println("invalid ack seq:", ack)
+        log.Info("invalid ack seq:", ack)
         return nil
     } else {
         m := client.unacks[pos]
         client.unacks = client.unacks[pos+1:]
-        log.Println("remove unack msg:", len(client.unacks))
+        log.Info("remove unack msg:", len(client.unacks))
         return m
     }
 }
@@ -312,7 +312,7 @@ func (client *Client) Write() {
             }
             client.SaveUnAckMessage()
             client.conn.Close()
-            log.Println("socket closed")
+            log.Info("socket closed")
             break
         }
         seq++

@@ -1,12 +1,12 @@
 package main
 
-import "log"
 import "net"
 import "fmt"
-import "os"
+import "flag"
 import "time"
 import "runtime"
 import "github.com/garyburd/redigo/redis"
+import log "github.com/golang/glog"
 
 var route *Route
 var cluster *Cluster 
@@ -82,12 +82,15 @@ func NewRedisPool(server, password string) *redis.Pool {
 
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU())
-	log.SetFlags(log.Lshortfile|log.LstdFlags)
-    if len(os.Args) < 2 {
+    flag.Parse()
+    if len(flag.Args()) == 0 {
         fmt.Println("usage: im config")
         return
     }
-    config = read_cfg(os.Args[1])
+
+    config = read_cfg(flag.Args()[0])
+    log.Infof("port:%d storage root:%s redis address:%s\n", 
+        config.port, config.storage_root, config.redis_address)
 
     cluster = NewCluster(config.peer_addrs)
     cluster.Start()

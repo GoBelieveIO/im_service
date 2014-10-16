@@ -1,12 +1,13 @@
 package main
-import "github.com/garyburd/redigo/redis"
+
 import "sync"
-import "log"
 import "strconv"
 import "strings"
 import "time"
 import "database/sql"
+import "github.com/garyburd/redigo/redis"
 import _ "github.com/go-sql-driver/mysql"
+import log "github.com/golang/glog"
 
 type GroupManager struct {
 	mutex sync.Mutex
@@ -31,7 +32,7 @@ func (group_manager *GroupManager) FindGroup(gid int64) *Group {
 func (group_manager *GroupManager) HandleCreate(data string) {
     gid, err := strconv.ParseInt(data, 10, 64)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
 
@@ -39,43 +40,43 @@ func (group_manager *GroupManager) HandleCreate(data string) {
     defer group_manager.mutex.Unlock()
 
     if _, ok := group_manager.groups[gid]; ok {
-        log.Printf("group:%d exists\n", gid)
+        log.Infof("group:%d exists\n", gid)
     }
-    log.Println("create group:", gid)
+    log.Info("create group:", gid)
     group_manager.groups[gid] = NewGroup(gid, nil)
 }
 
 func (group_manager *GroupManager) HandleDisband(data string) {
     gid, err := strconv.ParseInt(data, 10, 64)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
 
     group_manager.mutex.Lock()
     defer group_manager.mutex.Unlock()
     if _, ok := group_manager.groups[gid]; ok {
-        log.Println("disband group:", gid)
+        log.Info("disband group:", gid)
         delete(group_manager.groups, gid)
     } else {
-        log.Printf("group:%d nonexists\n", gid)
+        log.Infof("group:%d nonexists\n", gid)
     }
 }
 
 func (group_manager *GroupManager) HandleMemberAdd(data string) {
     arr := strings.Split(data, ",")
     if len(arr) != 2 {
-        log.Println("message error")
+        log.Info("message error")
         return
     }
     gid, err := strconv.ParseInt(arr[0], 10, 64)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
     uid, err := strconv.ParseInt(arr[1], 10, 64)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
 
@@ -83,24 +84,24 @@ func (group_manager *GroupManager) HandleMemberAdd(data string) {
     if group != nil {
         group.AddMember(uid)
     } else {
-        log.Printf("can't find group:%d\n", gid)
+        log.Infof("can't find group:%d\n", gid)
     }
 }
 
 func (group_manager *GroupManager) HandleMemberRemove(data string) {
     arr := strings.Split(data, ",")
     if len(arr) != 2 {
-        log.Println("message error")
+        log.Info("message error")
         return
     }
     gid, err := strconv.ParseInt(arr[0], 10, 64)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
     uid, err := strconv.ParseInt(arr[1], 10, 64)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
 
@@ -108,21 +109,21 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
     if group != nil {
         group.RemoveMember(uid)
     } else {
-        log.Printf("can't find group:%d\n", gid)
+        log.Infof("can't find group:%d\n", gid)
     }
 }
 
 func (group_manager *GroupManager) Reload() {
     db, err := sql.Open("mysql", config.mysqldb_datasource)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
     defer db.Close()
 
     groups, err := LoadAllGroup(db)
     if err != nil {
-        log.Println("error:", err)
+        log.Info("error:", err)
         return
     }
 
@@ -134,7 +135,7 @@ func (group_manager *GroupManager) Reload() {
 func (group_manager *GroupManager) RunOnce() bool{
     c, err := redis.Dial("tcp", config.redis_address)
     if err != nil {
-        log.Println("dial redis error:", err)
+        log.Info("dial redis error:", err)
         return false
     }
     psc := redis.PubSubConn{c}
@@ -152,12 +153,12 @@ func (group_manager *GroupManager) RunOnce() bool{
             } else if v.Channel == "group_member_remove" {
                 group_manager.HandleMemberRemove(string(v.Data))
             } else {
-                log.Printf("%s: message: %s\n", v.Channel, v.Data)
+                log.Infof("%s: message: %s\n", v.Channel, v.Data)
             }
         case redis.Subscription:
-            log.Printf("%s: %s %d\n", v.Channel, v.Kind, v.Count)
+            log.Infof("%s: %s %d\n", v.Channel, v.Kind, v.Count)
         case error:
-            log.Println("error:", v)
+            log.Info("error:", v)
             return true
         }
     }

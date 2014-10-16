@@ -1,8 +1,9 @@
 package main
-import "encoding/binary"
+
 import "io"
 import "bytes"
-import "log"
+import "encoding/binary"
+import log "github.com/golang/glog"
 
 const MSG_HEARTBEAT = 1
 const MSG_AUTH = 2
@@ -71,7 +72,7 @@ func ReceiveMessage(conn io.Reader) *Message {
     buff := make([]byte, 12)
     _, err := io.ReadFull(conn, buff)
     if err != nil {
-        log.Println("sock read error:", err)
+        log.Info("sock read error:", err)
         return nil
     }
     var len int32
@@ -80,15 +81,15 @@ func ReceiveMessage(conn io.Reader) *Message {
     binary.Read(buffer, binary.BigEndian, &len)
     binary.Read(buffer, binary.BigEndian, &seq)
     cmd, _ := buffer.ReadByte()
-    log.Println("cmd:", cmd)
+    log.Info("cmd:", cmd)
     if len < 0 || len > 64*1024 {
-        log.Println("invalid len:", len)
+        log.Info("invalid len:", len)
         return nil
     }
     buff = make([]byte, len)
     _, err = io.ReadFull(conn, buff)
     if err != nil {
-        log.Println("sock read error:", err)
+        log.Info("sock read error:", err)
         return nil
     }
     
@@ -96,7 +97,7 @@ func ReceiveMessage(conn io.Reader) *Message {
         buffer := bytes.NewBuffer(buff)
         var uid int64
         binary.Read(buffer, binary.BigEndian, &uid)
-        log.Println("uid:", uid)
+        log.Info("uid:", uid)
         return &Message{MSG_AUTH, int(seq), &Authentication{uid}}
     } else if cmd == MSG_AUTH_STATUS {
         buffer := bytes.NewBuffer(buff)
@@ -189,7 +190,7 @@ func WriteMessage(conn io.Writer, cmd byte, seq int, message *IMMessage) {
 
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -201,7 +202,7 @@ func WriteAuth(conn io.Writer, seq int, auth *Authentication) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -213,7 +214,7 @@ func  WriteAuthStatus(conn io.Writer, seq int, auth *AuthenticationStatus) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -226,7 +227,7 @@ func WriteAddClient(conn io.Writer, seq int, ac *MessageAddClient) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -238,7 +239,7 @@ func WriteRemoveClient(conn io.Writer, seq int, uid int64) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -250,7 +251,7 @@ func WriteACK(conn io.Writer, seq int, ack MessageACK) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -264,7 +265,7 @@ func WritePeerACK(conn io.Writer, seq int, ack *MessagePeerACK) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -275,7 +276,7 @@ func WriteRST(conn io.Writer, seq int) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -286,7 +287,7 @@ func WriteHeartbeat(conn io.Writer, seq int) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error", err)
+        log.Info("sock write error", err)
     }
 }
 
@@ -299,7 +300,7 @@ func WriteInputing(conn io.Writer, seq int, inputing *MessageInputing) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error")
+        log.Info("sock write error")
     }
 }
 
@@ -312,7 +313,7 @@ func WriteGroupNotification(conn io.Writer, seq int, notification string) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error", err)
+        log.Info("sock write error", err)
     }
 }
 
@@ -325,7 +326,7 @@ func WriteState(conn io.Writer, seq int, state *MessageOnlineState) {
     buf := buffer.Bytes()
     n, err := conn.Write(buf)
     if err != nil || n != len(buf) {
-        log.Println("sock write error", err)
+        log.Info("sock write error", err)
     }
 }
 
@@ -355,6 +356,6 @@ func SendMessage(conn io.Writer, msg *Message) {
     } else if msg.cmd == MSG_ONLINE_STATE {
         WriteState(conn, msg.seq, msg.body.(*MessageOnlineState))
     } else {
-        log.Println("unknow cmd", msg.cmd)
+        log.Info("unknow cmd", msg.cmd)
     }
 }
