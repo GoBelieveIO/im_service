@@ -6,7 +6,6 @@ import "time"
 import "flag"
 import "math/rand"
 
-var c chan bool
 
 var first int64
 var last int64
@@ -32,7 +31,7 @@ func receive(uid int64) {
     conn, err := net.DialTCP("tcp4", &laddr, &addr)
     if err != nil {
         log.Println("connect error")
-        c <- false
+
         return
     }
     seq := 1
@@ -41,25 +40,36 @@ func receive(uid int64) {
     ReceiveMessage(conn)
 
     msgid := 0
+
+    send_timestamp := time.Now().Unix()
+
+    const HEARTBEAT_TIMEOUT = 3*60
+
     for {
+
+        now := time.Now().Unix()
+        if now - send_timestamp > 150 {
+            seq++
+            msgid++
+            receiver := first + rand.Int63()%(last-first)
+            im := &IMMessage{uid, receiver, int32(msgid), "test"}
+            conn.SetDeadline(time.Now().Add(10*time.Second))
+            SendMessage(conn, &Message{MSG_IM, seq, im})
+            send_timestamp = now
+        }
         begin := time.Now().Unix()
-        conn.SetDeadline(time.Now().Add(3*time.Minute))
+        conn.SetDeadline(time.Now().Add(HEARTBEAT_TIMEOUT*time.Second))
         msg := ReceiveMessage(conn)
         if msg == nil {
             end := time.Now().Unix()
-            if end - begin < 60*2 {
+            if end - begin < (HEARTBEAT_TIMEOUT-10) {
+                log.Println("recv err")
                 break
             }
             log.Println("ping...")
             seq++
-            conn.SetDeadline(time.Now().Add(3*time.Minute))
+            conn.SetDeadline(time.Now().Add(10*time.Second))
             SendMessage(conn, &Message{MSG_PING, seq, nil})
-
-            seq++
-            msgid++
-            receiver := rand.Int63()%(last-first)
-            im := IMMessage{uid, receiver, int32(msgid), "test"}
-            SendMessage(conn, &Message{MSG_IM, seq, im})
             continue
         }
         if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
@@ -69,7 +79,6 @@ func receive(uid int64) {
         }
     }
     conn.Close()
-    c <- true
 }
 
 func receive_loop(uid int64) {
@@ -90,7 +99,7 @@ func main() {
         first, last, local_ip, host, port)
 
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
-    c = make(chan bool, 100)
+    c := make(chan bool, 100)
     var i int64
     var j int64
 
