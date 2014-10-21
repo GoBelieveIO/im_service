@@ -3,20 +3,33 @@ import "net"
 import "log"
 import "runtime"
 import "time"
-import "os"
-import "strconv"
-
-const HOST = "127.0.0.1"
-const PORT = 23000
+import "flag"
+import "math/rand"
 
 var c chan bool
 
+var first int64
+var last int64
+var local_ip string
+var host string
+var port int
+
+func init() {
+    flag.Int64Var(&first, "first", 0, "first uid")
+    flag.Int64Var(&last, "last", 0, "last uid")
+    flag.StringVar(&local_ip, "local_ip", "0.0.0.0", "local ip")
+    flag.StringVar(&host, "host", "127.0.0.1", "host")
+    flag.IntVar(&port, "port", 23000, "port")
+}
 
 func receive(uid int64) {
-    ip := net.ParseIP(HOST)
-    addr := net.TCPAddr{ip, PORT, ""}
+    ip := net.ParseIP(host)
+    addr := net.TCPAddr{ip, port, ""}
 
-    conn, err := net.DialTCP("tcp4", nil, &addr)
+    lip := net.ParseIP(local_ip)
+    laddr := net.TCPAddr{lip, 0, ""}
+
+    conn, err := net.DialTCP("tcp4", &laddr, &addr)
     if err != nil {
         log.Println("connect error")
         c <- false
@@ -26,51 +39,64 @@ func receive(uid int64) {
 
     SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid:uid, platform_id:PLATFORM_IOS}})
     ReceiveMessage(conn)
+
+    msgid := 0
     for {
         begin := time.Now().Unix()
-        conn.SetDeadline(time.Now().Add(60*8*time.Second))
+        conn.SetDeadline(time.Now().Add(3*time.Minute))
         msg := ReceiveMessage(conn)
         if msg == nil {
             end := time.Now().Unix()
-            if end - begin < 60*7 {
+            if end - begin < 60*2 {
                 break
             }
-            log.Println("send heartbeat message")
+            log.Println("ping...")
             seq++
-            conn.SetDeadline(time.Now().Add(60*8*time.Second))
-            SendMessage(conn, &Message{MSG_HEARTBEAT, seq, nil})
+            conn.SetDeadline(time.Now().Add(3*time.Minute))
+            SendMessage(conn, &Message{MSG_PING, seq, nil})
+
+            seq++
+            msgid++
+            receiver := rand.Int63()%(last-first)
+            im := IMMessage{uid, receiver, int32(msgid), "test"}
+            SendMessage(conn, &Message{MSG_IM, seq, im})
             continue
         }
-        seq++
-        ack := &Message{MSG_ACK, seq, MessageACK(msg.seq)}
-        SendMessage(conn, ack)
+        if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+            seq++
+            ack := &Message{MSG_ACK, seq, MessageACK(msg.seq)}
+            SendMessage(conn, ack)
+        }
     }
     conn.Close()
     c <- true
 }
 
-
+func receive_loop(uid int64) {
+    for {
+        receive(uid)
+        n := rand.Int()
+        n = n%20
+        time.Sleep(time.Duration(n)*time.Second)
+    }
+}
 
 func main() {
     runtime.GOMAXPROCS(4)
+    rand.Seed(time.Now().Unix())
+
+    flag.Parse()
+    log.Printf("first:%d last:%d local ip:%s host:%s port:%d\n", 
+        first, last, local_ip, host, port)
 
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
     c = make(chan bool, 100)
     var i int64
     var j int64
 
-    if len(os.Args) < 3 {
-        log.Println("benchmark_connection first last")
-        return
-    }
-
-    first, _ := strconv.ParseInt(os.Args[1], 10, 64)
-    last, _ := strconv.ParseInt(os.Args[2], 10, 64)
-
-    log.Printf("first:%d last:%d", first, last)
     for i = first; i < last; i+= 1000 {
         for j = i; j < i+1000 && j < last; j++ {
-            go receive(j)
+            go receive_loop(j)
         }
         time.Sleep(2*time.Second)
     }

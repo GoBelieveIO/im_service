@@ -11,6 +11,7 @@ type Config struct {
     storage_root string
     mysqldb_datasource string
     redis_address string
+    http_listen_address string
     peer_addrs []*net.TCPAddr
 }
 
@@ -52,6 +53,7 @@ func read_cfg(cfg_path string) *Config{
 
     config.port = get_int(app_cfg, "port")
     config.storage_root = get_string(app_cfg, "storage_root")
+    config.http_listen_address = get_string(app_cfg, "http_listen_address")
     config.redis_address = get_string(app_cfg, "redis_address")
     config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 

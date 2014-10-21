@@ -16,10 +16,12 @@ var group_server *GroupServer
 var state_center *StateCenter
 var redis_pool *redis.Pool
 var config *Config
+var server_summary *ServerSummary
 
 func init() {
     route = NewRoute()
     state_center = NewStateCenter()
+    server_summary = NewServerSummary()
 }
 
 func handle_client(conn *net.TCPConn) {
@@ -92,6 +94,8 @@ func main() {
     log.Infof("port:%d storage root:%s redis address:%s\n", 
         config.port, config.storage_root, config.redis_address)
 
+    redis_pool = NewRedisPool(config.redis_address, "")
+
     cluster = NewCluster(config.peer_addrs)
     cluster.Start()
     storage = NewStorage(config.storage_root)
@@ -101,7 +105,9 @@ func main() {
     group_manager = NewGroupManager()
     group_manager.Start()
 
-    redis_pool = NewRedisPool(config.redis_address, "")
+    StartHttpServer(config.http_listen_address)
+
+
 
     go ListenPeerClient()
     ListenClient()

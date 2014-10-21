@@ -1,11 +1,12 @@
 package main
 import "net"
-import "sync"
 import "time"
 import "fmt"
+import "sync"
+import "sync/atomic"
 import log "github.com/golang/glog"
 
-const CLIENT_TIMEOUT = (60*8)
+const CLIENT_TIMEOUT = (60*6)
 type Client struct {
     tm time.Time
     wt chan *Message
@@ -20,6 +21,7 @@ func NewClient(conn *net.TCPConn) *Client {
     client.conn = conn
     client.wt = make(chan *Message, 10)
     client.unacks = make([]*Message, 0, 4)
+    atomic.AddInt64(&server_summary.nconnections, 1)
     return client
 }
 
@@ -168,6 +170,8 @@ func (client *Client) HandleAuth(login *Authentication) {
     cluster.AddClient(client.uid, int32(client.tm.Unix()))
     client.PublishState(true)
     client.SendOfflineMessage()
+
+    atomic.AddInt64(&server_summary.nclients, 1)
 }
 
 func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
@@ -201,6 +205,8 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
         storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
     }
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
+
+    atomic.AddInt64(&server_summary.in_message_count, 1)
 }
 
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
@@ -231,6 +237,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
         peer.wt <- &Message{cmd:MSG_GROUP_IM, body:msg}
     }
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
+    atomic.AddInt64(&server_summary.in_message_count, 1)
 }
 
 func (client *Client) HandleInputing(inputing *MessageInputing) {
@@ -329,6 +336,10 @@ func (client *Client) Write() {
             }
             client.SaveUnAckMessage()
             client.conn.Close()
+            atomic.AddInt64(&server_summary.nconnections, -1)
+            if client.uid > 0 {
+                atomic.AddInt64(&server_summary.nclients, -1)
+            }
             log.Info("socket closed")
             break
         }
@@ -336,6 +347,7 @@ func (client *Client) Write() {
         msg.seq = seq
         if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
             client.AddUnAckMessage(msg)
+            atomic.AddInt64(&server_summary.out_message_count, 1)
         }
 
 		if rst {

@@ -4,13 +4,21 @@ import "net"
 import "log"
 import "runtime"
 import "time"
+import "flag"
+
+var concurrent int
+var count int
+
+func init() {
+    flag.IntVar(&concurrent, "c", 10, "concurrent number")
+    flag.IntVar(&count, "n", 100000, "request number")
+}
 
 const HOST = "127.0.0.1"
 const PORT = 23000
 
 var c chan bool
-const concurrent = 10
-const count = 100000
+
 func send(uid int64, receiver int64) {
     ip := net.ParseIP(HOST)
     addr := net.TCPAddr{ip, PORT, ""}
@@ -83,20 +91,31 @@ func receive(uid int64) {
 
 func main() {
     runtime.GOMAXPROCS(4)
+    flag.Parse()
+
+    fmt.Printf("concurrent:%d, request:%d\n", concurrent, count)
 
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
     c = make(chan bool, 100)
     u := int64(13635273140)
-    var i int64
 
-    for i = 0; i < concurrent; i++ {
-        go receive(u+concurrent+i)
+    begin := time.Now().UnixNano()
+    for i := 0; i < concurrent; i++ {
+        go receive(u+int64(concurrent+i))
     }
     time.Sleep(2*time.Second)
-    for  i  = 0; i < concurrent; i++ {
-        go send(u+i, u + i + concurrent)
+    for  i := 0; i < concurrent; i++ {
+        go send(u+int64(i), u + int64(i + concurrent))
     }
-    for i = 0; i < 2*concurrent; i++ {
+    for i := 0; i < 2*concurrent; i++ {
         <- c
     }
+
+    end := time.Now().UnixNano()
+    
+    var tps int64 = 0
+    if end - begin > 0 {
+        tps = int64(1000*1000*1000*concurrent*count)/(end - begin)
+    }
+    fmt.Println("tps:", tps)
 }
