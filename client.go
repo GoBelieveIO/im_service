@@ -211,6 +211,7 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 }
 
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
+    msg.timestamp = int32(time.Now().Unix())
     group := group_manager.FindGroup(msg.receiver)
     if group == nil {
         log.Info("can't find group:", msg.receiver)
