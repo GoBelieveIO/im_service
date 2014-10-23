@@ -52,7 +52,7 @@ func receive(uid int64) {
             seq++
             msgid++
             receiver := first + rand.Int63()%(last-first)
-            im := &IMMessage{uid, receiver, int32(msgid), "test"}
+            im := &IMMessage{uid, receiver, 0, int32(msgid), "test"}
             conn.SetDeadline(time.Now().Add(10*time.Second))
             SendMessage(conn, &Message{MSG_IM, seq, im})
             send_timestamp = now

@@ -199,6 +199,7 @@ func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
+    msg.timestamp = int32(time.Now().Unix())
     m := &Message{cmd:MSG_IM, body:msg}
     r := client.SendMessage(msg.receiver, m)
     if !r {

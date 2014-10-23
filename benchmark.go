@@ -36,7 +36,7 @@ func send(uid int64, receiver int64) {
     for i := 0; i < count; i++ {
         content := fmt.Sprintf("test....%d", i)
         seq++
-        msg := &Message{MSG_IM, seq, &IMMessage{uid, receiver, int32(i), content}}
+        msg := &Message{MSG_IM, seq, &IMMessage{uid, receiver, 0, int32(i), content}}
         SendMessage(conn, msg)
         for {
             ack := ReceiveMessage(conn)

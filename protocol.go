@@ -30,6 +30,7 @@ const PLATFORM_ANDROID = 2
 type IMMessage struct {
     sender int64
     receiver int64
+    timestamp int32
     msgid int32
     content string
 }
@@ -176,6 +177,7 @@ func WriteIMMessage(message *IMMessage) []byte {
     buffer := new(bytes.Buffer)
     binary.Write(buffer, binary.BigEndian, message.sender)
     binary.Write(buffer, binary.BigEndian, message.receiver)
+    binary.Write(buffer, binary.BigEndian, message.timestamp)
     binary.Write(buffer, binary.BigEndian, message.msgid)
     buffer.Write([]byte(message.content))
     buf := buffer.Bytes()
@@ -183,15 +185,16 @@ func WriteIMMessage(message *IMMessage) []byte {
 }
 
 func ReadIMMessage(buff []byte) (*IMMessage, bool) {
-    if len(buff) < 20 {
+    if len(buff) < 24 {
         return nil, false
     }
     buffer := bytes.NewBuffer(buff)
     im := &IMMessage{}
     binary.Read(buffer, binary.BigEndian, &im.sender)
     binary.Read(buffer, binary.BigEndian, &im.receiver)
+    binary.Read(buffer, binary.BigEndian, &im.timestamp)
     binary.Read(buffer, binary.BigEndian, &im.msgid)
-    im.content = string(buff[20:])    
+    im.content = string(buff[24:])    
     return im, true
 }
 

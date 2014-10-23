@@ -32,6 +32,7 @@ class IMMessage:
     def __init__(self):
         self.sender = 0
         self.receiver = 0
+        self.timestamp = 0
         self.msgid = 0
         self.content = ""
 
@@ -48,7 +49,7 @@ def send_message(cmd, seq, msg, sock):
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         length = 20 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
-        b = struct.pack("!qqi", msg.sender, msg.receiver, msg.msgid)
+        b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
         sock.sendall(h+b+msg.content)
     elif cmd == MSG_ACK:
         h = struct.pack("!iibbbb", 4, seq, cmd, 0, 0, 0)
@@ -85,8 +86,8 @@ def recv_message(sock):
         return cmd, seq, status
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         im = IMMessage()
-        im.sender, im.receiver, _ = struct.unpack("!qqi", content[:20])
-        im.content = content[20:]
+        im.sender, im.receiver, _, _ = struct.unpack("!qqii", content[:24])
+        im.content = content[24:]
         return cmd, seq, im
     elif cmd == MSG_ACK:
         ack, = struct.unpack("!i", content)
