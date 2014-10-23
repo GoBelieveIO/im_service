@@ -13,5 +13,6 @@ install:all
 	cp im ./bin
 	cp benchmark ./bin
 	cp benchmark_connection ./bin
+	cp push.py ./bin
 clean:
 	rm -f im benchmark benchmark_connection

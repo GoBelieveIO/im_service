@@ -4,6 +4,7 @@ import "time"
 import "fmt"
 import "sync"
 import "sync/atomic"
+import "encoding/json"
 import log "github.com/golang/glog"
 
 const CLIENT_TIMEOUT = (60*6)
@@ -198,13 +199,32 @@ func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
     state_center.Subscribe(client.uid, set)
 }
 
+//离线消息入apns队列
+func (client *Client) PublishPeerMessage(im *IMMessage) {
+    conn := redis_pool.Get()
+    defer conn.Close()
+
+    v := make(map[string]interface{})
+    v["sender"] = im.sender
+    v["receiver"] = im.receiver
+    v["content"] = im.content
+
+    b, _ := json.Marshal(v)
+    _, err := conn.Do("RPUSH", "push_queue", b)
+    if err != nil {
+        log.Info("rpush error:", err)
+    }
+}
+
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
     msg.timestamp = int32(time.Now().Unix())
     m := &Message{cmd:MSG_IM, body:msg}
     r := client.SendMessage(msg.receiver, m)
     if !r {
         storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
+        client.PublishPeerMessage(msg)
     }
+
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
 
     atomic.AddInt64(&server_summary.in_message_count, 1)

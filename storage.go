@@ -4,10 +4,7 @@ import "os"
 import "fmt"
 import "bytes"
 import "encoding/binary"
-import "encoding/json"
 import log "github.com/golang/glog"
-import "github.com/garyburd/redigo/redis"
-
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
@@ -25,7 +22,6 @@ type Storage struct {
     ic chan *OfflineMessage 
     cc chan int64
     root string
-    redis redis.Conn
 }
 
 func NewStorage(root string) *Storage {
@@ -170,32 +166,6 @@ func (storage *Storage) SaveMessage(msg *OfflineMessage) {
     storage.WriteMessage(storage.files[msg.receiver], msg.message)
 }
 
-//离线消息入apns队列
-func (storage *Storage) PublishMessage(msg *OfflineMessage) {
-    if (msg.message.cmd != MSG_IM && msg.message.cmd != MSG_GROUP_IM) {
-        return;
-    }
-    if storage.redis == nil {
-        c, err := redis.Dial("tcp", config.redis_address)
-        if err != nil {
-            log.Info("error:", err)
-            return;
-        }
-        storage.redis = c
-    }
-    im := msg.message.body.(*IMMessage)
-    v := make(map[string]interface{})
-    v["content"] = im.content
-    v["sender"] = im.sender
-    v["receiver"] = im.receiver
-    b, _ := json.Marshal(v)
-    _, err := storage.redis.Do("RPUSH", "push_queue", b)
-    if err != nil {
-        storage.redis = nil;
-        log.Info("error:", err)
-    }
-}
-
 //清空离线消息
 func (storage *Storage) ClearMessage(uid int64) {
     file, ok := storage.files[uid]
@@ -212,7 +182,7 @@ func (storage *Storage) Run() {
         select {
         case msg := <- storage.ic:
             storage.SaveMessage(msg)
-            storage.PublishMessage(msg)
+
         case uid := <- storage.cc:
             storage.ClearMessage(uid)
         }
