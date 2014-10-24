@@ -37,7 +37,8 @@ def android_push(uid):
         data = {
             "push_type":1,
             "title":config.NAME,
-            "content":config.CONTENT
+            "content":config.CONTENT,
+            "is_clearable":True
         }
 
         basic = base64.b64encode(str(config.ANDROID_APP_ID) + ":" + config.ANDROID_APP_SECRET)
