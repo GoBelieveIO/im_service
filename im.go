@@ -30,6 +30,8 @@ func handle_client(conn *net.TCPConn) {
 }
 
 func handle_peer_client(conn *net.TCPConn) {
+    conn.SetKeepAlive(true)
+    conn.SetKeepAlivePeriod(time.Duration(10*60*time.Second))
     client := NewPeerClient(conn)
     client.Run()
 }

@@ -1,6 +1,7 @@
 package main
 import "time"
 import "net"
+import "fmt"
 import "encoding/json"
 import log "github.com/golang/glog"
 
@@ -103,7 +104,6 @@ func (peer *Peer) HandleGroupIMMessage(msg *IMMessage) {
 }
 
 func (peer *Peer) Write() {
-    ticker := time.NewTicker(10*time.Second)
     seq := 0
     for {
         select {
@@ -117,13 +117,10 @@ func (peer *Peer) Write() {
             msg.seq = seq
             log.Info("peer msg:", msg.cmd)
             SendMessage(peer.conn, msg)
-        case <- ticker.C:
-            log.Info("peer send heartbeat")
-            seq++
-            m := &Message{cmd:MSG_HEARTBEAT, seq:seq}
-            SendMessage(peer.conn, m)
         }
         if peer.conn == nil {
+            p := fmt.Sprintf("%s:%d", peer.host, peer.port)
+            server_summary.SetPeerConnected(p, false)
             break
         }
     }
@@ -155,8 +152,14 @@ func (peer *Peer) Connect() {
             conn, err := net.DialTCP("tcp4", nil, &addr)
             if err != nil {
                 log.Info("connect error:", ip, " ", peer.port)
+                p := fmt.Sprintf("%s:%d", peer.host, peer.port)
+                server_summary.SetPeerConnected(p, false)
             } else {
                 log.Infof("peer:%s port:%d connected", ip, peer.port)
+                p := fmt.Sprintf("%s:%d", peer.host, peer.port)
+                server_summary.SetPeerConnected(p, true)
+                conn.SetKeepAlive(true)
+                conn.SetKeepAlivePeriod(time.Duration(10*60*time.Second))
                 peer.conn = conn
                 go peer.Read()
                 go peer.Write()

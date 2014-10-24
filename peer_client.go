@@ -36,8 +36,6 @@ func (peer *PeerClient) Read() {
             peer.HandleAddClient(msg.body.(*MessageAddClient))
         } else if msg.cmd == MSG_REMOVE_CLIENT {
             peer.HandleRemoveClient(msg.body.(int64))
-        } else if msg.cmd == MSG_HEARTBEAT {
-            log.Info("peer heartbeat")
         }
     }
 }
