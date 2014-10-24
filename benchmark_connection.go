@@ -34,50 +34,60 @@ func receive(uid int64) {
 
         return
     }
-    seq := 1
 
+    seq := 1
     SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid:uid, platform_id:PLATFORM_IOS}})
     ReceiveMessage(conn)
 
-    msgid := 0
-
-    send_timestamp := time.Now().Unix()
+    q := make(chan bool, 10)
+    wt := make(chan *Message, 10)
 
     const HEARTBEAT_TIMEOUT = 3*60
-
-    for {
-
-        now := time.Now().Unix()
-        if now - send_timestamp > 150 {
-            seq++
-            msgid++
-            receiver := first + rand.Int63()%(last-first)
-            im := &IMMessage{uid, receiver, 0, int32(msgid), "test"}
-            conn.SetDeadline(time.Now().Add(10*time.Second))
-            SendMessage(conn, &Message{MSG_IM, seq, im})
-            send_timestamp = now
-        }
-        begin := time.Now().Unix()
-        conn.SetDeadline(time.Now().Add(HEARTBEAT_TIMEOUT*time.Second))
-        msg := ReceiveMessage(conn)
-        if msg == nil {
-            end := time.Now().Unix()
-            if end - begin < (HEARTBEAT_TIMEOUT-10) {
-                log.Println("recv err")
-                break
+    go func() {
+        msgid := 0
+        ticker := time.NewTicker(HEARTBEAT_TIMEOUT*time.Second)
+        ticker2 := time.NewTicker(150*time.Second)
+        for {
+            select {
+            case <- ticker2.C:
+                seq++
+                msgid++
+                receiver := first + rand.Int63()%(last-first)
+                im := &IMMessage{uid, receiver, 0, int32(msgid), "test"}
+                SendMessage(conn, &Message{MSG_IM, seq, im})                
+            case <- ticker.C:
+                seq++
+                SendMessage(conn, &Message{MSG_PING, seq, nil})
+            case m := <- wt:
+                if m == nil {
+                    q <- true
+                    return
+                }
+                seq++
+                m.seq = seq
+                SendMessage(conn, m)
             }
-            log.Println("ping...")
-            seq++
-            conn.SetDeadline(time.Now().Add(10*time.Second))
-            SendMessage(conn, &Message{MSG_PING, seq, nil})
-            continue
         }
-        if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-            seq++
-            ack := &Message{MSG_ACK, seq, MessageACK(msg.seq)}
-            SendMessage(conn, ack)
+    }()
+
+
+    go func() {
+        for {
+            msg := ReceiveMessage(conn)
+            if msg == nil {
+                q <- true
+                return
+            }
+
+            if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+                ack := &Message{cmd:MSG_ACK, body:MessageACK(msg.seq)}
+                wt <- ack
+            }
         }
-    }
+    }()
+
+    <- q
+    <- q
     conn.Close()
 }
 
