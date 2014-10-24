@@ -1,6 +1,7 @@
 package main
 import "time"
 import "net"
+import "encoding/json"
 import log "github.com/golang/glog"
 
 type Peer struct {
@@ -48,6 +49,22 @@ func (peer *Peer) HandleInputing(msg *MessageInputing) {
     }
 }
 
+func (peer *Peer) PublishPeerMessage(im *IMMessage) {
+    conn := redis_pool.Get()
+    defer conn.Close()
+
+    v := make(map[string]interface{})
+    v["sender"] = im.sender
+    v["receiver"] = im.receiver
+    v["content"] = im.content
+
+    b, _ := json.Marshal(v)
+    _, err := conn.Do("RPUSH", "push_queue", b)
+    if err != nil {
+        log.Info("rpush error:", err)
+    }
+}
+
 func (peer *Peer) HandlePeerACK(msg *MessagePeerACK) {
     other := route.FindClient(msg.receiver)
     if other != nil {
@@ -65,6 +82,7 @@ func (peer *Peer) HandleIMMessage(msg *IMMessage) {
     } else {
         log.Info("can't find client:", msg.receiver)
         storage.SaveOfflineMessage(msg.receiver, &Message{cmd:MSG_IM, body:msg})
+        peer.PublishPeerMessage(msg)
     }
 }
 
