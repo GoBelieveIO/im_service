@@ -1,10 +1,8 @@
 package main
 import "net"
 import "sync"
-import "time"
 import log "github.com/golang/glog"
 
-const PEER_TIMEOUT = 20
 type PeerClient struct {
     wt chan *Message
     conn *net.TCPConn
@@ -23,7 +21,6 @@ func NewPeerClient(conn *net.TCPConn) *PeerClient {
 
 func (peer *PeerClient) Read() {
     for {
-        peer.conn.SetDeadline(time.Now().Add(PEER_TIMEOUT*time.Second))
         msg := ReceiveMessage(peer.conn)
         if msg == nil {
             route.RemovePeerClient(peer)

@@ -19,4 +19,4 @@ install:all
 	cp benchmark_sender ./bin
 	cp push.py ./bin
 clean:
-	rm -f im benchmark benchmark_connection
+	rm -f im benchmark benchmark_connection benchmark_sender
