@@ -55,12 +55,18 @@ func (peer *PeerClient) ResetClient(uid int64, ts int32) {
 
 func (peer *PeerClient) PublishOffline() {
     peer.mutex.Lock()
-    defer peer.mutex.Unlock()
-
+    uids := make([]int64, len(peer.uids))
+    i := 0
     for uid, _ := range peer.uids {
-        peer.PublishState(uid, false)
+        uids[i] = uid
+        i++
+    }
+    peer.mutex.Unlock()
+    for _, uid := range uids {
+        peer.PublishState(uid, false)    
     }
 }
+
 func (peer *PeerClient) PublishState(uid int64, online bool) {
     subs := state_center.FindSubsriber(uid)
     state := &MessageOnlineState{uid, 0}
@@ -87,14 +93,15 @@ func (peer *PeerClient) PublishState(uid int64, online bool) {
 
 func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
     peer.mutex.Lock()
-    defer peer.mutex.Unlock()
     uid := ac.uid
     if peer.uids.IsMember(uid) {
         log.Infof("uid:%d exists\n", uid)
+        peer.mutex.Unlock()
         return
     }
     log.Info("add uid:", uid)
     peer.uids.Add(uid)
+    peer.mutex.Unlock()
 
     peer.ResetClient(uid, ac.timestamp)
     peer.PublishState(uid, true)
@@ -110,8 +117,8 @@ func (peer *PeerClient) HandleAddClient(ac *MessageAddClient) {
 
 func (peer *PeerClient) HandleRemoveClient(uid int64) {
     peer.mutex.Lock()
-    defer peer.mutex.Unlock()
     peer.uids.Remove(uid)
+    peer.mutex.Unlock()
     peer.PublishState(uid, false)
     log.Info("remove uid:", uid)
 }
