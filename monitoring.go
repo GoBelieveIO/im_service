@@ -4,6 +4,8 @@ import "fmt"
 import "sync"
 import "net/http"
 import "encoding/json"
+import "os"
+import "runtime/pprof"
 import log "github.com/golang/glog"
 
 type ServerSummary struct {
@@ -58,10 +60,15 @@ func Summary(rw http.ResponseWriter, req *http.Request) {
 	return
 }
 
+func Stack(rw http.ResponseWriter, req *http.Request) {
+    pprof.Lookup("goroutine").WriteTo(os.Stderr, 1)
+    rw.WriteHeader(200)
+}
 
 func StartHttpServer(addr string) {
     go func () {
         http.HandleFunc("/summary", Summary)
+        http.HandleFunc("/stack", Stack)
         err := http.ListenAndServe(addr, nil)
         log.Info("http server err:", err)
     }()
