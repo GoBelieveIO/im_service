@@ -75,6 +75,7 @@ func receive(uid int64) {
         for {
             msg := ReceiveMessage(conn)
             if msg == nil {
+                wt <- nil
                 q <- true
                 return
             }
