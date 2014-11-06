@@ -31,12 +31,12 @@ func (client *Client) Read() {
         client.conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT*time.Second))
         msg := ReceiveMessage(client.conn)
         if msg == nil {
-            route.RemoveClient(client)
-            if client.uid > 0 {
+            r := route.RemoveClient(client)
+            if client.uid > 0 && r {
                 cluster.RemoveClient(client.uid)
+                client.PublishState(false)
             }
             client.wt <- nil
-            client.PublishState(false)
             break
         }
         log.Info("msg:", msg.cmd)
@@ -228,6 +228,7 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
 
     atomic.AddInt64(&server_summary.in_message_count, 1)
+    log.Infof("peer message sender:%d receiver:%d", msg.sender, msg.receiver)
 }
 
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
@@ -260,11 +261,13 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
     }
     client.wt <- &Message{cmd:MSG_ACK, body:MessageACK(seq)}
     atomic.AddInt64(&server_summary.in_message_count, 1)
+    log.Infof("group message sender:%d group id:%d", msg.sender, msg.receiver)
 }
 
 func (client *Client) HandleInputing(inputing *MessageInputing) {
     msg := &Message{cmd:MSG_INPUTING, body:inputing}
     client.SendMessage(inputing.receiver, msg)
+    log.Infof("inputting sender:%d receiver:%d", inputing.sender, inputing.receiver)
 }
 
 func (client *Client) HandleACK(ack MessageACK) {
@@ -286,6 +289,9 @@ func (client *Client) HandleACK(ack MessageACK) {
 func (client *Client) HandlePing() {
     m := &Message{cmd:MSG_PONG}
     client.wt <- m
+    if client.uid == 0 {
+        log.Warning("client has't been authenticated")
+    }
 }
 
 func (client *Client) RemoveUnAckMessage(ack MessageACK) *Message {
@@ -362,7 +368,7 @@ func (client *Client) Write() {
             if client.uid > 0 {
                 atomic.AddInt64(&server_summary.nclients, -1)
             }
-            log.Info("socket closed")
+            log.Infof("client:%d socket closed", client.uid)
             break
         }
         seq++

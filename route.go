@@ -51,16 +51,17 @@ func (route *Route) AddClient(client *Client) {
     route.clients[client.uid] = client
 }
 
-func (route *Route) RemoveClient(client *Client) {
+func (route *Route) RemoveClient(client *Client) bool {
     route.mutex.Lock()
     defer route.mutex.Unlock()
     if _, ok := route.clients[client.uid]; ok {
         if route.clients[client.uid] == client {
             delete(route.clients, client.uid)
-            return
+            return true
         }
     }
     log.Info("client non exists")
+    return false
 }
 
 func (route *Route) FindClient(uid int64) *Client{
