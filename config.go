@@ -12,6 +12,7 @@ type Config struct {
 	mysqldb_datasource  string
 	redis_address       string
 	http_listen_address string
+	socket_io_address   string
 	peer_addrs          []*net.TCPAddr
 }
 
@@ -56,6 +57,7 @@ func read_cfg(cfg_path string) *Config {
 	config.http_listen_address = get_string(app_cfg, "http_listen_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
+	config.socket_io_address = get_string(app_cfg, "socket_io_address")
 
 	config.peer_addrs = make([]*net.TCPAddr, 0)
 	peers := get_opt_string(app_cfg, "peers")

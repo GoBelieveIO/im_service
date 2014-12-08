@@ -25,7 +25,7 @@ func init() {
 }
 
 func handle_client(conn *net.TCPConn) {
-	client := NewClient(conn)
+	client := NewClient(conn, nil)
 	client.Run()
 }
 
@@ -109,5 +109,7 @@ func main() {
 	StartHttpServer(config.http_listen_address)
 
 	go ListenPeerClient()
+	go StartSocketIO(config.socket_io_address)
 	ListenClient()
+
 }

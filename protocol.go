@@ -153,6 +153,189 @@ func (message *Message) FromData(buff []byte) bool {
 	}
 }
 
+func (message *Message) ToMap() map[string]interface{} {
+	data := make(map[string]interface{})
+	data["cmd"] = message.cmd
+	data["seq"] = message.seq
+	cmd := message.cmd
+	if cmd == MSG_AUTH {
+		body := message.body.(*Authentication)
+		data["body"] = map[string]interface{}{
+			"uid":         body.uid,
+			"platform_id": body.platform_id,
+		}
+	} else if cmd == MSG_AUTH_STATUS {
+		body := message.body.(*AuthenticationStatus)
+		data["body"] = map[string]interface{}{
+			"status": body.status,
+		}
+	} else if cmd == MSG_IM || cmd == MSG_GROUP_IM {
+		body := message.body.(*IMMessage)
+		data["body"] = map[string]interface{}{
+			"sender":    body.sender,
+			"receiver":  body.receiver,
+			"timestamp": body.timestamp,
+			"msgid":     body.msgid,
+			"content":   body.content,
+		}
+	} else if cmd == MSG_ADD_CLIENT {
+		body := message.body.(*MessageAddClient)
+		data["body"] = map[string]interface{}{
+			"uid":       body.uid,
+			"timestamp": body.timestamp,
+		}
+	} else if cmd == MSG_REMOVE_CLIENT {
+		data["body"] = message.body.(int64)
+	} else if cmd == MSG_ACK {
+		data["body"] = message.body.(MessageACK)
+	} else if cmd == MSG_PEER_ACK {
+		body := message.body.(*MessagePeerACK)
+		data["body"] = map[string]interface{}{
+			"sender":   body.sender,
+			"receiver": body.receiver,
+			"msgid":    body.msgid,
+		}
+	} else if cmd == MSG_HEARTBEAT || cmd == MSG_PING || cmd == MSG_PONG {
+		data["body"] = nil
+	} else if cmd == MSG_INPUTING {
+		body := message.body.(*MessageInputing)
+		data["body"] = map[string]interface{}{
+			"sender":   body.sender,
+			"receiver": body.receiver,
+		}
+	} else if cmd == MSG_GROUP_NOTIFICATION {
+		data["body"] = message.body.(string)
+	} else if cmd == MSG_ONLINE_STATE {
+		body := message.body.(*MessageOnlineState)
+		data["body"] = map[string]interface{}{
+			"sender": body.sender,
+			"online": body.online,
+		}
+	} else {
+		data["body"] = nil
+	}
+	return data
+}
+
+func (message *Message) FromMap(msg map[string]interface{}) bool {
+	switch message.cmd {
+	case MSG_AUTH:
+		if body, ok := msg["body"].(map[string]interface{}); ok {
+			data := &Authentication{}
+			//			GetData(data, body)
+			data.uid = int64(body["uid"].(float64))
+			data.platform_id = int8(body["platform_id"].(float64))
+			message.body = data
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_AUTH_STATUS:
+		if body, ok := msg["body"].(map[string]interface{}); ok {
+			data := &AuthenticationStatus{}
+			data.status = int32(body["status"].(float64))
+			message.body = data
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_IM, MSG_GROUP_IM:
+		if body, ok := msg["body"].(map[string]interface{}); ok {
+			data := &IMMessage{}
+			data.sender = int64(body["sender"].(float64))
+			data.receiver = int64(body["receiver"].(float64))
+			data.timestamp = int32(body["timestamp"].(float64))
+			data.msgid = int32(body["msgid"].(float64))
+			data.content = body["content"].(string)
+			message.body = data
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_ADD_CLIENT:
+		if body, ok := msg["body"].(map[string]interface{}); ok {
+			data := &MessageAddClient{}
+			data.uid = int64(body["uid"].(float64))
+			data.timestamp = int32(body["timestamp"].(float64))
+			message.body = data
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_REMOVE_CLIENT:
+		if body, ok := msg["body"].(float64); ok {
+			message.body = int64(body)
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_ACK:
+		if body, ok := msg["body"].(float64); ok {
+			message.body = MessageACK(body)
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_HEARTBEAT, MSG_PING, MSG_PONG:
+		return true
+	case MSG_INPUTING:
+		if body, ok := msg["body"].(map[string]interface{}); ok {
+			data := &MessageInputing{}
+			data.sender = int64(body["sender"].(float64))
+			data.receiver = int64(body["receiver"].(float64))
+			message.body = data
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_GROUP_NOTIFICATION:
+		if body, ok := msg["body"].(string); ok {
+			message.body = body
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_PEER_ACK:
+		if body, ok := msg["body"].(map[string]interface{}); ok {
+			data := &MessagePeerACK{}
+			data.sender = int64(body["sender"].(float64))
+			data.receiver = int64(body["receiver"].(float64))
+			data.msgid = int32(body["msgid"].(float64))
+			message.body = data
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	case MSG_SUBSCRIBE_ONLINE_STATE:
+		if body, ok := msg["body"].(map[string]interface{}); ok {
+			data := &MessageSubsribeState{}
+			tmp := body["uids"].([]interface{})
+			uids := make([]int64, len(tmp))
+			for i := range tmp {
+				uids[i] = int64(tmp[i].(float64))
+			}
+			data.uids = uids
+			message.body = data
+			return true
+		} else {
+			log.Info("read body fail")
+			return false
+		}
+	default:
+		return false
+	}
+	return false
+}
+
 func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {
 	binary.Write(buffer, binary.BigEndian, len)
 	binary.Write(buffer, binary.BigEndian, seq)

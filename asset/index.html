@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+    <title>Socket.IO chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font: 13px Helvetica, Arial; }
+        form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+        form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+        form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+        #messages { list-style-type: none; margin: 0; padding: 0; }
+        #messages li { padding: 5px 10px; }
+        #messages li:nth-child(odd) { background: #eee; }
+    </style>
+</head>
+<body>
+<ul id="messages"></ul>
+<form action="">
+    <input id="m" autocomplete="off" /><button>Send</button>
+</form>
+<script src="/socket.io.js"></script>
+<script src="/jquery-1.11.1.js"></script>
+<script>
+    var socket = io();
+    var seq = 0;
+    var event_name = 'chat';
+    var sender = 1;
+    var receiver = 2;
+    var platform_id = 2;
+    var msgid = 0;
+
+    var online_flag = 0;
+    var input_flag = 0;
+
+    // CMD定义
+    var MSG_HEARTBEAT = 1,
+            MSG_AUTH = 2,
+            MSG_AUTH_STATUS = 3,
+            MSG_IM = 4,
+            MSG_ACK = 5,
+            MSG_RST = 6,
+            MSG_GROUP_NOTIFICATION = 7,
+            MSG_GROUP_IM = 8,
+            MSG_PEER_ACK = 9,
+            MSG_INPUTING = 10,
+            MSG_SUBSCRIBE_ONLINE_STATE = 11,
+            MSG_ONLINE_STATE = 12,
+            MSG_PING = 13,
+            MSG_PONG = 14;
+
+
+    function send(cmd, body) {
+        seq++;
+        socket.emit(event_name, {"seq": seq, "cmd": cmd, "body": body});
+    }
+
+    function append_message_list(sender, receiver, content) {
+        $('#messages').append($('<li>').text(sender + ' say to ' + receiver + ': ' + content));
+    }
+
+    socket.on(event_name, function(msg){
+        if(msg.cmd == MSG_AUTH_STATUS) {
+            if(msg.body.status == 0) {
+                $('#messages').append($('<li>').text(sender + ' login success'));
+            } else {
+                $('#messages').append($('<li>').text(sender + ' login fail'));
+            }
+        }
+        else if(msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM)
+        {
+            append_message_list(msg.body.sender, msg.body.receiver, msg.body.content);
+            // 回ACK
+            send(MSG_ACK, msg.seq);
+        }
+        else if(msg.cmd == MSG_ACK) {
+            //
+        }
+        else if(msg.cmd == MSG_ONLINE_STATE) {
+            // 是否在线
+            if(msg.body.online != online_flag) {
+                $('#messages').append($('<li>').text(msg.body.sender + ' is' + (msg.body.online ? '' : ' not') + ' online'));
+                online_flag = msg.body.online;
+            }
+        }
+        else if(msg.cmd == MSG_INPUTING) {
+            if(input_flag == 0) {
+                $('#messages').append($('<li>').text(msg.body.sender + ' is inputting'));
+                input_flag = 1;
+            }
+        }
+        else if(msg.cmd == MSG_PONG) {
+
+        }
+        else {
+
+        }
+
+    });
+
+    $( document ).ready(function() {
+        setTimeout(function() {
+            // 登录
+            send(MSG_AUTH, {"uid": sender, "platform_id": platform_id});
+        }, 1000);
+
+//        setInterval(function() {
+//            // 检查对方是否在线
+//            send(MSG_SUBSCRIBE_ONLINE_STATE, {"uids": [receiver]});
+//        }, 10000);
+    });
+
+    $('#m').on('input', function() {
+        send(MSG_INPUTING, {"sender": sender, "receiver": receiver});
+    });
+
+    $('form').submit(function(){
+        // 发送消息
+        var $m = $('#m');
+        append_message_list(sender, receiver, $m.val());
+        send(MSG_IM, {"sender": sender, "receiver": receiver, "timestamp": $.now(), "msgid": msgid++, "content": $m.val()});
+        $m.val('');
+        input_flag = 0;
+        return false;
+    });
+
+</script>
+</body>
+</html>

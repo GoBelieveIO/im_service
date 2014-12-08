@@ -1,0 +1,7 @@
+port=23000
+http_listen_address=:23002
+peers=127.0.0.1:22001
+storage_root=./data/storage
+mysqldb_source=ngds_user:ngds_user.mysql@tcp(172.25.1.111:3306)/im
+redis_address=192.168.59.103:6379
+socket_io_address=:5000

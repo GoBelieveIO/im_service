@@ -7,6 +7,7 @@ import "sync"
 import "sync/atomic"
 import "encoding/json"
 import log "github.com/golang/glog"
+import "github.com/googollee/go-socket.io"
 
 const CLIENT_TIMEOUT = (60 * 6)
 
@@ -15,13 +16,15 @@ type Client struct {
 	wt     chan *Message
 	uid    int64
 	conn   *net.TCPConn
+	so     socketio.Socket
 	unacks []*Message
 	mutex  sync.Mutex
 }
 
-func NewClient(conn *net.TCPConn) *Client {
+func NewClient(conn *net.TCPConn, so socketio.Socket) *Client {
 	client := new(Client)
 	client.conn = conn
+	client.so = so
 	client.wt = make(chan *Message, 10)
 	client.unacks = make([]*Message, 0, 4)
 	atomic.AddInt64(&server_summary.nconnections, 1)
@@ -29,38 +32,67 @@ func NewClient(conn *net.TCPConn) *Client {
 }
 
 func (client *Client) Read() {
-	for {
-		client.conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
-		msg := ReceiveMessage(client.conn)
-		if msg == nil {
-			r := route.RemoveClient(client)
-			if client.uid > 0 && r {
-				cluster.RemoveClient(client.uid)
-				client.PublishState(false)
+	if client.conn != nil {
+		for {
+			client.conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
+			msg := ReceiveMessage(client.conn)
+			if msg == nil {
+				client.HandleRemoveClient()
+				break
 			}
-			client.wt <- nil
-			break
+			client.HandleMessage(msg)
 		}
-		log.Info("msg:", msg.cmd)
-		if msg.cmd == MSG_AUTH {
-			client.HandleAuth(msg.body.(*Authentication))
-		} else if msg.cmd == MSG_IM {
-			client.HandleIMMessage(msg.body.(*IMMessage), msg.seq)
-		} else if msg.cmd == MSG_GROUP_IM {
-			client.HandleGroupIMMessage(msg.body.(*IMMessage), msg.seq)
-		} else if msg.cmd == MSG_ACK {
-			client.HandleACK(msg.body.(MessageACK))
-		} else if msg.cmd == MSG_HEARTBEAT {
+	} else if client.so != nil {
+		client.so.On("chat", func(input map[string]interface{}) {
+			log.Info(input)
+			cmd := int(input["cmd"].(float64))
+			seq := int(input["seq"].(float64))
 
-		} else if msg.cmd == MSG_PING {
-			client.HandlePing()
-		} else if msg.cmd == MSG_INPUTING {
-			client.HandleInputing(msg.body.(*MessageInputing))
-		} else if msg.cmd == MSG_SUBSCRIBE_ONLINE_STATE {
-			client.HandleSubsribe(msg.body.(*MessageSubsribeState))
-		} else {
-			log.Info("unknown msg:", msg.cmd)
-		}
+			msg := new(Message)
+			msg.cmd = cmd
+			msg.seq = seq
+
+			msg.FromMap(input)
+			log.Info("msg:", msg.cmd)
+			client.HandleMessage(msg)
+		})
+		client.so.On("disconnection", func() {
+			log.Info("disconnection")
+			client.HandleRemoveClient()
+		})
+	}
+}
+
+func (client *Client) HandleRemoveClient() {
+	r := route.RemoveClient(client)
+	if client.uid > 0 && r {
+		cluster.RemoveClient(client.uid)
+		client.PublishState(false)
+	}
+	client.wt <- nil
+}
+
+func (client *Client) HandleMessage(msg *Message) {
+	log.Info("msg:", msg.cmd)
+	switch msg.cmd {
+	case MSG_AUTH:
+		client.HandleAuth(msg.body.(*Authentication))
+	case MSG_IM:
+		client.HandleIMMessage(msg.body.(*IMMessage), msg.seq)
+	case MSG_GROUP_IM:
+		client.HandleGroupIMMessage(msg.body.(*IMMessage), msg.seq)
+	case MSG_ACK:
+		client.HandleACK(msg.body.(MessageACK))
+	case MSG_HEARTBEAT:
+		// nothing to do
+	case MSG_PING:
+		client.HandlePing()
+	case MSG_INPUTING:
+		client.HandleInputing(msg.body.(*MessageInputing))
+	case MSG_SUBSCRIBE_ONLINE_STATE:
+		client.HandleSubsribe(msg.body.(*MessageSubsribeState))
+	default:
+		log.Info("unknown msg:", msg.cmd)
 	}
 }
 
@@ -364,7 +396,9 @@ func (client *Client) Write() {
 				client.ResendUnAckMessage()
 			}
 			client.SaveUnAckMessage()
-			client.conn.Close()
+			if client.conn != nil {
+				client.conn.Close()
+			}
 			atomic.AddInt64(&server_summary.nconnections, -1)
 			if client.uid > 0 {
 				atomic.AddInt64(&server_summary.nclients, -1)
@@ -382,9 +416,17 @@ func (client *Client) Write() {
 		if rst {
 			continue
 		}
-		SendMessage(client.conn, msg)
+
+		if client.conn != nil {
+			SendMessage(client.conn, msg)
+		} else if client.so != nil {
+			SendSocketIOMessage(client.so, msg)
+		}
+
 		if msg.cmd == MSG_RST {
-			client.conn.Close()
+			if client.conn != nil {
+				client.conn.Close()
+			}
 			rst = true
 		}
 	}

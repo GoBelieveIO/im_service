@@ -1,7 +1,7 @@
 all:im benchmark benchmark_connection benchmark_sender
 
-im:im.go peer.go peer_client.go client.go cluster.go route.go protocol.go storage.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go
-	go build im.go peer.go peer_client.go client.go cluster.go route.go protocol.go storage.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go
+im:im.go peer.go peer_client.go client.go cluster.go route.go protocol.go storage.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go
+	go build im.go peer.go peer_client.go client.go cluster.go route.go protocol.go storage.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go
 
 benchmark:benchmark.go protocol.go
 	go build benchmark.go protocol.go
