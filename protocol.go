@@ -4,6 +4,7 @@ import "io"
 import "bytes"
 import "encoding/binary"
 import log "github.com/golang/glog"
+import "github.com/bitly/go-simplejson"
 
 const MSG_HEARTBEAT = 1
 const MSG_AUTH = 2
@@ -171,6 +172,7 @@ func (message *Message) ToMap() map[string]interface{} {
 		}
 	} else if cmd == MSG_IM || cmd == MSG_GROUP_IM {
 		body := message.body.(*IMMessage)
+		//todo base64 encode
 		data["body"] = map[string]interface{}{
 			"sender":    body.sender,
 			"receiver":  body.receiver,
@@ -217,123 +219,186 @@ func (message *Message) ToMap() map[string]interface{} {
 	return data
 }
 
-func (message *Message) FromMap(msg map[string]interface{}) bool {
+func (message *Message) FromJson(msg *simplejson.Json) bool {
 	switch message.cmd {
 	case MSG_AUTH:
-		if body, ok := msg["body"].(map[string]interface{}); ok {
-			data := &Authentication{}
-			//			GetData(data, body)
-			data.uid = int64(body["uid"].(float64))
-			data.platform_id = int8(body["platform_id"].(float64))
-			message.body = data
-			return true
-		} else {
-			log.Info("read body fail")
+		uid, err := msg.Get("body").Get("uid").Int64()
+		if err != nil {
+			log.Info("get uid fail")
 			return false
 		}
+
+		platform_id, err := msg.Get("body").Get("platform_id").Int()
+		if err != nil {
+			log.Info("get platform_id fail")
+			return false
+		}
+
+		data := &Authentication{}
+		data.uid = uid
+		data.platform_id = int8(platform_id)
+		message.body = data
+		return true
 	case MSG_AUTH_STATUS:
-		if body, ok := msg["body"].(map[string]interface{}); ok {
-			data := &AuthenticationStatus{}
-			data.status = int32(body["status"].(float64))
-			message.body = data
-			return true
-		} else {
-			log.Info("read body fail")
+		status, err := msg.Get("body").Get("status").Int()
+		if err != nil {
+			log.Info("get status fail")
 			return false
 		}
+
+		data := &AuthenticationStatus{}
+		data.status = int32(status)
+		message.body = data
+		return true
+
 	case MSG_IM, MSG_GROUP_IM:
-		if body, ok := msg["body"].(map[string]interface{}); ok {
-			data := &IMMessage{}
-			data.sender = int64(body["sender"].(float64))
-			data.receiver = int64(body["receiver"].(float64))
-			data.timestamp = int32(body["timestamp"].(float64))
-			data.msgid = int32(body["msgid"].(float64))
-			data.content = body["content"].(string)
-			message.body = data
-			return true
-		} else {
-			log.Info("read body fail")
+		sender, err := msg.Get("body").Get("sender").Int64()
+		if err != nil {
+			log.Info("get sender fail")
 			return false
 		}
+
+		receiver, err := msg.Get("body").Get("receiver").Int64()
+		if err != nil {
+			log.Info("get receiver fail")
+			return false
+		}
+
+		timestamp, err := msg.Get("body").Get("timestamp").Int()
+		if err != nil {
+			timestamp = 0
+		}
+
+		msgid, err := msg.Get("body").Get("msgid").Int()
+		if err != nil {
+			log.Info("get msgid fail")
+			return false
+		}
+
+		content, err := msg.Get("body").Get("content").String()
+		if err != nil {
+			log.Info("get content fail")
+			return false
+		}
+
+		data := &IMMessage{}
+		data.sender = sender
+		data.receiver = receiver
+		data.timestamp = int32(timestamp)
+		data.msgid = int32(msgid)
+		data.content = content
+		//todo base64 decode
+		message.body = data
+		return true
+
 	case MSG_ADD_CLIENT:
-		if body, ok := msg["body"].(map[string]interface{}); ok {
-			data := &MessageAddClient{}
-			data.uid = int64(body["uid"].(float64))
-			data.timestamp = int32(body["timestamp"].(float64))
-			message.body = data
-			return true
-		} else {
-			log.Info("read body fail")
+		uid, err := msg.Get("body").Get("uid").Int64()
+		if err != nil {
+			log.Info("get uid fail")
 			return false
 		}
+
+		timestamp, err := msg.Get("body").Get("timestamp").Int()
+		if err != nil {
+			log.Info("get timestamp fail")
+			return false
+		}
+
+		data := &MessageAddClient{}
+		data.uid = uid
+		data.timestamp = int32(timestamp)
+		message.body = data
+		return true
+
 	case MSG_REMOVE_CLIENT:
-		if body, ok := msg["body"].(float64); ok {
-			message.body = int64(body)
-			return true
-		} else {
+		body, err := msg.Get("body").Float64()
+		if err != nil {
 			log.Info("read body fail")
 			return false
 		}
+		message.body = int64(body)
+		return true
 	case MSG_ACK:
-		if body, ok := msg["body"].(float64); ok {
-			message.body = MessageACK(body)
-			return true
-		} else {
+		body, err := msg.Get("body").Float64()
+		if err != nil {
 			log.Info("read body fail")
 			return false
 		}
+		message.body = MessageACK(body)
+		return true
 	case MSG_HEARTBEAT, MSG_PING, MSG_PONG:
 		return true
 	case MSG_INPUTING:
-		if body, ok := msg["body"].(map[string]interface{}); ok {
-			data := &MessageInputing{}
-			data.sender = int64(body["sender"].(float64))
-			data.receiver = int64(body["receiver"].(float64))
-			message.body = data
-			return true
-		} else {
-			log.Info("read body fail")
+		sender, err := msg.Get("body").Get("sender").Int64()
+		if err != nil {
+			log.Info("get sender fail")
 			return false
 		}
+
+		receiver, err := msg.Get("body").Get("receiver").Int64()
+		if err != nil {
+			log.Info("get receiver fail")
+			return false
+		}
+
+		data := &MessageInputing{}
+		data.sender = sender
+		data.receiver = receiver
+		message.body = data
+		return true
+
 	case MSG_GROUP_NOTIFICATION:
-		if body, ok := msg["body"].(string); ok {
-			message.body = body
-			return true
-		} else {
+		body, err := msg.Get("body").String()
+		if err != nil {
 			log.Info("read body fail")
 			return false
 		}
+		message.body = body
+		return true
 	case MSG_PEER_ACK:
-		if body, ok := msg["body"].(map[string]interface{}); ok {
-			data := &MessagePeerACK{}
-			data.sender = int64(body["sender"].(float64))
-			data.receiver = int64(body["receiver"].(float64))
-			data.msgid = int32(body["msgid"].(float64))
-			message.body = data
-			return true
-		} else {
-			log.Info("read body fail")
+		sender, err := msg.Get("body").Get("sender").Int64()
+		if err != nil {
+			log.Info("get sender fail")
 			return false
 		}
+
+		receiver, err := msg.Get("body").Get("receiver").Int64()
+		if err != nil {
+			log.Info("get receiver fail")
+			return false
+		}
+
+		msgid, err := msg.Get("body").Get("msgid").Int()
+		if err != nil {
+			log.Info("get msgid fail")
+			return false
+		}
+
+		data := &MessagePeerACK{}
+		data.sender = sender
+		data.receiver = receiver
+		data.msgid = int32(msgid)
+		message.body = data
+		return true
+
 	case MSG_SUBSCRIBE_ONLINE_STATE:
-		if body, ok := msg["body"].(map[string]interface{}); ok {
-			data := &MessageSubsribeState{}
-			tmp := body["uids"].([]interface{})
-			uids := make([]int64, len(tmp))
-			for i := range tmp {
-				uids[i] = int64(tmp[i].(float64))
-			}
-			data.uids = uids
-			message.body = data
-			return true
-		} else {
+		tmp, err := msg.Get("body").Get("uids").Array()
+		if err != nil {
 			log.Info("read body fail")
 			return false
 		}
+
+		data := &MessageSubsribeState{}
+		uids := make([]int64, len(tmp))
+		for i := range tmp {
+			uids[i] = int64(tmp[i].(float64))
+		}
+		data.uids = uids
+		message.body = data
+		return true
 	default:
 		return false
 	}
-	return false
 }
 
 func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {

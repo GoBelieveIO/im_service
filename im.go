@@ -25,7 +25,7 @@ func init() {
 }
 
 func handle_client(conn *net.TCPConn) {
-	client := NewClient(conn, nil)
+	client := NewClient(conn)
 	client.Run()
 }
 

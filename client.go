@@ -7,7 +7,7 @@ import "sync"
 import "sync/atomic"
 import "encoding/json"
 import log "github.com/golang/glog"
-import "github.com/googollee/go-socket.io"
+import "github.com/googollee/go-engine.io"
 
 const CLIENT_TIMEOUT = (60 * 6)
 
@@ -15,16 +15,14 @@ type Client struct {
 	tm     time.Time
 	wt     chan *Message
 	uid    int64
-	conn   *net.TCPConn
-	so     socketio.Socket
+	conn   interface{}
 	unacks []*Message
 	mutex  sync.Mutex
 }
 
-func NewClient(conn *net.TCPConn, so socketio.Socket) *Client {
+func NewClient(conn interface{}) *Client {
 	client := new(Client)
-	client.conn = conn
-	client.so = so
+	client.conn = conn // conn is *net.TCPConn or engineio.Conn
 	client.wt = make(chan *Message, 10)
 	client.unacks = make([]*Message, 0, 4)
 	atomic.AddInt64(&server_summary.nconnections, 1)
@@ -32,34 +30,13 @@ func NewClient(conn *net.TCPConn, so socketio.Socket) *Client {
 }
 
 func (client *Client) Read() {
-	if client.conn != nil {
-		for {
-			client.conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
-			msg := ReceiveMessage(client.conn)
-			if msg == nil {
-				client.HandleRemoveClient()
-				break
-			}
-			client.HandleMessage(msg)
-		}
-	} else if client.so != nil {
-		client.so.On("chat", func(input map[string]interface{}) {
-			log.Info(input)
-			cmd := int(input["cmd"].(float64))
-			seq := int(input["seq"].(float64))
-
-			msg := new(Message)
-			msg.cmd = cmd
-			msg.seq = seq
-
-			msg.FromMap(input)
-			log.Info("msg:", msg.cmd)
-			client.HandleMessage(msg)
-		})
-		client.so.On("disconnection", func() {
-			log.Info("disconnection")
+	for {
+		msg := client.read()
+		if msg == nil {
 			client.HandleRemoveClient()
-		})
+			break
+		}
+		client.HandleMessage(msg)
 	}
 }
 
@@ -396,9 +373,9 @@ func (client *Client) Write() {
 				client.ResendUnAckMessage()
 			}
 			client.SaveUnAckMessage()
-			if client.conn != nil {
-				client.conn.Close()
-			}
+
+			client.close()
+
 			atomic.AddInt64(&server_summary.nconnections, -1)
 			if client.uid > 0 {
 				atomic.AddInt64(&server_summary.nclients, -1)
@@ -417,18 +394,41 @@ func (client *Client) Write() {
 			continue
 		}
 
-		if client.conn != nil {
-			SendMessage(client.conn, msg)
-		} else if client.so != nil {
-			SendSocketIOMessage(client.so, msg)
-		}
+		client.send(msg)
 
 		if msg.cmd == MSG_RST {
-			if client.conn != nil {
-				client.conn.Close()
-			}
+			client.close()
 			rst = true
 		}
+	}
+}
+
+// 根据连接类型获取消息
+func (client *Client) read() *Message {
+	if conn, ok := client.conn.(*net.TCPConn); ok {
+		conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
+		return ReceiveMessage(conn)
+	} else if conn, ok := client.conn.(engineio.Conn); ok {
+		return ReadEngineIOMessage(conn)
+	}
+	return nil
+}
+
+// 根据连接类型发送消息
+func (client *Client) send(msg *Message) {
+	if conn, ok := client.conn.(*net.TCPConn); ok {
+		SendMessage(conn, msg)
+	} else if conn, ok := client.conn.(engineio.Conn); ok {
+		SendEngineIOMessage(conn, msg)
+	}
+}
+
+// 根据连接类型关闭
+func (client *Client) close() {
+	if conn, ok := client.conn.(*net.TCPConn); ok {
+		conn.Close()
+	} else if conn, ok := client.conn.(engineio.Conn); ok {
+		conn.Close()
 	}
 }
 
