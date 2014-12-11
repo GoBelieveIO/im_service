@@ -7,19 +7,31 @@ import (
 	"github.com/googollee/go-engine.io"
 	"io/ioutil"
 	"net/http"
-	"time"
 )
 
-const PING_INTERVAL = 25
-const PING_TIMEOUT = 60
+type SIOServer struct {
+	server *engineio.Server
+}
+
+func (s *SIOServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	log.Info(req.Header.Get("Origin"))
+	if req.Header.Get("Origin") != "" {
+		w.Header().Set("Access-Control-Allow-Origin", req.Header.Get("Origin"))
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", `Origin, No-Cache, X-Requested-With, If-Modified-Since, Pragma,
+		Last-Modified, Cache-Control, Expires, Content-Type`)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	} else {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+	s.server.ServeHTTP(w, req)
+}
 
 func StartSocketIO(socket_io_address string) {
 	server, err := engineio.NewServer(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	server.SetPingInterval(time.Second * PING_INTERVAL)
-	server.SetPingTimeout(time.Second * PING_TIMEOUT)
 
 	go func() {
 		for {
@@ -32,7 +44,7 @@ func StartSocketIO(socket_io_address string) {
 	}()
 
 	mux := http.NewServeMux()
-	mux.Handle("/engine.io/", server)
+	mux.Handle("/engine.io/", &SIOServer{server})
 	mux.Handle("/", http.FileServer(http.Dir("./asset")))
 	log.Infof("EngineIO Serving at %s...", socket_io_address)
 	log.Fatal(http.ListenAndServe(socket_io_address, mux))
