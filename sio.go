@@ -45,16 +45,14 @@ func handlerEngineIOClient(conn engineio.Conn) {
 }
 
 func SendEngineIOMessage(conn engineio.Conn, msg *Message) {
-	data := msg.ToMap()
-	log.Info(data)
+
 	w, err := conn.NextWriter(engineio.MessageText)
 	if err != nil {
 		log.Info("get next writer fail")
 		return
 	}
 
-	d, err := json.Marshal(data)
-
+	d, err := ToJson(msg)
 	if err != nil {
 		log.Info("json encode error")
 		return
@@ -69,6 +67,12 @@ func SendEngineIOMessage(conn engineio.Conn, msg *Message) {
 	w.Close()
 }
 
+func ToJson(msg *Message) ([]byte, error) {
+	data := msg.ToMap()
+	log.Info(data)
+	return json.Marshal(data)
+}
+
 func ReadEngineIOMessage(conn engineio.Conn) *Message {
 	t, r, err := conn.NextReader()
 	if err != nil {
@@ -81,7 +85,7 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 	r.Close()
 	if t == engineio.MessageText {
 		log.Info(string(b))
-		return readMessage(b)
+		return ReadMessage(b)
 	} else {
 		log.Info("receive binary data")
 		return nil
@@ -89,7 +93,7 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 
 }
 
-func readMessage(b []byte) *Message {
+func ReadMessage(b []byte) *Message {
 	input, err := simplejson.NewJson(b)
 
 	if err != nil {
