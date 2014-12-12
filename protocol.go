@@ -172,7 +172,6 @@ func (message *Message) ToMap() map[string]interface{} {
 		}
 	} else if cmd == MSG_IM || cmd == MSG_GROUP_IM {
 		body := message.body.(*IMMessage)
-		//todo base64 encode
 		data["body"] = map[string]interface{}{
 			"sender":    body.sender,
 			"receiver":  body.receiver,
@@ -264,10 +263,7 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 			return false
 		}
 
-		timestamp, err := msg.Get("body").Get("timestamp").Int()
-		if err != nil {
-			timestamp = 0
-		}
+		timestamp := msg.Get("body").Get("timestamp").MustInt(0)
 
 		msgid, err := msg.Get("body").Get("msgid").Int()
 		if err != nil {
@@ -280,14 +276,12 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 			log.Info("get content fail")
 			return false
 		}
-
 		data := &IMMessage{}
 		data.sender = sender
 		data.receiver = receiver
 		data.timestamp = int32(timestamp)
 		data.msgid = int32(msgid)
 		data.content = content
-		//todo base64 decode
 		message.body = data
 		return true
 
@@ -311,15 +305,15 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 		return true
 
 	case MSG_REMOVE_CLIENT:
-		body, err := msg.Get("body").Float64()
+		body, err := msg.Get("body").Int64()
 		if err != nil {
 			log.Info("read body fail")
 			return false
 		}
-		message.body = int64(body)
+		message.body = body
 		return true
 	case MSG_ACK:
-		body, err := msg.Get("body").Float64()
+		body, err := msg.Get("body").Int()
 		if err != nil {
 			log.Info("read body fail")
 			return false
@@ -391,7 +385,10 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 		data := &MessageSubsribeState{}
 		uids := make([]int64, len(tmp))
 		for i := range tmp {
-			uids[i] = int64(tmp[i].(float64))
+			log.Info(tmp[i])
+			if d, ok := tmp[i].(float64); ok {
+				uids[i] = int64(d)
+			}
 		}
 		data.uids = uids
 		message.body = data

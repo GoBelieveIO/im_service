@@ -45,7 +45,6 @@ func StartSocketIO(socket_io_address string) {
 
 	mux := http.NewServeMux()
 	mux.Handle("/engine.io/", &SIOServer{server})
-	mux.Handle("/", http.FileServer(http.Dir("./asset")))
 	log.Infof("EngineIO Serving at %s...", socket_io_address)
 	log.Fatal(http.ListenAndServe(socket_io_address, mux))
 
@@ -128,6 +127,8 @@ func ReadMessage(b []byte) *Message {
 	msg.cmd = cmd
 	msg.seq = seq
 
-	msg.FromJson(input)
-	return msg
+	if msg.FromJson(input) {
+		return msg
+	}
+	return nil
 }
