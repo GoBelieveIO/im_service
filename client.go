@@ -6,6 +6,10 @@ import "fmt"
 import "sync"
 import "sync/atomic"
 import "encoding/json"
+import "net/http"
+import "io/ioutil"
+import "net/url"
+import "errors"
 import log "github.com/golang/glog"
 import "github.com/googollee/go-engine.io"
 
@@ -54,6 +58,8 @@ func (client *Client) HandleMessage(msg *Message) {
 	switch msg.cmd {
 	case MSG_AUTH:
 		client.HandleAuth(msg.body.(*Authentication))
+	case MSG_AUTH_TOKEN:
+		client.HandleAuthToken(msg.body.(*AuthenticationToken))
 	case MSG_IM:
 		client.HandleIMMessage(msg.body.(*IMMessage), msg.seq)
 	case MSG_GROUP_IM:
@@ -185,6 +191,78 @@ func (client *Client) HandleAuth(login *Authentication) {
 	client.SendOfflineMessage()
 
 	atomic.AddInt64(&server_summary.nclients, 1)
+}
+
+func (client *Client) AuthToken(token string) (int64, error) {
+	URL := config.token_url
+	if len(URL) == 0 {
+		return 0, errors.New("token url is't config")
+	}
+	
+    token_url, err := url.Parse(URL)
+    if err != nil {
+		return 0, err
+    }
+    parameters := url.Values{}
+    parameters.Add("token", token)
+    token_url.RawQuery = parameters.Encode()
+	log.Info("token url:", token_url.String())
+
+	resp, err := http.Get(token_url.String())
+	if err != nil {
+		return 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, errors.New("invalid token")
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return 0, err
+	}
+
+	var v map[string]interface{}
+	err = json.Unmarshal(body, &v)
+	if err != nil {
+		return 0, err
+	}
+	if v["uid"] == nil {
+		return 0, errors.New("no uid")
+	}
+	if _, ok := v["uid"].(float64); !ok {
+		return 0, errors.New("uid is's number")
+	}
+	return int64(v["uid"].(float64)), nil
+}
+
+func (client *Client) HandleAuthToken(login *AuthenticationToken) {
+	var err error
+	client.uid, err = client.AuthToken(login.token)
+	if err != nil {
+		log.Info("auth token err:", err)
+		msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{1}}
+		client.wt <- msg
+		return
+	}
+
+	log.Infof("auth token:%s uid:%d", login.token, client.uid)
+
+	client.tm = time.Now()
+	client.SaveLoginInfo(login.platform_id)
+	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
+	client.wt <- msg
+
+	client.ResetClient(client.uid)
+
+	route.AddClient(client)
+	cluster.AddClient(client.uid, int32(client.tm.Unix()))
+	client.PublishState(true)
+	client.SendOfflineMessage()
+
+	atomic.AddInt64(&server_summary.nclients, 1)
+
+	return
 }
 
 func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {

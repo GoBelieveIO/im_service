@@ -20,6 +20,7 @@ const MSG_SUBSCRIBE_ONLINE_STATE = 11
 const MSG_ONLINE_STATE = 12
 const MSG_PING = 13
 const MSG_PONG = 14
+const MSG_AUTH_TOKEN = 15
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -62,6 +63,11 @@ type Authentication struct {
 	platform_id int8
 }
 
+type AuthenticationToken struct {
+	token       string
+	platform_id int8
+}
+
 type AuthenticationStatus struct {
 	status int32
 }
@@ -81,6 +87,8 @@ func (message *Message) ToData() []byte {
 	cmd := message.cmd
 	if cmd == MSG_AUTH {
 		return WriteAuth(message.body.(*Authentication))
+	} else if cmd == MSG_AUTH_TOKEN {
+		return WriteAuthToken(message.body.(*AuthenticationToken))
 	} else if cmd == MSG_AUTH_STATUS {
 		return WriteAuthStatus(message.body.(*AuthenticationStatus))
 	} else if cmd == MSG_IM || cmd == MSG_GROUP_IM {
@@ -110,6 +118,10 @@ func (message *Message) FromData(buff []byte) bool {
 	cmd := message.cmd
 	if cmd == MSG_AUTH {
 		body, ret := ReadAuth(buff)
+		message.body = body
+		return ret
+	} else if cmd == MSG_AUTH_TOKEN {
+		body, ret := ReadAuthToken(buff)
 		message.body = body
 		return ret
 	} else if cmd == MSG_AUTH_STATUS {
@@ -459,6 +471,24 @@ func ReadAuth(buff []byte) (*Authentication, bool) {
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &auth.uid)
 	binary.Read(buffer, binary.BigEndian, &auth.platform_id)
+	return auth, true
+}
+
+func WriteAuthToken(auth *AuthenticationToken) []byte {
+	buffer := new(bytes.Buffer)
+	buffer.Write([]byte(auth.token))
+	binary.Write(buffer, binary.BigEndian, auth.platform_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func ReadAuthToken(buff []byte) (*AuthenticationToken, bool) {
+	if (len(buff) <= 1) {
+		return nil, false
+	}
+	auth := &AuthenticationToken{}
+	auth.token = string(buff[:len(buff)-1])
+	auth.platform_id = int8(buff[len(buff)-1])
 	return auth, true
 }
 

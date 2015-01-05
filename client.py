@@ -19,6 +19,7 @@ MSG_SUBSCRIBE_ONLINE_STATE = 11
 MSG_ONLINE_STATE = 12
 MSG_PING = 13
 MSG_PONG = 14
+MSG_AUTH_TOKEN = 15
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -26,6 +27,11 @@ PLATFORM_ANDROID = 2
 class Authentication:
     def __init__(self):
         self.uid = 0
+        self.platform_id = PLATFORM_ANDROID
+
+class AuthenticationToken:
+    def __init__(self):
+        self.token = ""
         self.platform_id = PLATFORM_ANDROID
 
 class IMMessage:
@@ -46,6 +52,11 @@ def send_message(cmd, seq, msg, sock):
         h = struct.pack("!iibbbb", l, seq, cmd, 0, 0, 0)
         b = struct.pack("!qB", msg.uid, msg.platform_id)
         sock.sendall(h + b)
+    elif cmd == MSG_AUTH_TOKEN:
+        length = len(msg.token) + 1
+        h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
+        b = msg.token + struct.pack("!B", msg.platform_id)
+        sock.sendall(h+b)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         length = 20 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
@@ -404,6 +415,21 @@ def TestClusterMultiLogin():
         time.sleep(1)
     print "test cluster multi login completed"
     
+def TestAuthToken():
+    seq = 0
+    address = ("127.0.0.1", 23000)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
+    sock.connect(address)
+    auth = AuthenticationToken()
+    auth.token = "11"
+    seq = seq + 1
+    send_message(MSG_AUTH_TOKEN, seq, auth, sock)
+    cmd, _, msg = recv_message(sock)
+    if cmd != MSG_AUTH_STATUS:
+        print "test auth token fail"
+
+    print "test auth status:", msg
+
 def TestTimeout():
     sock, seq = connect_server(13635273142, 23000)
     print "waiting timeout"
@@ -527,6 +553,8 @@ def TestSubscribeState():
     
     
 def main():
+    TestAuthToken()
+    time.sleep(1)
     TestSubscribeState()
     time.sleep(1)
     TestGroup()
