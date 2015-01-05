@@ -156,6 +156,8 @@ func (client *Client) SaveLoginInfo(platform_id int8) {
 		platform = "ios"
 	} else if platform_id == PLATFORM_ANDROID {
 		platform = "android"
+	} else if platform_id == PLATFORM_WEB {
+		platform = "web"
 	} else {
 		platform = "unknown"
 	}

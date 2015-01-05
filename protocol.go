@@ -26,6 +26,7 @@ const MSG_REMOVE_CLIENT = 129
 
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
+const PLATFORM_WEB = 3
 
 type IMMessage struct {
 	sender    int64
