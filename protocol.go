@@ -21,6 +21,8 @@ const MSG_ONLINE_STATE = 12
 const MSG_PING = 13
 const MSG_PONG = 14
 const MSG_AUTH_TOKEN = 15
+const MSG_LOGIN_POINT = 16
+
 
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
@@ -84,6 +86,12 @@ type AuthenticationStatus struct {
 	status int32
 }
 
+type LoginPoint struct {
+	up_timestamp      int32
+	platform_id       int8
+	device_id         string
+}
+
 type MessageAddClient struct {
 	uid       int64
 	timestamp int32
@@ -103,6 +111,8 @@ func (message *Message) ToData() []byte {
 		return WriteAuthToken(message.body.(*AuthenticationToken))
 	} else if cmd == MSG_AUTH_STATUS {
 		return WriteAuthStatus(message.body.(*AuthenticationStatus))
+	} else if cmd == MSG_LOGIN_POINT {
+		return WriteLoginPoint(message.body.(*LoginPoint))
 	} else if cmd == MSG_IM || cmd == MSG_GROUP_IM {
 		return WriteIMMessage(message.body.(*IMMessage))
 	} else if cmd == MSG_ADD_CLIENT {
@@ -142,6 +152,10 @@ func (message *Message) FromData(buff []byte) bool {
 		return ret
 	} else if cmd == MSG_AUTH_STATUS {
 		body, ret := ReadAuthStatus(buff)
+		message.body = body
+		return ret
+	} else if cmd == MSG_LOGIN_POINT {
+		body, ret := ReadLoginPoint(buff)
 		message.body = body
 		return ret
 	} else if cmd == MSG_IM || cmd == MSG_GROUP_IM {
@@ -547,6 +561,28 @@ func ReadAuthStatus(buff []byte) (*AuthenticationStatus, bool) {
 	s := &AuthenticationStatus{}
 	binary.Read(buffer, binary.BigEndian, &s.status)
 	return s, true
+}
+
+func WriteLoginPoint(point *LoginPoint) []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, point.up_timestamp)
+	binary.Write(buffer, binary.BigEndian, point.platform_id)
+	buffer.Write([]byte(point.device_id))
+	buf := buffer.Bytes()
+	return buf
+}
+
+func ReadLoginPoint(buff []byte) (*LoginPoint, bool) {
+	if len(buff) <= 5 {
+		return nil, false
+	}
+
+	buffer := bytes.NewBuffer(buff)
+	point := &LoginPoint{}
+	binary.Read(buffer, binary.BigEndian, &point.up_timestamp)
+	binary.Read(buffer, binary.BigEndian, &point.platform_id)
+	point.device_id = string(buff[5:])
+	return point, true
 }
 
 func WriteAddClient(ac *MessageAddClient) []byte {

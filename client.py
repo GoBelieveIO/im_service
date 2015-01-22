@@ -22,6 +22,7 @@ MSG_ONLINE_STATE = 12
 MSG_PING = 13
 MSG_PONG = 14
 MSG_AUTH_TOKEN = 15
+MSG_LOGIN_POINT = 16
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -89,6 +90,10 @@ def recv_message(sock):
     if cmd == MSG_AUTH_STATUS:
         status, = struct.unpack("!i", content)
         return cmd, seq, status
+    elif cmd == MSG_LOGIN_POINT:
+        up_timestamp, platform_id = struct.unpack("!ib", content[:5])
+        device_id = content[5:]
+        return cmd, seq, (up_timestamp, platform_id, device_id)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         im = IMMessage()
         im.sender, im.receiver, _, _ = struct.unpack("!qqii", content[:24])
@@ -152,6 +157,24 @@ def recv_rst(uid):
     while True:
         cmd, s, msg = recv_message(sock1)
         if cmd == MSG_RST:
+            task += 1
+            break
+
+def recv_login_point(uid):
+    global task
+    sock1, seq1 = connect_server(uid, 23000)
+    sock2, seq2 = connect_server(uid, 23000)
+
+    while True:
+        cmd, s, msg = recv_message(sock2)
+        if cmd == MSG_LOGIN_POINT:
+            print "up timestamp:", msg[0], " platform id:", msg[1], " device_id", msg[2]
+            break
+
+    while True:
+        cmd, s, msg = recv_message(sock1)
+        if cmd == MSG_LOGIN_POINT:
+            print "up timestamp:", msg[0], " platform id:", msg[1], " device_id", msg[2]
             task += 1
             break
 
@@ -401,6 +424,9 @@ def TestPeerACK():
 
     print "test peer ack completed"
 
+def TestLoginPoint():
+    recv_login_point(13635273142)
+    print "test login point completed"
 
 def TestTimeout():
     sock, seq = connect_server(13635273142, 23000)
@@ -541,12 +567,15 @@ def main():
     time.sleep(1)
     TestOffline()
     time.sleep(1)
-    TestCluster()
+    #TestCluster()
+    #time.sleep(1)
+    TestLoginPoint()
     time.sleep(1)
     TestPingPong()
     time.sleep(1)
     TestTimeout()
     time.sleep(1)
+    
 
 
 if __name__ == "__main__":

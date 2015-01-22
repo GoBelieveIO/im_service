@@ -60,7 +60,7 @@ func (client *Client) HandleRemoveClient() {
 	}
 	r := route.RemoveClient(client)
 	if client.uid > 0 && r {
-
+		client.RemoveLoginInfo()
 	}
 }
 
@@ -129,20 +129,6 @@ func (client *Client) SendMessage(uid int64, msg *Message) bool {
 	return false
 }
 
-func (client *Client) PlatformString(platform_id int8) string {
-	var platform string
-	if platform_id == PLATFORM_IOS {
-		platform = "ios"
-	} else if platform_id == PLATFORM_ANDROID {
-		platform = "android"
-	} else if platform_id == PLATFORM_WEB {
-		platform = "web"
-	} else {
-		platform = "unknown"
-	}
-	return platform
-}
-
 func (client *Client) SaveLoginInfo() {
 	conn := redis_pool.Get()
 	defer conn.Close()
@@ -150,18 +136,16 @@ func (client *Client) SaveLoginInfo() {
 	var platform_id int8 = client.platform_id
 	var device_id string = client.device_id
 
-	platform := client.PlatformString(platform_id)
-
 	key := fmt.Sprintf("user_logins_%d_%d", client.appid, client.uid)
-	value := fmt.Sprintf("%s_%s", platform, device_id)
+	value := fmt.Sprintf("%d_%s", platform_id, device_id)
 	_, err := conn.Do("SADD", key, value)
 	if err != nil {
 		log.Warning("sadd err:", err)
 	}
 	conn.Do("EXPIRE", key, CLIENT_TIMEOUT*2)
 
-	key = fmt.Sprintf("user_logins_%d_%d_%s_%s", client.appid, client.uid, platform, device_id)
-	_, err = conn.Do("HMSET", key, "up_timestamp", client.tm.Unix(), "platform", platform, "device_id", device_id)
+	key = fmt.Sprintf("user_logins_%d_%d_%d_%s", client.appid, client.uid, platform_id, device_id)
+	_, err = conn.Do("HMSET", key, "up_timestamp", client.tm.Unix(), "platform_id", platform_id, "device_id", device_id)
 	if err != nil {
 		log.Warning("hset err:", err)
 	}
@@ -173,15 +157,65 @@ func (client *Client) RefreshLoginInfo() {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
-	platform := client.PlatformString(client.platform_id)
-
 	key := fmt.Sprintf("user_logins_%d_%d", client.appid, client.uid)
 
 	conn.Do("EXPIRE", key, CLIENT_TIMEOUT*2)
 
-	key = fmt.Sprintf("user_logins_%d_%d_%s_%s", client.appid, client.uid, platform, client.device_id)
-
+	key = fmt.Sprintf("user_logins_%d_%d_%s_%s", client.appid, client.uid, client.platform_id, client.device_id)
+	
 	conn.Do("EXPIRE", key, CLIENT_TIMEOUT*2)	
+}
+
+func (client *Client) RemoveLoginInfo() {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("user_logins_%d_%d", client.appid, client.uid)
+	value := fmt.Sprintf("%d_%s", client.platform_id, client.device_id)
+	conn.Do("SREM", key, value)
+
+	key = fmt.Sprintf("user_logins_%d_%d_%d_%s", client.appid, client.uid, client.platform_id, client.device_id)
+	
+	conn.Do("DEL", key)
+
+}
+
+func (client *Client) ListLoginInfo() []*LoginPoint {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("user_logins_%d_%d", client.appid, client.uid)
+	members, err := redis.Values(conn.Do("SMEMBERS", key))
+	if err != nil {
+		log.Error("smembers err:", err)
+		return nil
+	}
+	
+	points := make([]*LoginPoint, 0)
+	for _, member := range(members) {
+		key = fmt.Sprintf("user_logins_%d_%d_%s", client.appid, client.uid, member)
+		obj, err := redis.Values(conn.Do("HMGET", key, "up_timestamp", "platform_id", "device_id"))
+		if err != nil {
+			log.Error("hmget err:", err)
+			break
+		}
+
+		var up_timestamp int64
+		var platform_id  int64
+		var device_id string
+		_, err = redis.Scan(obj, &up_timestamp, &platform_id, &device_id)
+		if err != nil {
+			log.Warning("scan error:", err)
+			break
+		}
+		point := &LoginPoint{}
+		point.up_timestamp = int32(up_timestamp)
+		point.platform_id = int8(platform_id)
+		point.device_id = device_id
+		points = append(points, point)
+	}
+
+	return points
 }
 
 func (client *Client) AuthToken(login *AuthenticationToken) (int64, int64, error) {
@@ -207,6 +241,27 @@ func (client *Client) AuthToken(login *AuthenticationToken) (int64, int64, error
 	return appid, uid, nil
 }
 
+func (client *Client) SendLoginPoint() {
+	points := client.ListLoginInfo()
+	for _, point := range(points) {
+		log.Infof("login point platform id:%d device id:%s\n", 
+			point.platform_id, point.device_id)
+		if point.platform_id == client.platform_id && 
+			point.device_id == client.device_id {
+			continue
+		}
+		msg := &Message{cmd:MSG_LOGIN_POINT, body:point}
+		client.wt <- msg
+	}
+	
+	point := &LoginPoint{}
+	point.up_timestamp = int32(client.tm.Unix())
+	point.platform_id = client.platform_id
+	point.device_id = client.device_id
+	msg := &Message{cmd:MSG_LOGIN_POINT, body:point}
+	client.SendMessage(client.uid, msg)
+}
+
 func (client *Client) HandleAuthToken(login *AuthenticationToken) {
 	var err error
 	client.appid, client.uid, err = client.AuthToken(login)
@@ -226,9 +281,9 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken) {
 	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
 	client.wt <- msg
 
-	client.AddClient()
+	client.SendLoginPoint()
 	client.SendOfflineMessage()
-
+	client.AddClient()
 	atomic.AddInt64(&server_summary.nclients, 1)
 }
 
