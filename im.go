@@ -8,8 +8,8 @@ import "runtime"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
 
-var route *Route
-var cluster *Cluster
+var app_route *AppRoute
+//var cluster *Cluster
 var storage *Storage
 var group_manager *GroupManager
 var group_server *GroupServer
@@ -19,7 +19,7 @@ var config *Config
 var server_summary *ServerSummary
 
 func init() {
-	route = NewRoute()
+	app_route = NewAppRoute()
 	state_center = NewStateCenter()
 	server_summary = NewServerSummary()
 }
@@ -30,10 +30,11 @@ func handle_client(conn *net.TCPConn) {
 }
 
 func handle_peer_client(conn *net.TCPConn) {
-	conn.SetKeepAlive(true)
-	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
-	client := NewPeerClient(conn)
-	client.Run()
+	return
+	// conn.SetKeepAlive(true)
+	// conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
+	// client := NewPeerClient(conn)
+	// client.Run()
 }
 
 func Listen(f func(*net.TCPConn), port int) {
@@ -56,10 +57,6 @@ func Listen(f func(*net.TCPConn), port int) {
 }
 func ListenClient() {
 	Listen(handle_client, config.port)
-}
-
-func ListenPeerClient() {
-	Listen(handle_peer_client, config.port+1)
 }
 
 func NewRedisPool(server, password string) *redis.Pool {
@@ -97,18 +94,16 @@ func main() {
 
 	redis_pool = NewRedisPool(config.redis_address, "")
 
-	cluster = NewCluster(config.peer_addrs)
-	cluster.Start()
+//	cluster = NewCluster(config.peer_addrs)
+//	cluster.Start()
 	storage = NewStorage(config.storage_root)
-	storage.Start()
-	group_server = NewGroupServer(config.port + 2)
+	group_server = NewGroupServer(config.group_api_port)
 	group_server.Start()
 	group_manager = NewGroupManager()
 	group_manager.Start()
 
 	StartHttpServer(config.http_listen_address)
 
-	go ListenPeerClient()
 	go StartSocketIO(config.socket_io_address)
 	ListenClient()
 

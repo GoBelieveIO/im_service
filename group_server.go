@@ -30,17 +30,7 @@ func NewGroupServer(port int) *GroupServer {
 }
 
 func (group_server *GroupServer) SendMessage(receiver int64, msg *Message) {
-	other := route.FindClient(receiver)
-	if other != nil {
-		other.wt <- msg
-	} else {
-		peer := route.FindPeerClient(receiver)
-		if peer != nil {
-			peer.wt <- msg
-		} else {
-			storage.SaveOfflineMessage(receiver, msg)
-		}
-	}
+	//todo send group notification
 }
 
 func (group_server *GroupServer) PublishMessage(channel string, msg string) {

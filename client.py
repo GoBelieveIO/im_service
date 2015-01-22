@@ -4,6 +4,8 @@ import threading
 import time
 import requests
 import json
+import uuid
+import base64
 
 MSG_HEARTBEAT = 1
 MSG_AUTH = 2
@@ -24,15 +26,12 @@ MSG_AUTH_TOKEN = 15
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
 
-class Authentication:
-    def __init__(self):
-        self.uid = 0
-        self.platform_id = PLATFORM_ANDROID
 
 class AuthenticationToken:
     def __init__(self):
         self.token = ""
         self.platform_id = PLATFORM_ANDROID
+        self.device_id = str(uuid.uuid1())
 
 class IMMessage:
     def __init__(self):
@@ -47,15 +46,10 @@ class SubsribeState:
         self.uids = []
 
 def send_message(cmd, seq, msg, sock):
-    if cmd == MSG_AUTH:
-        l = 9
-        h = struct.pack("!iibbbb", l, seq, cmd, 0, 0, 0)
-        b = struct.pack("!qB", msg.uid, msg.platform_id)
-        sock.sendall(h + b)
-    elif cmd == MSG_AUTH_TOKEN:
-        length = len(msg.token) + 1
+    if cmd == MSG_AUTH_TOKEN:
+        b = struct.pack("!BB", msg.platform_id, len(msg.token)) + msg.token + struct.pack("!B", len(msg.device_id)) + msg.device_id
+        length = len(b)
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
-        b = msg.token + struct.pack("!B", msg.platform_id)
         sock.sendall(h+b)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         length = 20 + len(msg.content)
@@ -114,18 +108,37 @@ def recv_message(sock):
     else:
         return cmd, seq, content
 
+APP_ID = 8
+APP_SECRET = 'sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44'
+URL = "http://127.0.0.1:8888/auth/token"
+
+def login(uid):
+    obj = {"uid":uid, "user_name":str(uid)}
+    basic = base64.b64encode(str(APP_ID) + ":" + APP_SECRET)
+    headers = {'Content-Type': 'application/json; charset=UTF-8',
+               'Authorization': 'Basic ' + basic}
+     
+    res = requests.post(URL, data=json.dumps(obj), headers=headers)
+    if res.status_code != 200:
+        return None
+    obj = json.loads(res.text)
+    return obj["token"]
+
 
 task = 0
 
 def connect_server(uid, port):
+    token = login(uid)
+    if not token:
+        return None, 0
     seq = 0
     address = ("127.0.0.1", port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
     sock.connect(address)
-    auth = Authentication()
-    auth.uid = uid
+    auth = AuthenticationToken()
+    auth.token = token
     seq = seq + 1
-    send_message(MSG_AUTH, seq, auth, sock)
+    send_message(MSG_AUTH_TOKEN, seq, auth, sock)
     cmd, _, msg = recv_message(sock)
     if cmd != MSG_AUTH_STATUS or msg != 0:
         return None, 0
@@ -142,16 +155,6 @@ def recv_rst(uid):
             task += 1
             break
 
-def recv_cluster_rst(uid):
-    global task
-    sock1, seq1 = connect_server(uid, 23000)
-    time.sleep(2)
-    sock2, seq2 = connect_server(uid, 24000)
-    while True:
-        cmd, s, msg = recv_message(sock1)
-        if cmd == MSG_RST:
-            task += 1
-            break
 
 count = 1
 
@@ -355,7 +358,7 @@ def TestInputing():
     global task
     task = 0
 
-    t3 = threading.Thread(target=recv_inputing, args=(13635273142,24000))
+    t3 = threading.Thread(target=recv_inputing, args=(13635273142,23000))
     t3.setDaemon(True)
     t3.start()
 
@@ -375,7 +378,7 @@ def TestPeerACK():
     global task
     task = 0
 
-    t3 = threading.Thread(target=recv_message_client, args=(13635273142,24000))
+    t3 = threading.Thread(target=recv_message_client, args=(13635273142,23000))
     t3.setDaemon(True)
     t3.start()
 
@@ -391,44 +394,6 @@ def TestPeerACK():
 
     print "test peer ack completed"
 
-
-
-def TestMultiLogin():
-    global task
-    task = 0
-    t3 = threading.Thread(target=recv_rst, args=(13635273142,))
-    t3.setDaemon(True)
-    t3.start()
-
-    while task < 1:
-        time.sleep(1)
-    print "test multi login completed"
-
-def TestClusterMultiLogin():
-    global task
-    task = 0
-    t3 = threading.Thread(target=recv_cluster_rst, args=(13635273142,))
-    t3.setDaemon(True)
-    t3.start()
-
-    while task < 1:
-        time.sleep(1)
-    print "test cluster multi login completed"
-    
-def TestAuthToken():
-    seq = 0
-    address = ("127.0.0.1", 23000)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
-    sock.connect(address)
-    auth = AuthenticationToken()
-    auth.token = "11"
-    seq = seq + 1
-    send_message(MSG_AUTH_TOKEN, seq, auth, sock)
-    cmd, _, msg = recv_message(sock)
-    if cmd != MSG_AUTH_STATUS:
-        print "test auth token fail"
-
-    print "test auth status:", msg
 
 def TestTimeout():
     sock, seq = connect_server(13635273142, 23000)
@@ -553,34 +518,28 @@ def TestSubscribeState():
     
     
 def main():
-    TestAuthToken()
-    time.sleep(1)
-    TestSubscribeState()
-    time.sleep(1)
-    TestGroup()
-    time.sleep(1)
-    TestGroupNotification()
-    time.sleep(1)
-    TestGroupMessage()
-    time.sleep(1)
-    TestMultiLogin()
-    time.sleep(1)
+    #TestGroup()
+    #time.sleep(1)
+    #TestGroupNotification()
+    #time.sleep(1)
+    #TestGroupMessage()
+    #time.sleep(1)
+    #TestSubscribeState()
+    #time.sleep(1)
     TestPeerACK()
     time.sleep(1)
     TestInputing()
     time.sleep(1)
-    TestClusterMultiLogin()
-    time.sleep(1)
     TestSendAndRecv()
     time.sleep(1)
-    TestOffline()
-    time.sleep(1)
-    TestCluster()
-    time.sleep(1)
+    #TestOffline()
+    #time.sleep(1)
+    #TestCluster()
+    #time.sleep(1)
     TestPingPong()
     time.sleep(1)
-    TestTimeout()
-    time.sleep(1)
+    #TestTimeout()
+    #time.sleep(1)
 
 
 if __name__ == "__main__":

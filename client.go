@@ -6,11 +6,8 @@ import "fmt"
 import "sync"
 import "sync/atomic"
 import "encoding/json"
-import "net/http"
-import "io/ioutil"
-import "net/url"
-import "errors"
 import log "github.com/golang/glog"
+import "github.com/garyburd/redigo/redis"
 import "github.com/googollee/go-engine.io"
 
 const CLIENT_TIMEOUT = (60 * 6)
@@ -18,9 +15,16 @@ const CLIENT_TIMEOUT = (60 * 6)
 type Client struct {
 	tm     time.Time
 	wt     chan *Message
+	ewt    chan *EMessage
+
+	appid  int64
 	uid    int64
+	device_id string
+	platform_id int8
 	conn   interface{}
-	unacks []*Message
+
+	unackMessages map[int]*EMessage
+	unacks map[int]int64
 	mutex  sync.Mutex
 }
 
@@ -28,7 +32,10 @@ func NewClient(conn interface{}) *Client {
 	client := new(Client)
 	client.conn = conn // conn is *net.TCPConn or engineio.Conn
 	client.wt = make(chan *Message, 10)
-	client.unacks = make([]*Message, 0, 4)
+	client.ewt = make(chan *EMessage, 10)
+
+	client.unacks = make(map[int]int64)
+	client.unackMessages = make(map[int]*EMessage)
 	atomic.AddInt64(&server_summary.nconnections, 1)
 	return client
 }
@@ -45,12 +52,16 @@ func (client *Client) Read() {
 }
 
 func (client *Client) HandleRemoveClient() {
+	client.wt <- nil
+	route := app_route.FindRoute(client.appid)
+	if route == nil {
+		log.Warning("can't find app route")
+		return
+	}
 	r := route.RemoveClient(client)
 	if client.uid > 0 && r {
-		cluster.RemoveClient(client.uid)
-		client.PublishState(false)
+
 	}
-	client.wt <- nil
 }
 
 func (client *Client) HandleMessage(msg *Message) {
@@ -80,83 +91,45 @@ func (client *Client) HandleMessage(msg *Message) {
 }
 
 func (client *Client) SendOfflineMessage() {
-	go func() {
-		c := storage.LoadOfflineMessage(client.uid)
-		if c != nil {
-			for m := range c {
-				client.wt <- m
-			}
-			storage.ClearOfflineMessage(client.uid)
-		}
-	}()
+	offline_messages := storage.LoadOfflineMessage(client.uid)
+	for _, emsg := range offline_messages {
+		client.ewt <- emsg
+	}
 }
 
-func (client *Client) ResetClient(uid int64) {
-	//单点登录
-	c := route.FindClient(client.uid)
-	if c != nil {
-		c.wt <- &Message{cmd: MSG_RST}
+func (client *Client) SendEMessage(uid int64, emsg *EMessage) bool {
+	route := app_route.FindRoute(client.appid)
+	if route == nil {
+		log.Warning("can't find app route")
+		return false
 	}
+	clients := route.FindClientSet(uid)
+	if clients != nil || clients.Count() > 0 {
+		for c, _ := range(clients) {
+			c.ewt <- emsg
+		}
+		return true
+	}
+	return false
 }
 
 func (client *Client) SendMessage(uid int64, msg *Message) bool {
-	other := route.FindClient(uid)
-	if other != nil {
-		other.wt <- msg
-		return true
-	} else {
-		peer := route.FindPeerClient(uid)
-		if peer != nil {
-			peer.wt <- msg
-			return true
+	route := app_route.FindRoute(client.appid)
+	if route == nil {
+		log.Warning("can't find app route")
+		return false
+	}
+	clients := route.FindClientSet(uid)
+	if clients != nil {
+		for c, _ := range(clients) {
+			c.wt <- msg
 		}
+		return true
 	}
 	return false
 }
 
-func (client *Client) PublishState(online bool) {
-	subs := state_center.FindSubsriber(client.uid)
-	state := &MessageOnlineState{client.uid, 0}
-	if online {
-		state.online = 1
-	}
-
-	log.Info("publish online state")
-	set := NewIntSet()
-	msg := &Message{cmd: MSG_ONLINE_STATE, body: state}
-	for _, sub := range subs {
-		log.Info("send online state:", sub)
-		other := route.FindClient(sub)
-		if other != nil {
-			other.wt <- msg
-		} else {
-			set.Add(sub)
-		}
-	}
-	if len(set) > 0 {
-		state_center.Unsubscribe(client.uid, set)
-	}
-}
-
-func (client *Client) IsOnline(uid int64) bool {
-	other := route.FindClient(uid)
-	if other != nil {
-		return true
-	} else {
-		peer := route.FindPeerClient(uid)
-		if peer != nil {
-			return true
-		}
-	}
-	return false
-}
-
-func (client *Client) SaveLoginInfo(platform_id int8) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	key := fmt.Sprintf("users_%d", client.uid)
-
+func (client *Client) PlatformString(platform_id int8) string {
 	var platform string
 	if platform_id == PLATFORM_IOS {
 		platform = "ios"
@@ -167,102 +140,119 @@ func (client *Client) SaveLoginInfo(platform_id int8) {
 	} else {
 		platform = "unknown"
 	}
+	return platform
+}
 
-	_, err := conn.Do("HMSET", key, "up_timestamp", client.tm.Unix(), "platform", platform)
+func (client *Client) SaveLoginInfo() {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	var platform_id int8 = client.platform_id
+	var device_id string = client.device_id
+
+	platform := client.PlatformString(platform_id)
+
+	key := fmt.Sprintf("user_logins_%d_%d", client.appid, client.uid)
+	value := fmt.Sprintf("%s_%s", platform, device_id)
+	_, err := conn.Do("SADD", key, value)
 	if err != nil {
-		log.Info("hset err:", err)
+		log.Warning("sadd err:", err)
 	}
+	conn.Do("EXPIRE", key, CLIENT_TIMEOUT*2)
+
+	key = fmt.Sprintf("user_logins_%d_%d_%s_%s", client.appid, client.uid, platform, device_id)
+	_, err = conn.Do("HMSET", key, "up_timestamp", client.tm.Unix(), "platform", platform, "device_id", device_id)
+	if err != nil {
+		log.Warning("hset err:", err)
+	}
+
+	conn.Do("EXPIRE", key, CLIENT_TIMEOUT*2)
 }
 
-func (client *Client) HandleAuth(login *Authentication) {
-	client.tm = time.Now()
-	client.uid = login.uid
-	log.Info("auth:", login.uid)
+func (client *Client) RefreshLoginInfo() {
+	conn := redis_pool.Get()
+	defer conn.Close()
 
-	client.SaveLoginInfo(login.platform_id)
-	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
-	client.wt <- msg
+	platform := client.PlatformString(client.platform_id)
 
-	client.ResetClient(client.uid)
+	key := fmt.Sprintf("user_logins_%d_%d", client.appid, client.uid)
 
-	route.AddClient(client)
-	cluster.AddClient(client.uid, int32(client.tm.Unix()))
-	client.PublishState(true)
-	client.SendOfflineMessage()
+	conn.Do("EXPIRE", key, CLIENT_TIMEOUT*2)
 
-	atomic.AddInt64(&server_summary.nclients, 1)
+	key = fmt.Sprintf("user_logins_%d_%d_%s_%s", client.appid, client.uid, platform, client.device_id)
+
+	conn.Do("EXPIRE", key, CLIENT_TIMEOUT*2)	
 }
 
-func (client *Client) AuthToken(token string) (int64, error) {
-	URL := config.token_url
-	if len(URL) == 0 {
-		return 0, errors.New("token url is't config")
-	}
+func (client *Client) AuthToken(login *AuthenticationToken) (int64, int64, error) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("tokens_%s", login.token)
+
+	var uid int64
+	var appid int64
 	
-    token_url, err := url.Parse(URL)
-    if err != nil {
-		return 0, err
-    }
-    parameters := url.Values{}
-    parameters.Add("token", token)
-    token_url.RawQuery = parameters.Encode()
-	log.Info("token url:", token_url.String())
-
-	resp, err := http.Get(token_url.String())
+	reply, err := redis.Values(conn.Do("HMGET", key, "uid", "app_id"))
 	if err != nil {
-		return 0, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return 0, errors.New("invalid token")
+		log.Info("hmget error:", err)
+		return 0, 0, err
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
+	_, err = redis.Scan(reply, &uid, &appid)
 	if err != nil {
-		return 0, err
+		log.Warning("scan error:", err)
+		return 0, 0, err
 	}
-
-	var v map[string]interface{}
-	err = json.Unmarshal(body, &v)
-	if err != nil {
-		return 0, err
-	}
-	if v["uid"] == nil {
-		return 0, errors.New("no uid")
-	}
-	if _, ok := v["uid"].(float64); !ok {
-		return 0, errors.New("uid is's number")
-	}
-	return int64(v["uid"].(float64)), nil
+	return appid, uid, nil
 }
 
 func (client *Client) HandleAuthToken(login *AuthenticationToken) {
 	var err error
-	client.uid, err = client.AuthToken(login.token)
+	client.appid, client.uid, err = client.AuthToken(login)
 	if err != nil {
 		log.Info("auth token err:", err)
 		msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{1}}
 		client.wt <- msg
 		return
 	}
-
-	log.Infof("auth token:%s uid:%d", login.token, client.uid)
-
+	client.device_id = login.device_id
+	client.platform_id = login.platform_id
 	client.tm = time.Now()
-	client.SaveLoginInfo(login.platform_id)
+	log.Infof("auth token:%s appid:%d uid:%d", 
+		login.token, client.appid, client.uid)
+
+	client.SaveLoginInfo()
 	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
 	client.wt <- msg
 
-	client.ResetClient(client.uid)
-
-	route.AddClient(client)
-	cluster.AddClient(client.uid, int32(client.tm.Unix()))
-	client.PublishState(true)
+	client.AddClient()
 	client.SendOfflineMessage()
 
 	atomic.AddInt64(&server_summary.nclients, 1)
+}
 
-	return
+func (client *Client) HandleAuth(login *Authentication) {
+	client.appid = 0
+	client.uid = login.uid
+	client.device_id = "00000000"
+	client.platform_id = PLATFORM_IOS
+	client.tm = time.Now()
+	log.Info("auth:", login.uid)
+
+	client.SaveLoginInfo()
+	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
+	client.wt <- msg
+
+	client.AddClient()
+	client.SendOfflineMessage()
+
+	atomic.AddInt64(&server_summary.nclients, 1)
+}
+
+func (client *Client) AddClient() {
+	route := app_route.FindOrAddRoute(client.appid)
+	route.AddClient(client)
 }
 
 func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
@@ -270,23 +260,12 @@ func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
 		return
 	}
 
+	//todo 获取在线状态
 	for _, uid := range msg.uids {
-		online := client.IsOnline(uid)
-		var on int32
-		if online {
-			on = 1
-		}
-		state := &MessageOnlineState{uid, on}
+		state := &MessageOnlineState{uid, 0}
 		m := &Message{cmd: MSG_ONLINE_STATE, body: state}
 		client.wt <- m
 	}
-
-	set := NewIntSet()
-	for _, uid := range msg.uids {
-		set.Add(uid)
-		log.Info(client.uid, " subscribe:", uid)
-	}
-	state_center.Subscribe(client.uid, set)
 }
 
 //离线消息入apns队列
@@ -309,9 +288,13 @@ func (client *Client) PublishPeerMessage(im *IMMessage) {
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, body: msg}
-	r := client.SendMessage(msg.receiver, m)
+
+	msgid := storage.SaveMessage(m)
+	storage.EnqueueOffline(msgid, msg.receiver)
+	
+	emsg := &EMessage{msgid:msgid, msg:m}
+	r := client.SendEMessage(msg.receiver, emsg)
 	if !r {
-		storage.SaveOfflineMessage(msg.receiver, &Message{cmd: MSG_IM, body: msg})
 		client.PublishPeerMessage(msg)
 	}
 
@@ -328,27 +311,21 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		log.Info("can't find group:", msg.receiver)
 		return
 	}
-	peers := make(map[*PeerClient]struct{})
+
 	for member := range group.Members() {
 		//群消息不再发送给自己
 		if member == client.uid {
 			continue
 		}
-		other := route.FindClient(member)
-		if other != nil {
-			other.wt <- &Message{cmd: MSG_GROUP_IM, body: msg}
-		} else {
-			peer := route.FindPeerClient(member)
-			if peer != nil {
-				peers[peer] = struct{}{}
-			} else {
-				storage.SaveOfflineMessage(member, &Message{cmd: MSG_GROUP_IM, body: msg})
-			}
-		}
+
+		m := &Message{cmd: MSG_GROUP_IM, body: msg}
+		msgid := storage.SaveMessage(m)
+		storage.EnqueueOffline(msgid, member)
+
+		emsg := &EMessage{msgid:msgid, msg:m}
+		client.SendEMessage(member, emsg)
 	}
-	for peer, _ := range peers {
-		peer.wt <- &Message{cmd: MSG_GROUP_IM, body: msg}
-	}
+	
 	client.wt <- &Message{cmd: MSG_ACK, body: MessageACK(seq)}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("group message sender:%d group id:%d", msg.sender, msg.receiver)
@@ -365,14 +342,16 @@ func (client *Client) HandleACK(ack MessageACK) {
 	if msg == nil {
 		return
 	}
+	
 	if msg.cmd == MSG_IM {
 		im := msg.body.(*IMMessage)
 		ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
 		m := &Message{cmd: MSG_PEER_ACK, body: ack}
-		r := client.SendMessage(im.sender, m)
-		if !r {
-			storage.SaveOfflineMessage(im.sender, m)
-		}
+		msgid := storage.SaveMessage(m)
+		storage.EnqueueOffline(msgid, im.sender)
+
+		emsg := &EMessage{msgid:msgid, msg:m}
+		client.SendEMessage(im.sender, emsg)
 	}
 }
 
@@ -381,104 +360,65 @@ func (client *Client) HandlePing() {
 	client.wt <- m
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
+		return
 	}
+	client.RefreshLoginInfo()
 }
 
 func (client *Client) RemoveUnAckMessage(ack MessageACK) *Message {
 	client.mutex.Lock()
 	defer client.mutex.Unlock()
-
-	pos := -1
-	for i, msg := range client.unacks {
-		if msg.seq == int(ack) {
-			pos = i
-			break
-		}
+	seq := int(ack)
+	if msgid, ok := client.unacks[seq]; ok {
+		storage.DequeueOffline(msgid, client.uid)
+		delete(client.unacks, seq)
 	}
-	if pos == -1 {
-		log.Info("invalid ack seq:", ack)
-		return nil
-	} else {
-		m := client.unacks[pos]
-		client.unacks = client.unacks[pos+1:]
-		log.Info("remove unack msg:", len(client.unacks))
-		return m
+	if emsg, ok := client.unackMessages[seq]; ok {
+		msg := emsg.msg
+		delete(client.unackMessages, seq)
+		return msg
 	}
+	return nil
 }
 
-func (client *Client) AddUnAckMessage(msg *Message) {
+func (client *Client) AddUnAckMessage(emsg *EMessage) {
 	client.mutex.Lock()
 	defer client.mutex.Unlock()
-	client.unacks = append(client.unacks, msg)
-}
-
-func (client *Client) SaveUnAckMessage() {
-	client.mutex.Lock()
-	defer client.mutex.Unlock()
-	for _, msg := range client.unacks {
-		storage.SaveOfflineMessage(client.uid, msg)
-	}
-}
-
-//unack消息重新发送給新登录的客户端
-func (client *Client) ResendUnAckMessage() {
-	client.mutex.Lock()
-	defer client.mutex.Unlock()
-
-	other := route.FindClient(client.uid)
-	if other != nil {
-		//assert(other != client)
-		for _, msg := range client.unacks {
-			other.wt <- msg
-		}
-		client.unacks = client.unacks[0:0]
-	} else {
-		peer := route.FindPeerClient(client.uid)
-		if peer != nil {
-			for _, msg := range client.unacks {
-				peer.wt <- msg
-			}
-			client.unacks = client.unacks[0:0]
-		}
+	seq := emsg.msg.seq
+	client.unacks[seq] = emsg.msgid
+	if emsg.msg.cmd == MSG_IM {
+		client.unackMessages[seq] = emsg
 	}
 }
 
 func (client *Client) Write() {
 	seq := 0
-	rst := false
-	for {
-		msg := <-client.wt
-		if msg == nil {
-			if rst {
-				client.ResendUnAckMessage()
+	running := true
+	for running {
+		select {
+		case msg := <-client.wt:
+			if msg == nil {
+				client.close()
+				atomic.AddInt64(&server_summary.nconnections, -1)
+				if client.uid > 0 {
+					atomic.AddInt64(&server_summary.nclients, -1)
+				}
+				running = false
+				log.Infof("client:%d socket closed", client.uid)
+				break
 			}
-			client.SaveUnAckMessage()
-
-			client.close()
-
-			atomic.AddInt64(&server_summary.nconnections, -1)
-			if client.uid > 0 {
-				atomic.AddInt64(&server_summary.nclients, -1)
+			seq++
+			msg.seq = seq
+			client.send(msg)
+		case emsg := <- client.ewt:
+			msg := emsg.msg
+			seq++
+			msg.seq = seq
+			client.AddUnAckMessage(emsg)
+			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
-			log.Infof("client:%d socket closed", client.uid)
-			break
-		}
-		seq++
-		msg.seq = seq
-		if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-			client.AddUnAckMessage(msg)
-			atomic.AddInt64(&server_summary.out_message_count, 1)
-		}
-
-		if rst {
-			continue
-		}
-
-		client.send(msg)
-
-		if msg.cmd == MSG_RST {
-			client.close()
-			rst = true
+			client.send(msg)
 		}
 	}
 }

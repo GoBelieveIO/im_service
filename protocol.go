@@ -25,9 +25,20 @@ const MSG_AUTH_TOKEN = 15
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
 
+
+//内部文件存储使用
+const MSG_OFFLINE = 254
+const MSG_ACK_IN = 255
+
+
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
+
+type OfflineMessage struct {
+	receiver int64
+	msgid    int64
+}
 
 type IMMessage struct {
 	sender    int64
@@ -58,14 +69,15 @@ type MessagePeerACK struct {
 	receiver int64
 	msgid    int32
 }
+
 type Authentication struct {
 	uid         int64
-	platform_id int8
 }
 
 type AuthenticationToken struct {
 	token       string
 	platform_id int8
+	device_id   string
 }
 
 type AuthenticationStatus struct {
@@ -109,6 +121,10 @@ func (message *Message) ToData() []byte {
 		return WriteGroupNotification(message.body.(string))
 	} else if cmd == MSG_ONLINE_STATE {
 		return WriteState(message.body.(*MessageOnlineState))
+	} else if cmd == MSG_ACK_IN {
+		return WriteACKInternal(message.body.(int64))
+	} else if cmd == MSG_OFFLINE {
+		return WriteOfflineMessage(message.body.(*OfflineMessage))
 	} else {
 		return nil
 	}
@@ -162,6 +178,14 @@ func (message *Message) FromData(buff []byte) bool {
 		body, ret := ReadSubscribeState(buff)
 		message.body = body
 		return ret
+	} else if cmd == MSG_ACK_IN {
+		body, ret := ReadACKInternal(buff)
+		message.body = body
+		return ret
+	} else if cmd == MSG_OFFLINE {
+		body, ret := ReadOfflineMessage(buff)
+		message.body = body
+		return ret
 	} else {
 		return false
 	}
@@ -176,7 +200,6 @@ func (message *Message) ToMap() map[string]interface{} {
 		body := message.body.(*Authentication)
 		data["body"] = map[string]interface{}{
 			"uid":         body.uid,
-			"platform_id": body.platform_id,
 		}
 	} else if cmd == MSG_AUTH_STATUS {
 		body := message.body.(*AuthenticationStatus)
@@ -240,15 +263,8 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 			return false
 		}
 
-		platform_id, err := msg.Get("body").Get("platform_id").Int()
-		if err != nil {
-			log.Info("get platform_id fail")
-			return false
-		}
-
 		data := &Authentication{}
 		data.uid = uid
-		data.platform_id = int8(platform_id)
 		message.body = data
 		return true
 	case MSG_AUTH_STATUS:
@@ -458,7 +474,6 @@ func ReadIMMessage(buff []byte) (*IMMessage, bool) {
 func WriteAuth(auth *Authentication) []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, auth.uid)
-	binary.Write(buffer, binary.BigEndian, auth.platform_id)
 	buf := buffer.Bytes()
 	return buf
 }
@@ -470,25 +485,53 @@ func ReadAuth(buff []byte) (*Authentication, bool) {
 	auth := &Authentication{}
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &auth.uid)
-	binary.Read(buffer, binary.BigEndian, &auth.platform_id)
 	return auth, true
 }
 
 func WriteAuthToken(auth *AuthenticationToken) []byte {
+	var l int8
+
 	buffer := new(bytes.Buffer)
-	buffer.Write([]byte(auth.token))
 	binary.Write(buffer, binary.BigEndian, auth.platform_id)
+
+	l = int8(len(auth.token))
+	binary.Write(buffer, binary.BigEndian, l)
+	buffer.Write([]byte(auth.token))
+
+	l = int8(len(auth.device_id))
+	binary.Write(buffer, binary.BigEndian, l)
+	buffer.Write([]byte(auth.device_id))
+
 	buf := buffer.Bytes()
 	return buf
 }
 
 func ReadAuthToken(buff []byte) (*AuthenticationToken, bool) {
-	if (len(buff) <= 1) {
+	var l int8
+	if (len(buff) <= 3) {
 		return nil, false
 	}
 	auth := &AuthenticationToken{}
-	auth.token = string(buff[:len(buff)-1])
-	auth.platform_id = int8(buff[len(buff)-1])
+	auth.platform_id = int8(buff[0])
+
+	buffer := bytes.NewBuffer(buff[1:])
+
+	binary.Read(buffer, binary.BigEndian, &l)
+	if int(l) > buffer.Len() {
+		return nil, false
+	}
+	token := make([]byte, l)
+	buffer.Read(token)
+
+	binary.Read(buffer, binary.BigEndian, &l)
+	if int(l) > buffer.Len() {
+		return nil, false
+	}
+	device_id := make([]byte, l)
+	buffer.Read(device_id)
+
+	auth.token = string(token)
+	auth.device_id = string(device_id)
 	return auth, true
 }
 
@@ -624,6 +667,43 @@ func ReadSubscribeState(buff []byte) (*MessageSubsribeState, bool) {
 		binary.Read(buffer, binary.BigEndian, &sub.uids[i])
 	}
 	return sub, true
+}
+
+func WriteACKInternal(msgid int64) []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, msgid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func ReadACKInternal(buff []byte) (int64, bool) {
+	if len(buff) < 8 {
+		return 0, false
+	}
+	buffer := bytes.NewBuffer(buff)
+	var msgid int64
+	binary.Read(buffer, binary.BigEndian, &msgid)
+	return msgid, true
+}
+
+func WriteOfflineMessage(off *OfflineMessage) []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
+	binary.Write(buffer, binary.BigEndian, off.msgid)
+	buf := buffer.Bytes()
+	return buf
+
+}
+
+func ReadOfflineMessage(buff []byte) (*OfflineMessage, bool) {
+	if len(buff) < 16 {
+		return nil, false
+	}
+	buffer := bytes.NewBuffer(buff)
+	off := &OfflineMessage{}
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
+	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	return off, true
 }
 
 func SendMessage(conn io.Writer, msg *Message) {

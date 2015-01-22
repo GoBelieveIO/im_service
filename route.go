@@ -3,115 +3,134 @@ package main
 import "sync"
 import log "github.com/golang/glog"
 
-type PeerClientSet struct {
-	peers map[*PeerClient]bool
+type AppRoute struct {
+	mutex sync.Mutex
+	apps  map[int64]*Route
 }
 
-func NewPeerClientSet() *PeerClientSet {
-	set := new(PeerClientSet)
-	set.peers = make(map[*PeerClient]bool)
-	return set
+func NewAppRoute() *AppRoute {
+	app_route := new(AppRoute)
+	app_route.apps = make(map[int64]*Route)
+	return app_route
 }
 
-func (set *PeerClientSet) Add(peer *PeerClient) {
-	set.peers[peer] = true
-}
-
-func (set *PeerClientSet) Contains(peer *PeerClient) bool {
-	_, ok := set.peers[peer]
-	return ok
-}
-
-func (set *PeerClientSet) Remove(peer *PeerClient) {
-	if _, ok := set.peers[peer]; ok {
-		delete(set.peers, peer)
-	} else {
-		log.Info("peer client no exists")
+func (app_route *AppRoute) FindOrAddRoute(appid int64) *Route {
+	app_route.mutex.Lock()
+	defer app_route.mutex.Unlock()
+	if route, ok := app_route.apps[appid]; ok {
+		return route
 	}
+	route := NewRoute(appid)
+	app_route.apps[appid] = route
+	return route
+}
+
+func (app_route *AppRoute) FindRoute(appid int64) *Route{
+	app_route.mutex.Lock()
+	defer app_route.mutex.Unlock()
+	return app_route.apps[appid]
+}
+
+func (app_route *AppRoute) AddRoute(route *Route) {
+	app_route.mutex.Lock()
+	defer app_route.mutex.Unlock()
+	app_route.apps[route.appid] = route
+}
+
+type ClientSet map[*Client]struct{}
+
+func NewClientSet() ClientSet {
+	return make(map[*Client]struct{})
+}
+
+func (set ClientSet) Add(c *Client) {
+	set[c] = struct{}{}
+}
+
+func (set ClientSet) IsMember(c *Client) bool {
+	if _, ok := set[c]; ok {
+		return true
+	}
+	return false
+}
+
+func (set ClientSet) Remove(c *Client) {
+	if _, ok := set[c]; !ok {
+		return
+	}
+	delete(set, c)
+}
+
+func (set ClientSet) Count() int {
+	return len(set)
+}
+
+func (set ClientSet) Clone() ClientSet {
+	n := make(map[*Client]struct{})
+	for k, v := range set {
+		n[k] = v
+	}
+	return n
 }
 
 type Route struct {
+	appid  int64
 	mutex   sync.Mutex
-	clients map[int64]*Client
-	peers   *PeerClientSet
+	clients map[int64]ClientSet
 }
 
-func NewRoute() *Route {
+func NewRoute(appid int64) *Route {
 	route := new(Route)
-	route.clients = make(map[int64]*Client)
-	route.peers = NewPeerClientSet()
+	route.appid = appid
+	route.clients = make(map[int64]ClientSet)
 	return route
 }
 
 func (route *Route) AddClient(client *Client) {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
-	if _, ok := route.clients[client.uid]; ok {
-		log.Info("client exists")
+	set, ok := route.clients[client.uid]; 
+	if !ok {
+		set = NewClientSet()
+		route.clients[client.uid] = set
 	}
-	route.clients[client.uid] = client
+	set.Add(client)
 }
 
 func (route *Route) RemoveClient(client *Client) bool {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
-	if _, ok := route.clients[client.uid]; ok {
-		if route.clients[client.uid] == client {
+	if set, ok := route.clients[client.uid]; ok {
+		set.Remove(client)
+		if set.Count() == 0 {
 			delete(route.clients, client.uid)
-			return true
 		}
+		return true
 	}
 	log.Info("client non exists")
 	return false
 }
 
-func (route *Route) FindClient(uid int64) *Client {
+func (route *Route) FindClientSet(uid int64) ClientSet {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
 
-	c, ok := route.clients[uid]
+	set, ok := route.clients[uid]
 	if ok {
-		return c
+		return set.Clone()
 	} else {
 		return nil
 	}
 }
 
 func (route *Route) GetClientUids() map[int64]int32 {
-	route.mutex.Lock()
-	defer route.mutex.Unlock()
-	uids := make(map[int64]int32)
-	for uid, c := range route.clients {
-		uids[uid] = int32(c.tm.Unix())
-	}
-	return uids
-}
-
-func (route *Route) AddPeerClient(peer *PeerClient) {
-	route.mutex.Lock()
-	defer route.mutex.Unlock()
-
-	if route.peers.Contains(peer) {
-		return
-	}
-	route.peers.Add(peer)
-}
-
-func (route *Route) RemovePeerClient(peer *PeerClient) {
-	route.mutex.Lock()
-	defer route.mutex.Unlock()
-
-	route.peers.Remove(peer)
-}
-
-func (route *Route) FindPeerClient(uid int64) *PeerClient {
-	route.mutex.Lock()
-	defer route.mutex.Unlock()
-
-	for peer := range route.peers.peers {
-		if peer.ContainUid(uid) {
-			return peer
-		}
-	}
 	return nil
+	// route.mutex.Lock()
+	// defer route.mutex.Unlock()
+	// uids := make(map[int64]int32)
+	// for uid, c := range route.clients {
+	// 	uids[uid] = int32(c.tm.Unix())
+	// }
+	// return uids
 }
+

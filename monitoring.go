@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-import "sync"
 import "net/http"
 import "encoding/json"
 import "os"
@@ -13,24 +11,13 @@ type ServerSummary struct {
 	nclients          int64
 	in_message_count  int64
 	out_message_count int64
-
-	peer_connected map[string]bool
-	mutex          sync.Mutex
 }
 
 func NewServerSummary() *ServerSummary {
 	s := new(ServerSummary)
-	s.peer_connected = make(map[string]bool)
 	return s
 }
 
-func (s *ServerSummary) SetPeerConnected(peer string, connected bool) {
-	s.mutex.Lock()
-	s.mutex.Unlock()
-
-	k := fmt.Sprintf("peer_%s_connected", peer)
-	s.peer_connected[k] = connected
-}
 
 func Summary(rw http.ResponseWriter, req *http.Request) {
 	obj := make(map[string]interface{})
@@ -38,12 +25,6 @@ func Summary(rw http.ResponseWriter, req *http.Request) {
 	obj["client_count"] = server_summary.nclients
 	obj["in_message_count"] = server_summary.in_message_count
 	obj["out_message_count"] = server_summary.out_message_count
-
-	server_summary.mutex.Lock()
-	for k, v := range server_summary.peer_connected {
-		obj[k] = v
-	}
-	server_summary.mutex.Unlock()
 
 	res, err := json.Marshal(obj)
 	if err != nil {

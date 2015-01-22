@@ -36,7 +36,7 @@ func receive(uid int64) {
 	}
 
 	seq := 1
-	SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid: uid, platform_id: PLATFORM_IOS}})
+	SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid: uid}})
 	ReceiveMessage(conn)
 
 	q := make(chan bool, 10)

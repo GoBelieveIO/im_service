@@ -3,104 +3,73 @@ package main
 import "os"
 import "fmt"
 import "bytes"
+import "sync"
 import "encoding/binary"
+import "strconv"
 import log "github.com/golang/glog"
+import "github.com/syndtr/goleveldb/leveldb"
+import "github.com/syndtr/goleveldb/leveldb/util"
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
 
-const OFFLINE = "offline"
-
-type OfflineMessage struct {
-	receiver int64
-	message  *Message
+type Storage struct {
+	root  string
+	db    *leveldb.DB
+	mutex sync.Mutex
+	file  *os.File
 }
 
-//离线消息存储
-type Storage struct {
-	files map[int64]*os.File
-	ic    chan *OfflineMessage
-	cc    chan int64
-	root  string
+type EMessage struct {
+	msgid int64
+	msg   *Message
 }
 
 func NewStorage(root string) *Storage {
 	storage := new(Storage)
-	storage.ic = make(chan *OfflineMessage)
-	storage.cc = make(chan int64)
-	storage.files = make(map[int64]*os.File)
 	storage.root = root
-	path := fmt.Sprintf("%s/%s", storage.root, OFFLINE)
-	err := os.Mkdir(path, 0755)
-	if err != nil && !os.IsExist(err) {
-		panic(fmt.Sprintf("mkdir %s error", path))
+
+	path := fmt.Sprintf("%s/%s", storage.root, "messages")
+	log.Info("message file path:", path)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		log.Fatal("open file")
 	}
+	file_size, err := file.Seek(0, os.SEEK_END)
+	if err != nil {
+		log.Fatal("seek file")
+	}
+	if file_size < HEADER_SIZE && file_size > 0 {
+		log.Info("file header is't complete")
+		err = file.Truncate(0)
+		if err != nil {
+			log.Fatal("truncate file")
+		}
+		file_size = 0
+	}
+	if file_size == 0 {
+		storage.WriteHeader(file)
+	}
+	storage.file = file
+
+	path = fmt.Sprintf("%s/%s", storage.root, "offline")
+	db, err := leveldb.OpenFile(path, nil)
+	if err != nil {
+		log.Fatal("open leveldb")
+	}
+
+	storage.db = db
 	return storage
 }
 
-func (storage *Storage) Start() {
-	go storage.Run()
-}
-
-func (storage *Storage) SaveOfflineMessage(receiver int64, message *Message) {
-	storage.ic <- &OfflineMessage{receiver, message}
-	log.Info("save off line message:", receiver, " ", message.cmd)
-}
-
-func (storage *Storage) ClearOfflineMessage(uid int64) {
-	storage.cc <- uid
-}
-
-func (storage *Storage) LoadOfflineMessage(uid int64) chan *Message {
-	path := storage.GetOfflinePath(uid)
-	file, err := os.Open(path)
+func (storage *Storage) ReadMessage(msg_id int64) *Message {
+	_, err := storage.file.Seek(msg_id, os.SEEK_SET)
 	if err != nil {
+		log.Warning("seek file")
 		return nil
 	}
-
-	fi, err := file.Stat()
-	if err != nil {
-		return nil
-	}
-	if fi.Size() <= HEADER_SIZE {
-		return nil
-	}
-
-	magic, version := storage.ReadHeader(file)
-	if magic != MAGIC {
-		log.Info("magic unmatch")
-		return nil
-	}
-	if version != VERSION {
-		log.Info("version unknown")
-		return nil
-	}
-
-	c := make(chan *Message)
-	go func() {
-		for {
-			msg := storage.ReadMessage(file)
-			if msg == nil {
-				break
-			}
-			c <- msg
-		}
-		close(c)
-	}()
-	return c
-}
-
-func (storage *Storage) GetOfflinePath(uid int64) string {
-	return fmt.Sprintf("%s/%s/%d", storage.root, OFFLINE, uid)
-}
-
-func (storage *Storage) ReadMessage(file *os.File) *Message {
-	return ReceiveMessage(file)
-}
-
-func (storage *Storage) WriteMessage(file *os.File, message *Message) {
-	SendMessage(file, message)
+	return ReceiveMessage(storage.file)
 }
 
 func (storage *Storage) ReadHeader(file *os.File) (magic int, version int) {
@@ -136,55 +105,66 @@ func (storage *Storage) WriteHeader(file *os.File) {
 	}
 }
 
-//保存离线消息
-func (storage *Storage) SaveMessage(msg *OfflineMessage) {
-	_, ok := storage.files[msg.receiver]
-	if !ok {
-		path := storage.GetOfflinePath(msg.receiver)
-		log.Info("path:", path)
-		file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-		if err != nil {
-			log.Fatal("open file")
-		}
-		file_size, err := file.Seek(0, os.SEEK_END)
-		if err != nil {
-			log.Fatal("seek file")
-		}
-		if file_size < HEADER_SIZE && file_size > 0 {
-			log.Info("file header is't complete")
-			err = file.Truncate(0)
-			if err != nil {
-				log.Fatal("truncate file")
-			}
-			file_size = 0
-		}
-		if file_size == 0 {
-			storage.WriteHeader(file)
-		}
-		storage.files[msg.receiver] = file
+func (storage *Storage) SaveMessage(msg *Message) int64 {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	msgid, err := storage.file.Seek(0, os.SEEK_END)
+	if err != nil {
+		log.Fatalln(err)
 	}
-	storage.WriteMessage(storage.files[msg.receiver], msg.message)
+	
+	SendMessage(storage.file, msg)
+	return msgid
 }
 
-//清空离线消息
-func (storage *Storage) ClearMessage(uid int64) {
-	file, ok := storage.files[uid]
-	if ok {
-		delete(storage.files, uid)
-		file.Close()
+func (storage *Storage) EnqueueOffline(msg_id int64, receiver int64) {
+	key := fmt.Sprintf("%d_%d", receiver, msg_id)
+	value := fmt.Sprintf("%d", msg_id)
+	err := storage.db.Put([]byte(key), []byte(value), nil)
+	if err != nil {
+		log.Error("put err:", err)
+		return
 	}
-	path := storage.GetOfflinePath(uid)
-	os.Remove(path)
+	off := &OfflineMessage{receiver:receiver, msgid:msg_id}
+	storage.SaveMessage(&Message{cmd:MSG_OFFLINE, body:off})
 }
 
-func (storage *Storage) Run() {
-	for {
-		select {
-		case msg := <-storage.ic:
-			storage.SaveMessage(msg)
-
-		case uid := <-storage.cc:
-			storage.ClearMessage(uid)
-		}
+func (storage *Storage) DequeueOffline(msg_id int64, receiver int64) {
+	key := fmt.Sprintf("%d_%d", receiver, msg_id)
+	err := storage.db.Delete([]byte(key), nil)
+	if err != nil {
+		log.Error("delete err:", err)
 	}
+
+	msg := &Message{cmd:MSG_ACK_IN, body:msg_id}
+	storage.SaveMessage(msg)
+}
+
+func (storage *Storage) LoadOfflineMessage(uid int64) []*EMessage {
+	return nil
+	c := make([]*EMessage, 0, 10)
+	prefix := fmt.Sprintf("%d_", uid)
+	r := util.BytesPrefix([]byte(prefix))
+	iter := storage.db.NewIterator(r, nil)
+	for iter.Next() {
+		value := iter.Value()
+		msgid, err := strconv.ParseInt(string(value), 10, 64)
+		if err != nil {
+			log.Error("parseint err:", err)
+			continue
+		}
+
+		msg := storage.ReadMessage(msgid)
+		if msg == nil {
+			continue
+		}
+		c = append(c, &EMessage{msgid:msgid, msg:msg})
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		log.Warning("iterator err:", err)
+	}
+	
+	return c
 }
