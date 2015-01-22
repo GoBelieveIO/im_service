@@ -52,7 +52,7 @@ def send_message(cmd, seq, msg, sock):
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
         sock.sendall(h+b)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
-        length = 20 + len(msg.content)
+        length = 24 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
         sock.sendall(h+b+msg.content)
@@ -232,10 +232,15 @@ def send_client(uid, receiver, msg_type):
         im.content = "test group im"
     seq += 1
     send_message(msg_type, seq, im, sock)
+    msg_seq = seq
     while True:
-        cmd, _, msg = recv_message(sock)
-        if cmd == MSG_ACK and msg == seq:
+        cmd, s, msg = recv_message(sock)
+        if cmd == MSG_ACK and msg == msg_seq:
             break
+        elif cmd == MSG_PEER_ACK:
+            print "send ack..."
+            seq += 1
+            send_message(MSG_ACK, seq, s, sock)
         else:
             print "cmd:", cmd, " ", msg
     task += 1
@@ -251,8 +256,10 @@ def send_wait_peer_ack_client(uid, receiver):
     seq += 1
     send_message(MSG_IM, seq, im, sock)
     while True:
-        cmd, _, msg = recv_message(sock)
+        cmd, s, msg = recv_message(sock)
         if cmd == MSG_PEER_ACK:
+            seq += 1
+            send_message(MSG_ACK, seq, s, sock)
             break
         else:
             print "cmd:", cmd, " ", msg
@@ -532,14 +539,14 @@ def main():
     time.sleep(1)
     TestSendAndRecv()
     time.sleep(1)
-    #TestOffline()
-    #time.sleep(1)
-    #TestCluster()
-    #time.sleep(1)
+    TestOffline()
+    time.sleep(1)
+    TestCluster()
+    time.sleep(1)
     TestPingPong()
     time.sleep(1)
-    #TestTimeout()
-    #time.sleep(1)
+    TestTimeout()
+    time.sleep(1)
 
 
 if __name__ == "__main__":

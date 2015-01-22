@@ -9,10 +9,50 @@ import "strconv"
 import log "github.com/golang/glog"
 import "github.com/syndtr/goleveldb/leveldb"
 import "github.com/syndtr/goleveldb/leveldb/util"
+import "github.com/syndtr/goleveldb/leveldb/opt"
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
+
+
+
+type OfflineComparer struct{}
+
+func (OfflineComparer) Compare(a, b []byte) int {
+	//"users_"
+	if len(a) <= 6 || len(b) <= 6 {
+		return bytes.Compare(a, b)
+	}
+
+	v1, err1 := strconv.ParseInt(string(a[6:]), 10, 64)
+	v2, err2 := strconv.ParseInt(string(b[6:]), 10, 64)
+	if err1 != nil || err2 != nil {
+		return bytes.Compare(a, b)
+	}
+
+	if v1 < v2 {
+		return -1
+	} else if v1 == v2 {
+		return 0
+	} else {
+		return 1
+	}
+}
+
+func (OfflineComparer) Name() string {
+	return "im.OfflineComparator"
+}
+
+func (OfflineComparer) Separator(dst, a, b []byte) []byte {
+	return nil
+}
+
+func (OfflineComparer) Successor(dst, b []byte) []byte {
+
+	return nil
+}
+
 
 type Storage struct {
 	root  string
@@ -32,7 +72,7 @@ func NewStorage(root string) *Storage {
 
 	path := fmt.Sprintf("%s/%s", storage.root, "messages")
 	log.Info("message file path:", path)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatal("open file")
 	}
@@ -54,7 +94,8 @@ func NewStorage(root string) *Storage {
 	storage.file = file
 
 	path = fmt.Sprintf("%s/%s", storage.root, "offline")
-	db, err := leveldb.OpenFile(path, nil)
+	opt := &opt.Options{Comparer:OfflineComparer{}}
+	db, err := leveldb.OpenFile(path, opt)
 	if err != nil {
 		log.Fatal("open leveldb")
 	}
@@ -64,6 +105,8 @@ func NewStorage(root string) *Storage {
 }
 
 func (storage *Storage) ReadMessage(msg_id int64) *Message {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
 	_, err := storage.file.Seek(msg_id, os.SEEK_SET)
 	if err != nil {
 		log.Warning("seek file")
@@ -141,7 +184,6 @@ func (storage *Storage) DequeueOffline(msg_id int64, receiver int64) {
 }
 
 func (storage *Storage) LoadOfflineMessage(uid int64) []*EMessage {
-	return nil
 	c := make([]*EMessage, 0, 10)
 	prefix := fmt.Sprintf("%d_", uid)
 	r := util.BytesPrefix([]byte(prefix))
@@ -153,9 +195,10 @@ func (storage *Storage) LoadOfflineMessage(uid int64) []*EMessage {
 			log.Error("parseint err:", err)
 			continue
 		}
-
+		log.Info("offline msgid:", msgid)
 		msg := storage.ReadMessage(msgid)
 		if msg == nil {
+			log.Error("can't load offline message:", msgid)
 			continue
 		}
 		c = append(c, &EMessage{msgid:msgid, msg:msg})

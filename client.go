@@ -306,6 +306,9 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
+	m := &Message{cmd: MSG_GROUP_IM, body: msg}
+	msgid := storage.SaveMessage(m)
+
 	group := group_manager.FindGroup(msg.receiver)
 	if group == nil {
 		log.Info("can't find group:", msg.receiver)
@@ -318,8 +321,6 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 			continue
 		}
 
-		m := &Message{cmd: MSG_GROUP_IM, body: msg}
-		msgid := storage.SaveMessage(m)
 		storage.EnqueueOffline(msgid, member)
 
 		emsg := &EMessage{msgid:msgid, msg:m}
@@ -338,6 +339,7 @@ func (client *Client) HandleInputing(inputing *MessageInputing) {
 }
 
 func (client *Client) HandleACK(ack MessageACK) {
+	log.Info("ack:", ack)
 	msg := client.RemoveUnAckMessage(ack)
 	if msg == nil {
 		return
@@ -370,6 +372,7 @@ func (client *Client) RemoveUnAckMessage(ack MessageACK) *Message {
 	defer client.mutex.Unlock()
 	seq := int(ack)
 	if msgid, ok := client.unacks[seq]; ok {
+		log.Infof("dequeue offline msgid:%d uid:%d\n", msgid, client.uid)
 		storage.DequeueOffline(msgid, client.uid)
 		delete(client.unacks, seq)
 	}

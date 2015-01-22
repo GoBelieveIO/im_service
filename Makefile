@@ -1,4 +1,4 @@
-all:im benchmark benchmark_connection benchmark_sender
+all:im benchmark benchmark_connection benchmark_sender main.test
 
 im:im.go client.go route.go protocol.go storage.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go
 	go build im.go client.go route.go protocol.go storage.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go
@@ -11,6 +11,9 @@ benchmark_connection:benchmark_connection.go protocol.go
 
 benchmark_sender:benchmark_sender.go protocol.go
 	go build benchmark_sender.go protocol.go
+
+main.test:storage_test.go storage.go protocol.go
+	go test -c  storage.go storage_test.go protocol.go
 
 install:all
 	cp im ./bin
