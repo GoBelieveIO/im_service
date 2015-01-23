@@ -119,7 +119,7 @@ func NewStorage(root string) *Storage {
 	opt := &opt.Options{Comparer:OfflineComparer{}}
 	db, err := leveldb.OpenFile(path, opt)
 	if err != nil {
-		log.Fatal("open leveldb")
+		log.Fatal("open leveldb:", err)
 	}
 
 	storage.db = db
@@ -206,10 +206,21 @@ func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64
 
 func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64) {
 	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
-	err := storage.db.Delete([]byte(key), nil)
+	has, err := storage.db.Has([]byte(key), nil)
 	if err != nil {
+		log.Error("check key err:", err)
+	}
+	if !has {
+		log.Info("no offline msg:", appid, receiver, msg_id)
+		return
+	}
+
+	err = storage.db.Delete([]byte(key), nil)
+	if err != nil {
+		//can't get ErrNotFound
 		log.Error("delete err:", err)
 	}
+
 	log.Infof("dequeue offline:%s %d %d %d\n", key, appid, receiver, msg_id)
 	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
 	msg := &Message{cmd:MSG_ACK_IN, body:off}
