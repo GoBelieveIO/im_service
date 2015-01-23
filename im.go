@@ -10,7 +10,7 @@ import log "github.com/golang/glog"
 
 var app_route *AppRoute
 //var cluster *Cluster
-var storage *Storage
+//var storage *Storage
 var group_manager *GroupManager
 var group_server *GroupServer
 var state_center *StateCenter
@@ -89,14 +89,14 @@ func main() {
 	}
 
 	config = read_cfg(flag.Args()[0])
-	log.Infof("port:%d storage root:%s redis address:%s\n",
-		config.port, config.storage_root, config.redis_address)
+	log.Infof("port:%d storage address:%s redis address:%s\n",
+		config.port, config.storage_address, config.redis_address)
 
 	redis_pool = NewRedisPool(config.redis_address, "")
 
 //	cluster = NewCluster(config.peer_addrs)
 //	cluster.Start()
-	storage = NewStorage(config.storage_root)
+	//storage = NewStorage(config.storage_root)
 	group_server = NewGroupServer(config.group_api_port)
 	group_server.Start()
 	group_manager = NewGroupManager()

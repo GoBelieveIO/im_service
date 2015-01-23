@@ -23,10 +23,14 @@ const MSG_PONG = 14
 const MSG_AUTH_TOKEN = 15
 const MSG_LOGIN_POINT = 16
 
-
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
 
+//存储服务器消息
+const MSG_SAVE_AND_ENQUEUE = 200
+const MSG_DEQUEUE = 201
+const MSG_LOAD_OFFLINE = 202
+const MSG_RESULT = 203
 
 //内部文件存储使用
 const MSG_OFFLINE = 254
@@ -38,6 +42,7 @@ const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
 
 type OfflineMessage struct {
+	appid    int64
 	receiver int64
 	msgid    int64
 }
@@ -103,6 +108,28 @@ type Message struct {
 	body interface{}
 }
 
+type EMessage struct {
+	msgid int64
+	msg   *Message
+}
+
+type AppUserID struct {
+	appid    int64
+	uid      int64
+}
+
+type SAEMessage struct {
+	msg       *Message
+	receivers []*AppUserID
+}
+
+type DQMessage OfflineMessage 
+
+type MessageResult struct {
+	status int32
+	content []byte
+}
+
 func (message *Message) ToData() []byte {
 	cmd := message.cmd
 	if cmd == MSG_AUTH {
@@ -131,11 +158,18 @@ func (message *Message) ToData() []byte {
 		return WriteGroupNotification(message.body.(string))
 	} else if cmd == MSG_ONLINE_STATE {
 		return WriteState(message.body.(*MessageOnlineState))
-	} else if cmd == MSG_ACK_IN {
-		return WriteACKInternal(message.body.(int64))
-	} else if cmd == MSG_OFFLINE {
+	} else if cmd == MSG_OFFLINE || cmd == MSG_ACK_IN {
 		return WriteOfflineMessage(message.body.(*OfflineMessage))
+	} else if cmd == MSG_SAVE_AND_ENQUEUE {
+		return WriteSAEMessage(message.body.(*SAEMessage))
+	} else if cmd == MSG_DEQUEUE {
+		return WriteOfflineMessage((*OfflineMessage)(message.body.(*DQMessage)))
+	} else if cmd == MSG_LOAD_OFFLINE {
+		return WriteAppUserID(message.body.(*AppUserID))
+	} else if cmd == MSG_RESULT {
+		return WriteResult(message.body.(*MessageResult))
 	} else {
+		log.Warning("unknown cmd:", cmd)
 		return nil
 	}
 }
@@ -192,15 +226,29 @@ func (message *Message) FromData(buff []byte) bool {
 		body, ret := ReadSubscribeState(buff)
 		message.body = body
 		return ret
-	} else if cmd == MSG_ACK_IN {
-		body, ret := ReadACKInternal(buff)
-		message.body = body
-		return ret
-	} else if cmd == MSG_OFFLINE {
+	} else if cmd == MSG_OFFLINE || cmd == MSG_ACK_IN {
 		body, ret := ReadOfflineMessage(buff)
 		message.body = body
 		return ret
+	} else if cmd == MSG_SAVE_AND_ENQUEUE {
+		body, ret := ReadSAEMessage(buff)
+		message.body = body
+		return ret
+	} else if cmd == MSG_DEQUEUE {
+		t, ret := ReadOfflineMessage(buff)
+		body := (*DQMessage)(t)
+		message.body = body
+		return ret
+	} else if cmd == MSG_LOAD_OFFLINE {
+		body, ret := ReadAppUserID(buff)
+		message.body = body
+		return ret
+	} else if cmd == MSG_RESULT {
+		body, ret := ReadResult(buff)
+		message.body = body
+		return ret
 	} else {
+		log.Warning("unknown cmd:", cmd)
 		return false
 	}
 }
@@ -705,25 +753,9 @@ func ReadSubscribeState(buff []byte) (*MessageSubsribeState, bool) {
 	return sub, true
 }
 
-func WriteACKInternal(msgid int64) []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, msgid)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func ReadACKInternal(buff []byte) (int64, bool) {
-	if len(buff) < 8 {
-		return 0, false
-	}
-	buffer := bytes.NewBuffer(buff)
-	var msgid int64
-	binary.Read(buffer, binary.BigEndian, &msgid)
-	return msgid, true
-}
-
 func WriteOfflineMessage(off *OfflineMessage) []byte {
 	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, off.appid)
 	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.msgid)
 	buf := buffer.Bytes()
@@ -732,14 +764,125 @@ func WriteOfflineMessage(off *OfflineMessage) []byte {
 }
 
 func ReadOfflineMessage(buff []byte) (*OfflineMessage, bool) {
-	if len(buff) < 16 {
+	if len(buff) < 24 {
 		return nil, false
 	}
 	buffer := bytes.NewBuffer(buff)
 	off := &OfflineMessage{}
+	binary.Read(buffer, binary.BigEndian, &off.appid)
 	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	binary.Read(buffer, binary.BigEndian, &off.msgid)
 	return off, true
+}
+
+func WriteSAEMessage(sae *SAEMessage) []byte {
+	if sae.msg == nil {
+		return nil
+	}
+
+	if sae.msg.cmd == MSG_SAVE_AND_ENQUEUE {
+		log.Warning("recusive sae message")
+		return nil
+	}
+
+	buffer := new(bytes.Buffer)
+	mbuffer := new(bytes.Buffer)
+	SendMessage(mbuffer, sae.msg)
+	msg_buf := mbuffer.Bytes()
+	var l int16 = int16(len(msg_buf))
+	binary.Write(buffer, binary.BigEndian, l)
+	buffer.Write(msg_buf)
+	var count int16 = int16(len(sae.receivers))
+	binary.Write(buffer, binary.BigEndian, count)
+	for _, r := range(sae.receivers) {
+		binary.Write(buffer, binary.BigEndian, r.appid)
+		binary.Write(buffer, binary.BigEndian, r.uid)
+	}
+	buf := buffer.Bytes()
+	return buf
+}
+
+func ReadSAEMessage(buff []byte) (*SAEMessage, bool) {
+	if len(buff) < 4 {
+		return nil, false
+	}
+
+	sae := &SAEMessage{}
+
+	buffer := bytes.NewBuffer(buff)
+	var l int16
+	binary.Read(buffer, binary.BigEndian, &l)
+	if int(l) > buffer.Len() {
+		return nil, false
+	}
+
+	msg_buf := make([]byte, l)
+	buffer.Read(msg_buf)
+	if buffer.Len() < 2 {
+		return nil, false
+	}
+	mbuffer := bytes.NewBuffer(msg_buf)
+	//recusive
+	msg := ReceiveMessage(mbuffer)
+	if msg == nil {
+		return nil, false
+	}
+	sae.msg = msg
+
+	var count int16
+	binary.Read(buffer, binary.BigEndian, &count)
+	if buffer.Len() < int(count)*16 {
+		return nil, false
+	}
+	sae.receivers = make([]*AppUserID, count)
+	for i := int16(0); i < count; i++ {
+		r := &AppUserID{}
+		binary.Read(buffer, binary.BigEndian, &r.appid)
+		binary.Read(buffer, binary.BigEndian, &r.uid)
+		sae.receivers[i] = r
+	}
+	return sae, true
+}
+
+func WriteAppUserID(id *AppUserID) []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.appid)
+	binary.Write(buffer, binary.BigEndian, id.uid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func ReadAppUserID(buff []byte) (*AppUserID, bool) {
+	if len(buff) < 16 {
+		return nil, false
+	}
+
+	id := &AppUserID{}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.appid)
+	binary.Read(buffer, binary.BigEndian, &id.uid)
+
+	return id, true
+}
+
+func WriteResult(result *MessageResult) []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, result.status)
+	buffer.Write(result.content)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func ReadResult(buff []byte) (*MessageResult, bool) {
+	if len(buff) < 4 {
+		return nil, false
+	}
+	result := &MessageResult{}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &result.status)
+	result.content = buff[4:]
+	return result, true
 }
 
 func SendMessage(conn io.Writer, msg *Message) {

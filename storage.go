@@ -16,19 +16,46 @@ const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
 
 
-
 type OfflineComparer struct{}
 
-func (OfflineComparer) Compare(a, b []byte) int {
-	//"users_"
-	if len(a) <= 6 || len(b) <= 6 {
+//appid, uid, msgid
+func (oc OfflineComparer) Split(a []byte) ([]byte, []byte, []byte) {
+	index1 := bytes.IndexByte(a, '_')
+	if index1 == -1 || index1 + 1 >= len(a) {
+		return nil, nil, nil
+	}
+	index2 := bytes.IndexByte(a[index1+1:], '_')
+	if index2 == -1 || index2 + 1 >= len(a) {
+		return nil, nil, nil
+	}
+	
+	return a[:index1], a[index1+1:index1+1+index2], a[index1+1+index2+1:]
+}
+
+func (oc OfflineComparer) Compare(a, b []byte) int {
+	p1, p2, p3 := oc.Split(a)
+	p4, p5, p6 := oc.Split(b)
+
+	if p1 == nil || p4 == nil {
+		log.Infof("can't find seperate, a:%s b:%s compare bytes...\n", string(a), string(b))
 		return bytes.Compare(a, b)
 	}
 
-	v1, err1 := strconv.ParseInt(string(a[6:]), 10, 64)
-	v2, err2 := strconv.ParseInt(string(b[6:]), 10, 64)
+	r1 := bytes.Compare(p1, p4)
+	if r1 != 0 {
+		return r1
+	}
+
+	r2 := bytes.Compare(p2, p5)
+	if r2 != 0 {
+		return r2
+	}
+
+	v1, err1 := strconv.ParseInt(string(p3), 10, 64)
+	v2, err2 := strconv.ParseInt(string(p6), 10, 64)
 	if err1 != nil || err2 != nil {
-		return bytes.Compare(a, b)
+		log.Infof("parse int err, a:%s b:%s compare bytes...\n", string(a), string(b))
+		return bytes.Compare(p3, p6)
 	}
 
 	if v1 < v2 {
@@ -59,11 +86,6 @@ type Storage struct {
 	db    *leveldb.DB
 	mutex sync.Mutex
 	file  *os.File
-}
-
-type EMessage struct {
-	msgid int64
-	msg   *Message
 }
 
 func NewStorage(root string) *Storage {
@@ -101,9 +123,18 @@ func NewStorage(root string) *Storage {
 	}
 
 	storage.db = db
+
+	storage.ListKeyValue()
+	
 	return storage
 }
 
+func (storage *Storage) ListKeyValue() {
+	iter := storage.db.NewIterator(nil, nil)
+	for iter.Next() {
+		log.Info("key:", string(iter.Key()), " value:", string(iter.Value()))
+	}
+}
 func (storage *Storage) ReadMessage(msg_id int64) *Message {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
@@ -160,33 +191,38 @@ func (storage *Storage) SaveMessage(msg *Message) int64 {
 	return msgid
 }
 
-func (storage *Storage) EnqueueOffline(msg_id int64, receiver int64) {
-	key := fmt.Sprintf("%d_%d", receiver, msg_id)
+func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64) {
+	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
 	value := fmt.Sprintf("%d", msg_id)
 	err := storage.db.Put([]byte(key), []byte(value), nil)
 	if err != nil {
 		log.Error("put err:", err)
 		return
 	}
-	off := &OfflineMessage{receiver:receiver, msgid:msg_id}
+	log.Infof("enqueue offline:%s %d %d %d\n", key, appid, receiver, msg_id)
+	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
 	storage.SaveMessage(&Message{cmd:MSG_OFFLINE, body:off})
 }
 
-func (storage *Storage) DequeueOffline(msg_id int64, receiver int64) {
-	key := fmt.Sprintf("%d_%d", receiver, msg_id)
+func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64) {
+	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
 	err := storage.db.Delete([]byte(key), nil)
 	if err != nil {
 		log.Error("delete err:", err)
 	}
-
-	msg := &Message{cmd:MSG_ACK_IN, body:msg_id}
+	log.Infof("dequeue offline:%s %d %d %d\n", key, appid, receiver, msg_id)
+	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
+	msg := &Message{cmd:MSG_ACK_IN, body:off}
 	storage.SaveMessage(msg)
 }
 
-func (storage *Storage) LoadOfflineMessage(uid int64) []*EMessage {
+func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
+	log.Infof("load offline message appid:%d uid:%d\n", appid, uid)
 	c := make([]*EMessage, 0, 10)
-	prefix := fmt.Sprintf("%d_", uid)
-	r := util.BytesPrefix([]byte(prefix))
+	start := fmt.Sprintf("%d_%d_0", appid, uid)
+	end := fmt.Sprintf("%d_%d_9223372036854775807", appid, uid)
+
+	r := &util.Range{Start:[]byte(start), Limit:[]byte(end)}
 	iter := storage.db.NewIterator(r, nil)
 	for iter.Next() {
 		value := iter.Value()
@@ -208,6 +244,6 @@ func (storage *Storage) LoadOfflineMessage(uid int64) []*EMessage {
 	if err != nil {
 		log.Warning("iterator err:", err)
 	}
-	
+	log.Info("offline count:", len(c))
 	return c
 }

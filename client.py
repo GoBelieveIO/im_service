@@ -440,11 +440,13 @@ def TestPingPong():
     sock, seq =  connect_server(uid, 23000)
     seq += 1
     send_message(MSG_PING, seq, None, sock)
-    cmd, _, msg = recv_message(sock)
-    if cmd == MSG_PONG:
-        print "test ping/pong completed"
-    else:
-        print "test ping/pong fail"
+    while True:
+        cmd, _, msg = recv_message(sock)
+        if cmd == MSG_PONG:
+            print "test ping/pong completed"
+            return
+        else:
+            continue
 
     
 def TestGroup():
@@ -559,16 +561,19 @@ def main():
     #time.sleep(1)
     #TestSubscribeState()
     #time.sleep(1)
+
     TestPeerACK()
     time.sleep(1)
     TestInputing()
     time.sleep(1)
     TestSendAndRecv()
     time.sleep(1)
+
     TestOffline()
     time.sleep(1)
     #TestCluster()
     #time.sleep(1)
+
     TestLoginPoint()
     time.sleep(1)
     TestPingPong()
