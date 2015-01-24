@@ -1,7 +1,7 @@
 all:im ims imr benchmark benchmark_connection benchmark_sender main.test benchmark_storage benchmark_route
 
-im:im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go
-	go build im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go
+im:im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go login.go
+	go build im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go login.go
 
 ims:storage_server.go protocol.go storage.go config.go
 	go build -o ims storage_server.go protocol.go storage.go config.go
