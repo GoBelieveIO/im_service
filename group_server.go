@@ -66,7 +66,7 @@ func (group_server *GroupServer) CreateGroup(gname string,
 	op := make(map[string]interface{})
 	op["create"] = v
 	b, _ := json.Marshal(op)
-	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: string(b)}
+	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{string(b)}}
 	for _, member := range members {
 		group_server.SendMessage(member, msg)
 	}
@@ -103,7 +103,7 @@ func (group_server *GroupServer) DisbandGroup(gid int64) bool {
 	op := make(map[string]interface{})
 	op["disband"] = v
 	b, _ := json.Marshal(op)
-	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: string(b)}
+	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{string(b)}}
 	for member := range group.Members() {
 		group_server.SendMessage(member, msg)
 	}
@@ -136,7 +136,7 @@ func (group_server *GroupServer) AddGroupMember(gid int64, uid int64) bool {
 	op := make(map[string]interface{})
 	op["add_member"] = v
 	b, _ := json.Marshal(op)
-	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: string(b)}
+	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{string(b)}}
 	for member := range group.Members() {
 		group_server.SendMessage(member, msg)
 	}
@@ -168,7 +168,7 @@ func (group_server *GroupServer) QuitGroup(gid int64, uid int64) bool {
 	op := make(map[string]interface{})
 	op["quit_group"] = v
 	b, _ := json.Marshal(op)
-	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: string(b)}
+	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{string(b)}}
 	for member := range group.Members() {
 		group_server.SendMessage(member, msg)
 	}

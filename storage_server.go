@@ -89,7 +89,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_SAVE_AND_ENQUEUE:
 		client.HandleSaveAndEnqueue(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE:
-		client.HandleDQMessage(msg.body.(*DQMessage))
+		client.HandleDQMessage((*DQMessage)(msg.body.(*OfflineMessage)))
 	default:
 		log.Warning("unknown msg:", msg.cmd)
 	}

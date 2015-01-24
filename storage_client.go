@@ -57,7 +57,7 @@ func (client *StorageConn) SaveAndEnqueueMessage(sae *SAEMessage) (int64, error)
 }
 
 func (client *StorageConn) DequeueMessage(dq *DQMessage) error {
-	msg := &Message{cmd:MSG_DEQUEUE, body:dq}
+	msg := &Message{cmd:MSG_DEQUEUE, body:(*OfflineMessage)(dq)}
 	SendMessage(client.conn, msg)
 	r := ReceiveMessage(client.conn)
 	if r == nil {

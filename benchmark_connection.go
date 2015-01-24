@@ -80,7 +80,7 @@ func receive(uid int64) {
 			}
 
 			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-				ack := &Message{cmd: MSG_ACK, body: MessageACK(msg.seq)}
+				ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
 				wt <- ack
 			}
 		}

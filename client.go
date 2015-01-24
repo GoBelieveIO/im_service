@@ -10,6 +10,8 @@ import "github.com/googollee/go-engine.io"
 
 const CLIENT_TIMEOUT = (60 * 6)
 
+
+
 type Client struct {
 	tm     time.Time
 	wt     chan *Message
@@ -76,7 +78,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_GROUP_IM:
 		client.HandleGroupIMMessage(msg.body.(*IMMessage), msg.seq)
 	case MSG_ACK:
-		client.HandleACK(msg.body.(MessageACK))
+		client.HandleACK(msg.body.(*MessageACK))
 	case MSG_HEARTBEAT:
 		// nothing to do
 	case MSG_PING:
@@ -285,7 +287,7 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	emsg := &EMessage{msgid:msgid, msg:m}
 	client.SendEMessage(msg.receiver, emsg)
 
-	client.wt <- &Message{cmd: MSG_ACK, body: MessageACK(seq)}
+	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("peer message sender:%d receiver:%d", msg.sender, msg.receiver)
@@ -339,7 +341,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		client.SendEMessage(member, emsg)
 	}
 	
-	client.wt <- &Message{cmd: MSG_ACK, body: MessageACK(seq)}
+	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("group message sender:%d group id:%d", msg.sender, msg.receiver)
 }
@@ -350,7 +352,7 @@ func (client *Client) HandleInputing(inputing *MessageInputing) {
 	log.Infof("inputting sender:%d receiver:%d", inputing.sender, inputing.receiver)
 }
 
-func (client *Client) HandleACK(ack MessageACK) {
+func (client *Client) HandleACK(ack *MessageACK) {
 	log.Info("ack:", ack)
 	msg := client.RemoveUnAckMessage(ack)
 	if msg == nil {
@@ -412,10 +414,10 @@ func (client *Client) DequeueMessage(msgid int64) {
 	}
 }
 
-func (client *Client) RemoveUnAckMessage(ack MessageACK) *Message {
+func (client *Client) RemoveUnAckMessage(ack *MessageACK) *Message {
 	client.mutex.Lock()
 	defer client.mutex.Unlock()
-	seq := int(ack)
+	seq := int(ack.seq)
 	if msgid, ok := client.unacks[seq]; ok {
 		log.Infof("dequeue offline msgid:%d uid:%d\n", msgid, client.uid)
 		client.DequeueMessage(msgid)

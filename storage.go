@@ -15,7 +15,6 @@ const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
 
-
 type OfflineComparer struct{}
 
 //appid, uid, msgid

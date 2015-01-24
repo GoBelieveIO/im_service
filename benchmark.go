@@ -81,7 +81,7 @@ func receive(uid int64) {
 
 		log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 		seq++
-		ack := &Message{MSG_ACK, seq, MessageACK(msg.seq)}
+		ack := &Message{MSG_ACK, seq, &MessageACK{int32(msg.seq)}}
 		SendMessage(conn, ack)
 	}
 	conn.Close()
