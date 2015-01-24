@@ -339,7 +339,8 @@ def TestCluster():
     t3.setDaemon(True)
     t3.start()
     
-    time.sleep(2)
+    time.sleep(1)
+
     t2 = threading.Thread(target=send_client, args=(13635273143,13635273142, MSG_IM))
     t2.setDaemon(True)
     t2.start()
@@ -431,9 +432,11 @@ def TestLoginPoint():
 def TestTimeout():
     sock, seq = connect_server(13635273142, 23000)
     print "waiting timeout"
-    r = sock.recv(1024)
-    if len(r) == 0:
-        print "test timeout completed"
+    while True:
+        r = sock.recv(1024)
+        if len(r) == 0:
+            print "test timeout completed"
+            break
 
 def TestPingPong():
     uid = 13635273142
@@ -568,11 +571,11 @@ def main():
     time.sleep(1)
     TestSendAndRecv()
     time.sleep(1)
-
     TestOffline()
     time.sleep(1)
-    #TestCluster()
-    #time.sleep(1)
+
+    TestCluster()
+    time.sleep(1)
 
     TestLoginPoint()
     time.sleep(1)

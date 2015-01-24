@@ -8,33 +8,22 @@ import "runtime"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
 
+var channels []*Channel
 var app_route *AppRoute
-//var cluster *Cluster
-//var storage *Storage
 var group_manager *GroupManager
 var group_server *GroupServer
-var state_center *StateCenter
 var redis_pool *redis.Pool
 var config *Config
 var server_summary *ServerSummary
 
 func init() {
 	app_route = NewAppRoute()
-	state_center = NewStateCenter()
 	server_summary = NewServerSummary()
 }
 
 func handle_client(conn *net.TCPConn) {
 	client := NewClient(conn)
 	client.Run()
-}
-
-func handle_peer_client(conn *net.TCPConn) {
-	return
-	// conn.SetKeepAlive(true)
-	// conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
-	// client := NewPeerClient(conn)
-	// client.Run()
 }
 
 func Listen(f func(*net.TCPConn), port int) {
@@ -80,6 +69,29 @@ func NewRedisPool(server, password string) *redis.Pool {
 	}
 }
 
+func DispatchAppMessage(amsg *AppMessage) {
+	log.Info("dispatch app message")
+	route := app_route.FindRoute(amsg.appid)
+	if route == nil {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		return
+	}
+	clients := route.FindClientSet(amsg.receiver)
+	if len(clients) == 0 {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		return
+	}
+	if clients != nil {
+		for c, _ := range(clients) {
+			if amsg.msgid > 0 {
+				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+			} else {
+				c.wt <- amsg.msg
+			}
+		}
+	}
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -94,9 +106,10 @@ func main() {
 
 	redis_pool = NewRedisPool(config.redis_address, "")
 
-//	cluster = NewCluster(config.peer_addrs)
-//	cluster.Start()
-	//storage = NewStorage(config.storage_root)
+	channels = make([]*Channel, 1)
+	channels[0] = NewChannel("127.0.0.1:4444", DispatchAppMessage)
+	channels[0].Start()
+
 	group_server = NewGroupServer(config.group_api_port)
 	group_server.Start()
 	group_manager = NewGroupManager()

@@ -61,11 +61,13 @@ func (client *Client) HandleRemoveClient() {
 	route.RemoveClient(client)
 	if client.uid > 0 {
 		client.RemoveLoginInfo()
+		channel := client.GetChannel(client.uid)
+		channel.Unsubscribe(client.appid, client.uid)
 	}
 }
 
 func (client *Client) HandleMessage(msg *Message) {
-	log.Info("msg:", msg.cmd)
+	log.Info("msg cmd:", Command(msg.cmd))
 	switch msg.cmd {
 	case MSG_AUTH:
 		client.HandleAuth(msg.body.(*Authentication))
@@ -104,7 +106,7 @@ func (client *Client) SendOfflineMessage() {
 		log.Error("load offline message err:", err)
 	}
 
-	log.Info("send offline...")
+	log.Info("load offline message count:", len(offline_messages))
 	for _, emsg := range offline_messages {
 		log.Info("send offline message:", emsg.msgid)
 		client.ewt <- emsg
@@ -112,9 +114,15 @@ func (client *Client) SendOfflineMessage() {
 }
 
 func (client *Client) SendEMessage(uid int64, emsg *EMessage) bool {
+	channel := client.GetChannel(uid)
+	amsg := &AppMessage{appid:client.appid, receiver:uid, 
+		msgid:emsg.msgid, msg:emsg.msg}
+	channel.Publish(amsg)
+
 	route := app_route.FindRoute(client.appid)
 	if route == nil {
-		log.Warning("can't find app route")
+		log.Warning("can't find app route, msg cmd:", 
+			Command(emsg.msg.cmd))
 		return false
 	}
 	clients := route.FindClientSet(uid)
@@ -128,9 +136,13 @@ func (client *Client) SendEMessage(uid int64, emsg *EMessage) bool {
 }
 
 func (client *Client) SendMessage(uid int64, msg *Message) bool {
+	channel := client.GetChannel(uid)
+	amsg := &AppMessage{appid:client.appid, receiver:uid, msgid:0, msg:msg}
+	channel.Publish(amsg)
+
 	route := app_route.FindRoute(client.appid)
 	if route == nil {
-		log.Warning("can't find app route")
+		log.Warning("can't find app route, msg cmd:", Command(msg.cmd))
 		return false
 	}
 	clients := route.FindClientSet(uid)
@@ -212,6 +224,10 @@ func (client *Client) ListLoginInfo() []*LoginPoint {
 		if err != nil {
 			log.Error("hmget err:", err)
 			break
+		}
+		if obj == nil || (obj[0] == nil && obj[1] == nil && obj[2] == nil) {
+			log.Warning("hmget nil")
+			continue
 		}
 
 		var up_timestamp int64
@@ -298,7 +314,14 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken) {
 	client.SendLoginPoint()
 	client.SendOfflineMessage()
 	client.AddClient()
+	channel := client.GetChannel(client.uid)
+	channel.Subscribe(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
+}
+
+func (client *Client) GetChannel(uid int64) *Channel{
+	index := uid%int64(len(channels))
+	return channels[index]
 }
 
 func (client *Client) HandleAuth(login *Authentication) {
@@ -378,10 +401,7 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	}
 
 	emsg := &EMessage{msgid:msgid, msg:m}
-	r := client.SendEMessage(msg.receiver, emsg)
-	if !r {
-		client.PublishPeerMessage(msg)
-	}
+	client.SendEMessage(msg.receiver, emsg)
 
 	client.wt <- &Message{cmd: MSG_ACK, body: MessageACK(seq)}
 

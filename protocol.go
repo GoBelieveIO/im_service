@@ -5,6 +5,7 @@ import "bytes"
 import "encoding/binary"
 import log "github.com/golang/glog"
 import "github.com/bitly/go-simplejson"
+import "fmt"
 
 const MSG_HEARTBEAT = 1
 const MSG_AUTH = 2
@@ -26,6 +27,13 @@ const MSG_LOGIN_POINT = 16
 const MSG_ADD_CLIENT = 128
 const MSG_REMOVE_CLIENT = 129
 
+//路由服务器消息
+const MSG_SUBSCRIBE = 130
+const MSG_UNSUBSCRIBE = 131
+const MSG_PUBLISH = 132
+const MSG_PUBLISH_GROUP = 133
+
+
 //存储服务器消息
 const MSG_SAVE_AND_ENQUEUE = 200
 const MSG_DEQUEUE = 201
@@ -40,6 +48,37 @@ const MSG_ACK_IN = 255
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
+
+type Command int
+func (cmd Command) String() string {
+	switch cmd {
+	case MSG_AUTH_STATUS:
+		return "MSG_AUTH_STATUS"
+	case MSG_IM:
+		return "MSG_IM"
+	case MSG_ACK:
+		return "MSG_ACK"
+	case MSG_PING:
+		return "MSG_PING"
+	case MSG_PONG:
+		return "MSG_PONG"
+	case MSG_SUBSCRIBE:
+		return "MSG_SUBSCRIBE"
+	case MSG_UNSUBSCRIBE:
+		return "MSG_UNSUBSCRIBE"
+	case MSG_PUBLISH:
+		return "MSG_PUBLISH"
+	case MSG_PEER_ACK:
+		return "MSG_PEER_ACK"
+	case MSG_AUTH_TOKEN:
+		return "MSG_AUTH_TOKEN"
+	case MSG_INPUTING:
+		return "MSG_INPUTTING"
+	default:
+		return fmt.Sprintf("%d", cmd)
+	}
+
+}
 
 type OfflineMessage struct {
 	appid    int64
@@ -118,6 +157,13 @@ type AppUserID struct {
 	uid      int64
 }
 
+type AppMessage struct {
+	appid    int64
+	receiver int64
+	msgid    int64
+	msg      *Message
+}
+
 type SAEMessage struct {
 	msg       *Message
 	receivers []*AppUserID
@@ -168,6 +214,10 @@ func (message *Message) ToData() []byte {
 		return WriteAppUserID(message.body.(*AppUserID))
 	} else if cmd == MSG_RESULT {
 		return WriteResult(message.body.(*MessageResult))
+	} else if cmd == MSG_SUBSCRIBE || cmd == MSG_UNSUBSCRIBE {
+		return WriteAppUserID(message.body.(*AppUserID))
+	} else if cmd == MSG_PUBLISH {
+		return WriteAppMessage(message.body.(*AppMessage))
 	} else {
 		log.Warning("unknown cmd:", cmd)
 		return nil
@@ -245,6 +295,14 @@ func (message *Message) FromData(buff []byte) bool {
 		return ret
 	} else if cmd == MSG_RESULT {
 		body, ret := ReadResult(buff)
+		message.body = body
+		return ret
+	} else if cmd == MSG_SUBSCRIBE || cmd == MSG_UNSUBSCRIBE {
+		body, ret := ReadAppUserID(buff)
+		message.body = body
+		return ret
+	} else if cmd == MSG_PUBLISH {
+		body, ret := ReadAppMessage(buff)
 		message.body = body
 		return ret
 	} else {
@@ -760,7 +818,6 @@ func WriteOfflineMessage(off *OfflineMessage) []byte {
 	binary.Write(buffer, binary.BigEndian, off.msgid)
 	buf := buffer.Bytes()
 	return buf
-
 }
 
 func ReadOfflineMessage(buff []byte) (*OfflineMessage, bool) {
@@ -818,9 +875,6 @@ func ReadSAEMessage(buff []byte) (*SAEMessage, bool) {
 
 	msg_buf := make([]byte, l)
 	buffer.Read(msg_buf)
-	if buffer.Len() < 2 {
-		return nil, false
-	}
 	mbuffer := bytes.NewBuffer(msg_buf)
 	//recusive
 	msg := ReceiveMessage(mbuffer)
@@ -829,6 +883,9 @@ func ReadSAEMessage(buff []byte) (*SAEMessage, bool) {
 	}
 	sae.msg = msg
 
+	if buffer.Len() < 2 {
+		return nil, false
+	}
 	var count int16
 	binary.Read(buffer, binary.BigEndian, &count)
 	if buffer.Len() < int(count)*16 {
@@ -883,6 +940,58 @@ func ReadResult(buff []byte) (*MessageResult, bool) {
 	binary.Read(buffer, binary.BigEndian, &result.status)
 	result.content = buff[4:]
 	return result, true
+}
+
+func WriteAppMessage(amsg *AppMessage) []byte {
+	if amsg.msg == nil {
+		return nil
+	}
+
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, amsg.appid)
+	binary.Write(buffer, binary.BigEndian, amsg.receiver)
+	binary.Write(buffer, binary.BigEndian, amsg.msgid)
+	mbuffer := new(bytes.Buffer)
+	SendMessage(mbuffer, amsg.msg)
+	msg_buf := mbuffer.Bytes()
+	var l int16 = int16(len(msg_buf))
+	binary.Write(buffer, binary.BigEndian, l)
+	buffer.Write(msg_buf)
+
+	buf := buffer.Bytes()
+	return buf
+}
+
+func ReadAppMessage(buff []byte) (*AppMessage, bool) {
+	if len(buff) < 26 {
+		return nil, false
+	}
+
+	amsg := &AppMessage{}
+
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &amsg.appid)
+	binary.Read(buffer, binary.BigEndian, &amsg.receiver)
+	binary.Read(buffer, binary.BigEndian, &amsg.msgid)
+
+	var l int16
+	binary.Read(buffer, binary.BigEndian, &l)
+	if int(l) > buffer.Len() {
+		return nil, false
+	}
+
+	msg_buf := make([]byte, l)
+	buffer.Read(msg_buf)
+
+	mbuffer := bytes.NewBuffer(msg_buf)
+	//recusive
+	msg := ReceiveMessage(mbuffer)
+	if msg == nil {
+		return nil, false
+	}
+	amsg.msg = msg
+
+	return amsg, true
 }
 
 func SendMessage(conn io.Writer, msg *Message) {

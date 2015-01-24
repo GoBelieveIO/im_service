@@ -19,6 +19,11 @@ type StorageConfig struct {
 	storage_root        string
 }
 
+type RouteConfig struct {
+	listen string
+}
+
+
 func get_int(app_cfg map[string]string, key string) int {
 	concurrency, present := app_cfg[key]
 	if !present {
@@ -76,5 +81,17 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 
 	config.listen = get_string(app_cfg, "listen")
 	config.storage_root = get_string(app_cfg, "storage_root")
+	return config
+}
+
+func read_route_cfg(cfg_path string) *RouteConfig {
+	config := new(RouteConfig)
+	app_cfg := make(map[string]string)
+	err := cfg.Load(cfg_path, app_cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	config.listen = get_string(app_cfg, "listen")
 	return config
 }
