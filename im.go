@@ -13,6 +13,7 @@ var app_route *AppRoute
 var group_manager *GroupManager
 var group_server *GroupServer
 var redis_pool *redis.Pool
+var storage_pool *StorageConnPool
 var config *Config
 var server_summary *ServerSummary
 
@@ -92,6 +93,19 @@ func DispatchAppMessage(amsg *AppMessage) {
 	}
 }
 
+func DialStorageFun(addr string) func()(*StorageConn, error) {
+	f := func() (*StorageConn, error){
+		storage := NewStorageConn()
+		err := storage.Dial(config.storage_address)
+		if err != nil {
+			log.Error("connect storage err:", err)
+			return nil, err
+		}
+		return storage, nil
+	}
+	return f
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -109,6 +123,9 @@ func main() {
 	channels = make([]*Channel, 1)
 	channels[0] = NewChannel("127.0.0.1:4444", DispatchAppMessage)
 	channels[0].Start()
+
+	f := DialStorageFun(config.storage_address)
+	storage_pool = NewStorageConnPool(100, 500, 600 * time.Second, f) 
 
 	group_server = NewGroupServer(config.group_api_port)
 	group_server.Start()

@@ -3,7 +3,11 @@ package main
 import "errors"
 import "net"
 import "bytes"
+import "time"
+import "sync"
+import "container/list"
 import "encoding/binary"
+import log "github.com/golang/glog"
 
 type StorageConn struct {
 	conn net.Conn
@@ -131,4 +135,130 @@ func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64) ([]*EMessa
 	return messages, nil
 }
 
+var nowFunc = time.Now // for testing
 
+type idleConn struct {
+	c *StorageConn
+	t time.Time
+}
+
+type StorageConnPool struct {
+
+	Dial           func()(*StorageConn, error)
+
+	// Maximum number of idle connections in the pool.
+	MaxIdle int
+
+	// Maximum number of connections allocated by the pool at a given time.
+	// When zero, there is no limit on the number of connections in the pool.
+	MaxActive int
+
+	// Close connections after remaining idle for this duration. If the value
+	// is zero, then idle connections are not closed. Applications should set
+	// the timeout to a value less than the server's timeout.
+	IdleTimeout time.Duration
+
+	// mu protects fields defined below.
+	mu     sync.Mutex
+	closed bool
+	active int
+
+	// Stack of idleConn with most recently used at the front.
+	idle list.List
+	
+	sem  chan int
+}
+
+func NewStorageConnPool(max_idle int, max_active int, 
+	idle_timeout time.Duration, 
+	dial func()(*StorageConn, error)) *StorageConnPool {
+	if max_idle > max_active {
+		return nil
+	}
+	pool := new(StorageConnPool)
+	pool.MaxIdle = max_idle
+	pool.MaxActive = max_active
+	pool.IdleTimeout = idle_timeout
+	pool.Dial = dial
+
+	pool.sem = make(chan int, max_active)
+	for i := 0; i < max_active; i++ {
+		pool.sem <- 0
+	}
+	return pool
+}
+
+func (p *StorageConnPool) Get() (*StorageConn, error) {
+	<- p.sem
+
+	p.mu.Lock()
+	// Prune stale connections.
+	if timeout := p.IdleTimeout; timeout > 0 {
+		for i, n := 0, p.idle.Len(); i < n; i++ {
+			e := p.idle.Back()
+			if e == nil {
+				break
+			}
+			ic := e.Value.(idleConn)
+			if ic.t.Add(timeout).After(nowFunc()) {
+				break
+			}
+			p.idle.Remove(e)
+			p.active -= 1
+			p.mu.Unlock()
+			ic.c.Close()
+			p.mu.Lock()
+		}
+	}
+
+	// Get idle connection.
+	for i, n := 0, p.idle.Len(); i < n; i++ {
+		e := p.idle.Front()
+		if e == nil {
+			break
+		}
+		ic := e.Value.(idleConn)
+		p.idle.Remove(e)
+		p.mu.Unlock()
+		return ic.c, nil
+	}
+
+	if p.MaxActive > 0 && p.active >= p.MaxActive {
+		log.Error("pool exhausted")
+		return nil, errors.New("exhausted")
+	}
+
+	// No idle connection, create new.
+	dial := p.Dial
+	p.active += 1
+	p.mu.Unlock()
+	c, err := dial()
+	if err != nil {
+		p.mu.Lock()
+		p.active -= 1
+		p.mu.Unlock()
+		c = nil
+	}
+	return c, err
+}
+
+func (p *StorageConnPool) Release(c *StorageConn) {
+	p.sem <- 0
+
+	if !c.e {
+		p.mu.Lock()
+		p.idle.PushFront(idleConn{t: nowFunc(), c: c})
+		if p.idle.Len() > p.MaxIdle {
+			c = p.idle.Remove(p.idle.Back()).(idleConn).c
+		} else {
+			c = nil
+		}
+		p.mu.Unlock()
+	}
+	if c != nil {
+		p.mu.Lock()
+		p.active -= 1
+		p.mu.Unlock()
+		c.Close()
+	}
+}

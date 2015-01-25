@@ -93,13 +93,12 @@ func (client *Client) HandleMessage(msg *Message) {
 }
 
 func (client *Client) SendOfflineMessage() {
-	storage := NewStorageConn()
-	err := storage.Dial(config.storage_address)
+	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
 		return
 	}
-	defer storage.Close()
+	defer storage_pool.Release(storage)
 
 	offline_messages, err := storage.LoadOfflineMessage(client.appid, client.uid)
 	if err != nil {
@@ -267,13 +266,12 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, body: msg}
 
-	storage := NewStorageConn()
-	err := storage.Dial(config.storage_address)
+	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
 		return
 	}
-	defer storage.Close()
+	defer storage_pool.Release(storage)
 
 	sae := &SAEMessage{}
 	sae.msg = m
@@ -299,13 +297,12 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_GROUP_IM, body: msg}
 
-	storage := NewStorageConn()
-	err := storage.Dial(config.storage_address)
+	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
 		return
 	}
-	defer storage.Close()
+	defer storage_pool.Release(storage)
 
 	group := group_manager.FindGroup(msg.receiver)
 	if group == nil {
@@ -366,13 +363,12 @@ func (client *Client) HandleACK(ack *MessageACK) {
 		ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
 		m := &Message{cmd: MSG_PEER_ACK, body: ack}
 
-		storage := NewStorageConn()
-		err := storage.Dial(config.storage_address)
+		storage, err := storage_pool.Get()
 		if err != nil {
 			log.Error("connect storage err:", err)
 			return
 		}
-		defer storage.Close()
+		defer storage_pool.Release(storage)
 		
 		sae := &SAEMessage{}
 		sae.msg = m
@@ -402,12 +398,13 @@ func (client *Client) HandlePing() {
 
 func (client *Client) DequeueMessage(msgid int64) {
 	storage := NewStorageConn()
-	err := storage.Dial(config.storage_address)
+
+	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
 		return
 	}
-	defer storage.Close()
+	defer storage_pool.Release(storage)
 
 	dq := &DQMessage{msgid:msgid, appid:client.appid, receiver:client.uid}
 	err = storage.DequeueMessage(dq)
