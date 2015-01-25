@@ -1,7 +1,7 @@
 all:im ims imr benchmark benchmark_connection benchmark_sender main.test benchmark_storage benchmark_route
 
-im:im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go
-	go build im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go
+im:im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go
+	go build im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go
 
 ims:storage_server.go protocol.go storage.go config.go storage_message.go storage_sync.go
 	go build -o ims storage_server.go protocol.go storage.go config.go storage_message.go storage_sync.go
@@ -29,9 +29,11 @@ main.test:storage_test.go storage.go protocol.go storage_message.go storage_sync
 
 install:all
 	cp im ./bin
+	cp ims ./bin
+	cp imr ./bin
 	cp benchmark ./bin
 	cp benchmark_connection ./bin
 	cp benchmark_sender ./bin
 	cp push.py ./bin
 clean:
-	rm -f im ims imr benchmark benchmark_connection benchmark_sender main.test
+	rm -f im ims imr benchmark benchmark_connection benchmark_sender benchmark_storage benchmark_route main.test
