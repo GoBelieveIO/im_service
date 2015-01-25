@@ -37,6 +37,7 @@ type MessageCreator func()IMessage
 var message_creators map[int]MessageCreator = make(map[int]MessageCreator)
 
 func init() {
+	message_creators[MSG_AUTH] = func()IMessage {return new(Authentication)}
 	message_creators[MSG_AUTH_STATUS] = func()IMessage {return new(AuthenticationStatus)}
 	message_creators[MSG_IM] = func()IMessage{return new(IMMessage)}
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
@@ -50,6 +51,7 @@ func init() {
 	message_creators[MSG_LOGIN_POINT] = func()IMessage{return new(LoginPoint)}
 
 
+	message_descriptions[MSG_AUTH] = "MSG_AUTH"
 	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
 	message_descriptions[MSG_IM] = "MSG_IM"
 	message_descriptions[MSG_ACK] = "MSG_ACK"
@@ -371,7 +373,7 @@ func (auth *Authentication) ToData() []byte {
 }
 
 func (auth *Authentication) FromData(buff []byte) bool {
-	if len(buff) != 9 {
+	if len(buff) < 8 {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)

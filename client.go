@@ -220,8 +220,10 @@ func (client *Client) HandleAuth(login *Authentication) {
 	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
 	client.wt <- msg
 
-	client.AddClient()
 	client.SendOfflineMessage()
+	client.AddClient()
+	channel := client.GetChannel(client.uid)
+	channel.Subscribe(client.appid, client.uid)
 
 	atomic.AddInt64(&server_summary.nclients, 1)
 }
