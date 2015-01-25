@@ -108,6 +108,8 @@ func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 }
 
 func (channel *Channel) RunOnce(conn *net.TCPConn) {
+	defer conn.Close()
+
 	closed_ch := make(chan bool)
 	seq := 0
 	seq = channel.ReSubscribe(conn, seq)
@@ -142,7 +144,6 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 			SendMessage(conn, msg)
 		}
 	}
-	conn.Close()
 }
 
 func (channel *Channel) Run() {
