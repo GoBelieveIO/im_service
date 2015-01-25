@@ -5,6 +5,11 @@ import "log"
 
 var storage = NewStorage("/tmp")
 var appid int64 = 0
+var master *Master
+func init() {
+	master = NewMaster()
+	master.Start()
+}
 
 func Test_Storage(t *testing.T) {
 	im := &IMMessage{sender:1, receiver:2, content:"test"}

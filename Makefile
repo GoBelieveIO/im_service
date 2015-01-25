@@ -3,8 +3,8 @@ all:im ims imr benchmark benchmark_connection benchmark_sender main.test benchma
 im:im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go
 	go build im.go client.go route.go app_route.go protocol.go group_server.go group_manager.go group.go set.go state_center.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go
 
-ims:storage_server.go protocol.go storage.go config.go storage_message.go
-	go build -o ims storage_server.go protocol.go storage.go config.go storage_message.go
+ims:storage_server.go protocol.go storage.go config.go storage_message.go storage_sync.go
+	go build -o ims storage_server.go protocol.go storage.go config.go storage_message.go storage_sync.go
 
 imr:route_server.go app_route.go protocol.go config.go set.go route_message.go
 	go build -o imr route_server.go app_route.go protocol.go config.go set.go route_message.go
@@ -24,8 +24,8 @@ benchmark_storage:benchmark_storage.go storage_client.go protocol.go storage_mes
 benchmark_route:benchmark_route.go channel.go protocol.go route_message.go
 	go build -o benchmark_route benchmark_route.go channel.go protocol.go route_message.go
 
-main.test:storage_test.go storage.go protocol.go storage_message.go
-	go test -c  storage.go storage_test.go protocol.go storage_message.go
+main.test:storage_test.go storage.go protocol.go storage_message.go storage_sync.go
+	go test -c  storage.go storage_test.go protocol.go storage_message.go storage_sync.go
 
 install:all
 	cp im ./bin

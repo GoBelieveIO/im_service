@@ -10,6 +10,7 @@ import log "github.com/golang/glog"
 
 var storage *Storage
 var config *StorageConfig
+var master *Master
 
 type Client struct {
 	conn   *net.TCPConn
@@ -143,6 +144,17 @@ func ListenClient() {
 	Listen(handle_client, config.listen)
 }
 
+func handle_sync_client(conn *net.TCPConn) {
+	conn.SetKeepAlive(true)
+	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
+	client := NewSyncClient(conn)
+	client.Run()
+}
+
+func ListenSyncClient() {
+	Listen(handle_sync_client, config.sync_listen)
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -152,9 +164,17 @@ func main() {
 	}
 
 	config = read_storage_cfg(flag.Args()[0])
-	log.Infof("listen:%s storage root:%s\n", config.listen, config.storage_root)
+	log.Infof("listen:%s storage root:%s sync listen:%s master address:%s\n", 
+		config.listen, config.storage_root, config.sync_listen, config.master_address)
 	storage = NewStorage(config.storage_root)
-
-	ListenClient()
 	
+	master = NewMaster()
+	master.Start()
+	if len(config.master_address) > 0 {
+		slaver := NewSlaver(config.master_address)
+		slaver.Start()
+	}
+
+	go ListenSyncClient()
+	ListenClient()
 }

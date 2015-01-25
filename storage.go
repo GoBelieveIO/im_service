@@ -95,7 +95,7 @@ func NewStorage(root string) *Storage {
 	log.Info("message file path:", path)
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		log.Fatal("open file")
+		log.Fatal("open file:", err)
 	}
 	file_size, err := file.Seek(0, os.SEEK_END)
 	if err != nil {
@@ -187,10 +187,12 @@ func (storage *Storage) SaveMessage(msg *Message) int64 {
 	}
 	
 	SendMessage(storage.file, msg)
+	master.ewt <- &EMessage{msgid:msgid, msg:msg}
+	log.Info("save message:", msgid)
 	return msgid
 }
 
-func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64) {
+func (storage *Storage) AddOffline(msg_id int64, appid int64, receiver int64) {
 	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
 	value := fmt.Sprintf("%d", msg_id)
 	err := storage.db.Put([]byte(key), []byte(value), nil)
@@ -198,29 +200,45 @@ func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64
 		log.Error("put err:", err)
 		return
 	}
-	log.Infof("enqueue offline:%s %d %d %d\n", key, appid, receiver, msg_id)
-	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
-	storage.SaveMessage(&Message{cmd:MSG_OFFLINE, body:off})
+	
 }
 
-func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64) {
+func (storage *Storage) RemoveOffline(msg_id int64, appid int64, receiver int64) {
+	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
+	err := storage.db.Delete([]byte(key), nil)
+	if err != nil {
+		//can't get ErrNotFound
+		log.Error("delete err:", err)
+	}
+}
+
+func (storage *Storage) HasOffline(msg_id int64, appid int64, receiver int64) bool {
 	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
 	has, err := storage.db.Has([]byte(key), nil)
 	if err != nil {
 		log.Error("check key err:", err)
+		return false
 	}
+	return has
+}
+
+func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64) {
+	log.Infof("enqueue offline:%d %d %d\n", appid, receiver, msg_id)
+	storage.AddOffline(msg_id, appid, receiver)
+	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
+	msg := &Message{cmd:MSG_OFFLINE, body:off}
+	storage.SaveMessage(msg)
+}
+
+func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64) {
+	log.Infof("dequeue offline:%d %d %d\n", appid, receiver, msg_id)
+	has := storage.HasOffline(msg_id, appid, receiver)
 	if !has {
 		log.Info("no offline msg:", appid, receiver, msg_id)
 		return
 	}
 
-	err = storage.db.Delete([]byte(key), nil)
-	if err != nil {
-		//can't get ErrNotFound
-		log.Error("delete err:", err)
-	}
-
-	log.Infof("dequeue offline:%s %d %d %d\n", key, appid, receiver, msg_id)
+	storage.RemoveOffline(msg_id, appid, receiver)
 	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
 	msg := &Message{cmd:MSG_ACK_IN, body:off}
 	storage.SaveMessage(msg)
@@ -255,5 +273,100 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
 		log.Warning("iterator err:", err)
 	}
 	log.Info("offline count:", len(c))
+	return c
+}
+
+func (storage *Storage) NextMessageID() int64 {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	msgid, err := storage.file.Seek(0, os.SEEK_END)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return msgid
+}
+
+func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	
+	filesize, err := storage.file.Seek(0, os.SEEK_END)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if emsg.msgid != filesize {
+		log.Warningf("file size:%d, msgid:%d is't equal", filesize, emsg.msgid)
+		if emsg.msgid < filesize {
+			log.Warning("skip msg:", emsg.msgid)
+		} else {
+			log.Warning("write padding:", emsg.msgid-filesize)
+			padding := make([]byte, emsg.msgid - filesize)
+			_, err = storage.file.Write(padding)
+			if err != nil {
+				log.Fatal("file write:", err)
+			}
+		}
+	}
+	
+	err = SendMessage(storage.file, emsg.msg)
+	if err != nil {
+		log.Fatal("file write:", err)
+	}
+
+	if emsg.msg.cmd == MSG_OFFLINE {
+		off := emsg.msg.body.(*OfflineMessage)
+		storage.AddOffline(off.msgid, off.appid, off.receiver)
+	} else if emsg.msg.cmd == MSG_ACK_IN {
+		off := emsg.msg.body.(*OfflineMessage)
+		storage.RemoveOffline(off.msgid, off.appid, off.receiver)
+	}
+	log.Info("save sync message:", emsg.msgid)
+	return nil
+}
+
+
+func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *EMessage {
+	c := make(chan *EMessage, 10)
+	go func() {
+		defer close(c)
+		path := fmt.Sprintf("%s/%s", storage.root, "messages")
+		log.Info("message file path:", path)
+		file, err := os.Open(path)
+		if err != nil {
+			log.Info("open file err:", err)
+			return
+		}
+		defer file.Close()
+
+		file_size, err := file.Seek(0, os.SEEK_END)
+		if err != nil {
+			log.Fatal("seek file err:", err)
+			return
+		}
+		if file_size < HEADER_SIZE {
+			log.Info("file header is't complete")
+			return
+		}
+		
+		_, err = file.Seek(msgid, os.SEEK_SET)
+		if err != nil {
+			log.Info("seek file err:", err)
+			return
+		}
+		
+		for {
+			msgid, err = file.Seek(0, os.SEEK_CUR)
+			if err != nil {
+				log.Info("seek file err:", err)
+				break
+			}
+			msg := ReceiveMessage(file)
+			if msg == nil {
+				break
+			}
+			emsg := &EMessage{msgid:msgid, msg:msg}
+			c <- emsg
+		}
+	}()
 	return c
 }

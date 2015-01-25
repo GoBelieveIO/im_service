@@ -6,6 +6,7 @@ import "encoding/binary"
 import log "github.com/golang/glog"
 import "github.com/bitly/go-simplejson"
 import "fmt"
+import "errors"
 
 const MSG_HEARTBEAT = 1
 const MSG_AUTH = 2
@@ -630,19 +631,22 @@ func (id *AppUserID) FromData(buff []byte) bool {
 	return true
 }
 
-
-
-func SendMessage(conn io.Writer, msg *Message) {
+func SendMessage(conn io.Writer, msg *Message) error {
 	body := msg.ToData()
 	buffer := new(bytes.Buffer)
 	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), buffer)
 	buffer.Write(body)
 	buf := buffer.Bytes()
 	n, err := conn.Write(buf)
-	if err != nil || n != len(buf) {
-		log.Info("sock write error")
-		return
+	if err != nil {
+		log.Info("sock write error:", err)
+		return err
 	}
+	if n != len(buf) {
+		log.Infof("write less:%d %d", n, len(buf))
+		return errors.New("write less")
+	}
+	return nil
 }
 
 func ReceiveMessage(conn io.Reader) *Message {
