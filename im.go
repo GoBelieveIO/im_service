@@ -69,14 +69,13 @@ func NewRedisPool(server, password string) *redis.Pool {
 	}
 }
 
-func DispatchAppMessage(amsg *AppMessage) {
-	log.Info("dispatch app message")
+func SendAppMessage(amsg *AppMessage, uid int64) {
 	route := app_route.FindRoute(amsg.appid)
 	if route == nil {
 		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
 		return
 	}
-	clients := route.FindClientSet(amsg.receiver)
+	clients := route.FindClientSet(uid)
 	if len(clients) == 0 {
 		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
 		return
@@ -89,7 +88,12 @@ func DispatchAppMessage(amsg *AppMessage) {
 				c.wt <- amsg.msg
 			}
 		}
-	}
+	}	
+}
+
+func DispatchAppMessage(amsg *AppMessage) {
+	log.Info("dispatch app message:", Command(amsg.msg.cmd))
+	SendAppMessage(amsg, amsg.receiver)
 }
 
 func DialStorageFun(addr string) func()(*StorageConn, error) {
@@ -120,7 +124,7 @@ func main() {
 	redis_pool = NewRedisPool(config.redis_address, "")
 
 	channels = make([]*Channel, 1)
-	channels[0] = NewChannel("127.0.0.1:4444", DispatchAppMessage)
+	channels[0] = NewChannel("127.0.0.1:4444", DispatchAppMessage, nil)
 	channels[0].Start()
 
 	f := DialStorageFun(config.storage_address)

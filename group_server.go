@@ -31,7 +31,7 @@ func NewGroupServer(port int) *GroupServer {
 }
 
 func (group_server *GroupServer) SendGroupNotification(appid int64, gid int64, 
-	op map[string]interface{}, members []int64) {
+	op map[string]interface{}, members IntSet) {
 
 	b, _ := json.Marshal(op)
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{string(b)}}
@@ -39,9 +39,11 @@ func (group_server *GroupServer) SendGroupNotification(appid int64, gid int64,
 	sae := &SAEMessage{}
 	sae.msg = msg
 	sae.receivers = make([]*AppUserID, len(members))
-	for i, member := range(members) {
+	i := 0
+	for member := range(members) {
 		id := &AppUserID{appid:appid, uid:member}
 		sae.receivers[i] = id
+		i++
 	}
 
 	storage, err := storage_pool.Get()
@@ -57,14 +59,16 @@ func (group_server *GroupServer) SendGroupNotification(appid int64, gid int64,
 		return
 	}
 
-	channel := group_server.GetChannel(gid)
-	amsg := &AppMessage{appid:appid, receiver:gid, 
-		msgid:msgid, msg:msg}
-	channel.PublishGroup(amsg)
+	for member := range(members) {
+		channel := group_server.GetChannel(member)
+		amsg := &AppMessage{appid:appid, receiver:member, 
+			msgid:msgid, msg:msg}
+		channel.Publish(amsg)
+	}
 }
 
-func (group_server *GroupServer) GetChannel(gid int64) *Channel{
-	index := gid%int64(len(channels))
+func (group_server *GroupServer) GetChannel(uid int64) *Channel{
+	index := uid%int64(len(channels))
 	return channels[index]
 }
 
@@ -128,7 +132,7 @@ func (group_server *GroupServer) CreateGroup(appid int64, gname string,
 		AddGroupMember(db, gid, member)
 	}
 
-	content := fmt.Sprintf("%d", gid)
+	content := fmt.Sprintf("%d,%d", gid, appid)
 	group_server.PublishMessage("group_create", content)
 
 	for _, member := range members {
@@ -144,7 +148,11 @@ func (group_server *GroupServer) CreateGroup(appid int64, gname string,
 	op := make(map[string]interface{})
 	op["create"] = v
 
-	group_server.SendGroupNotification(appid, gid, op, members)
+	s := NewIntSet()
+	for _, m := range(members) {
+		s.Add(m)
+	}
+	group_server.SendGroupNotification(appid, gid, op, s)
 
 	return gid
 }

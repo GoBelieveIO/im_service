@@ -12,12 +12,27 @@ import log "github.com/golang/glog"
 type GroupManager struct {
 	mutex  sync.Mutex
 	groups map[int64]*Group
+
+	ob_mutex sync.Mutex
+	observers map[IGroupObserver]struct{}
 }
 
 func NewGroupManager() *GroupManager {
 	m := new(GroupManager)
 	m.groups = make(map[int64]*Group)
+	m.observers = make(map[IGroupObserver]struct{})
 	return m
+}
+
+func (group_manager *GroupManager) GetGroups() []*Group{
+	group_manager.mutex.Lock()
+	defer group_manager.mutex.Unlock()
+
+	groups := make([]*Group, 0, len(group_manager.groups))
+	for _, group := range(group_manager.groups) {
+		groups = append(groups, group)
+	}
+	return groups
 }
 
 func (group_manager *GroupManager) FindGroup(gid int64) *Group {
@@ -30,7 +45,17 @@ func (group_manager *GroupManager) FindGroup(gid int64) *Group {
 }
 
 func (group_manager *GroupManager) HandleCreate(data string) {
-	gid, err := strconv.ParseInt(data, 10, 64)
+	arr := strings.Split(data, ",")
+	if len(arr) != 2 {
+		log.Info("message error:", data)
+		return
+	}
+	gid, err := strconv.ParseInt(arr[0], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+	appid, err := strconv.ParseInt(arr[1], 10, 64)
 	if err != nil {
 		log.Info("error:", err)
 		return
@@ -42,8 +67,8 @@ func (group_manager *GroupManager) HandleCreate(data string) {
 	if _, ok := group_manager.groups[gid]; ok {
 		log.Infof("group:%d exists\n", gid)
 	}
-	log.Info("create group:", gid)
-	group_manager.groups[gid] = NewGroup(gid, nil)
+	log.Infof("create group:%d appid:%d", gid, appid)
+	group_manager.groups[gid] = NewGroup(gid, appid, nil)
 }
 
 func (group_manager *GroupManager) HandleDisband(data string) {
@@ -83,6 +108,7 @@ func (group_manager *GroupManager) HandleMemberAdd(data string) {
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		group.AddMember(uid)
+		log.Infof("add group member gid:%d uid:%d", gid, uid)
 	} else {
 		log.Infof("can't find group:%d\n", gid)
 	}
@@ -108,6 +134,7 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		group.RemoveMember(uid)
+		log.Infof("remove group member gid:%d uid:%d", gid, uid)
 	} else {
 		log.Infof("can't find group:%d\n", gid)
 	}

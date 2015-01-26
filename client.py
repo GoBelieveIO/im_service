@@ -298,11 +298,6 @@ def send_inputing(uid, receiver):
     send_message(MSG_INPUTING, seq, m, sock)
     task += 1
     
-def publish_state(uid, port):
-    global task
-    connect_server(uid, port)
-    task += 1
-    print "publish success"
 
 def subscribe_state(uid, target):
     global task
@@ -317,16 +312,11 @@ def subscribe_state(uid, target):
         cmd, _, msg = recv_message(sock)
         if cmd == MSG_ONLINE_STATE:
             print "online:", msg
+            break
         elif cmd == 0:
             assert(False)
         else:
             print "cmd:", cmd, " ", msg
-
-        if cmd == MSG_ONLINE_STATE and msg[1] == 1:
-            connected = True
-
-        if cmd == MSG_ONLINE_STATE and msg[1] == 0 and connected:
-            break
 
     task += 1
     print "subscribe state success"
@@ -481,13 +471,20 @@ def TestGroup():
     print r.status_code, r.text
     print "test group completed"
 
-def TestGroupMessage():
+
+
+def _TestGroupMessage(port):
     URL = "http://127.0.0.1:23002"
+
+    access_token = login(13635273142)
 
     url = URL + "/groups"
 
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
-    r = requests.post(url, data=json.dumps(group))
+    headers = {}
+    headers["Authorization"] = "Bearer " + access_token
+    headers["Content-Type"] = "application/json; charset=UTF-8"
+    r = requests.post(url, data=json.dumps(group), headers = headers)
     print r.status_code
     obj = json.loads(r.content)
     group_id = obj["group_id"]
@@ -495,10 +492,11 @@ def TestGroupMessage():
     global task
     task = 0
  
-    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,))
+    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,port))
     t3.setDaemon(True)
     t3.start()
 
+    time.sleep(10)
     
     t2 = threading.Thread(target=send_client, args=(13635273142, group_id, MSG_GROUP_IM))
     t2.setDaemon(True)
@@ -508,10 +506,16 @@ def TestGroupMessage():
         time.sleep(1)
 
     url = URL + "/groups/%s"%str(group_id)
-    r = requests.delete(url)
+    r = requests.delete(url, headers=headers)
     print r.status_code, r.text
 
     print "test group message completed"
+
+def TestGroupMessage():
+    _TestGroupMessage(23000)
+
+def TestClusterGroupMessage():
+    _TestGroupMessage(24000)
 
 def TestGroupNotification():
     global task
@@ -524,10 +528,15 @@ def TestGroupNotification():
 
     URL = "http://127.0.0.1:23002"
 
+    access_token = login(13635273142)
+
     url = URL + "/groups"
 
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
-    r = requests.post(url, data=json.dumps(group))
+    headers = {}
+    headers["Authorization"] = "Bearer " + access_token
+    headers["Content-Type"] = "application/json; charset=UTF-8"
+    r = requests.post(url, data=json.dumps(group), headers=headers)
     print r.status_code
     obj = json.loads(r.content)
     group_id = obj["group_id"]
@@ -536,7 +545,7 @@ def TestGroupNotification():
         time.sleep(1)
 
     url = URL + "/groups/%s"%str(group_id)
-    r = requests.delete(url)
+    r = requests.delete(url, headers=headers)
     print r.status_code, r.text
 
     print "test group notification completed"  
@@ -548,29 +557,26 @@ def TestSubscribeState():
     t2.setDaemon(True)
     t2.start()
 
-    time.sleep(1)
-
-    t3 = threading.Thread(target=publish_state, args=(13635273142, 23000))
-    t3.setDaemon(True)
-    t3.start()
-
-    while task < 2:
+    while task < 1:
         time.sleep(1)
 
     print "test subsribe state completed"
     
     
 def main():
-    TestGroup()
-    time.sleep(1)
-    return
+    #TestGroup()
+    #time.sleep(1)
     #TestGroupNotification()
     #time.sleep(1)
     #TestGroupMessage()
     #time.sleep(1)
-    #TestSubscribeState()
-    #time.sleep(1)
 
+    TestClusterGroupMessage()
+    time.sleep(1)
+    return
+
+    TestSubscribeState()
+    time.sleep(1)
     TestPeerACK()
     time.sleep(1)
     TestInputing()
@@ -579,10 +585,8 @@ def main():
     time.sleep(1)
     TestOffline()
     time.sleep(1)
-
     TestCluster()
     time.sleep(1)
-
     TestLoginPoint()
     time.sleep(1)
     TestPingPong()

@@ -12,8 +12,9 @@ type Group struct {
 	members IntSet
 }
 
-func NewGroup(gid int64, members []int64) *Group {
+func NewGroup(gid int64, appid int64, members []int64) *Group {
 	group := new(Group)
+	group.appid = appid
 	group.gid = gid
 	group.members = NewIntSet()
 	for _, m := range members {
@@ -22,14 +23,10 @@ func NewGroup(gid int64, members []int64) *Group {
 	return group
 }
 
-func (group *Group) Members() []int64 {
-	members := make([]int64, 0, len(group.members))
+func (group *Group) Members() IntSet {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
-	for member, _ := range group.members {
-		members = append(members, member)
-	}
-	return members
+	return group.members.Clone()
 }
 
 func (group *Group) AddMember(uid int64) {
@@ -136,7 +133,7 @@ func RemoveGroupMember(db *sql.DB, group_id int64, uid int64) bool {
 }
 
 func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
-	stmtIns, err := db.Prepare("SELECT id FROM im_group")
+	stmtIns, err := db.Prepare("SELECT id, appid FROM im_group")
 	if err != nil {
 		log.Info("error:", err)
 		return nil, nil
@@ -147,13 +144,14 @@ func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
 	rows, err := stmtIns.Query()
 	for rows.Next() {
 		var id int64
-		rows.Scan(&id)
+		var appid int64
+		rows.Scan(&id, &appid)
 		members, err := LoadGroupMember(db, id)
 		if err != nil {
 			log.Info("error:", err)
 			continue
 		}
-		group := NewGroup(id, members)
+		group := NewGroup(id, appid, members)
 		groups[group.gid] = group
 	}
 	return groups, nil

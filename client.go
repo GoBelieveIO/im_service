@@ -315,7 +315,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	sae.msg = m
 	sae.receivers = make([]*AppUserID, 0, len(members))
 
-	for _, member := range members {
+	for member := range members {
 		if member == client.uid {
 			continue
 		}
@@ -330,7 +330,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		return
 	}
 
-	for _, member := range members {
+	for member := range members {
 		//群消息不再发送给自己
 		if member == client.uid {
 			continue

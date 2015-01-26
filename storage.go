@@ -122,8 +122,6 @@ func NewStorage(root string) *Storage {
 	}
 
 	storage.db = db
-
-	storage.ListKeyValue()
 	
 	return storage
 }

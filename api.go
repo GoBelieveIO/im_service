@@ -61,7 +61,7 @@ func main() {
 	redis_pool = NewRedisPool(config.redis_address, "")
 
 	channels = make([]*Channel, 1)
-	channels[0] = NewChannel("127.0.0.1:4444", nil)
+	channels[0] = NewChannel("127.0.0.1:4444", nil, nil)
 	channels[0].Start()
 
 	f := DialStorageFun(config.storage_address)

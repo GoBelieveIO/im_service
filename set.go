@@ -26,3 +26,11 @@ func (set IntSet) Remove(v int64) {
 	}
 	delete(set, v)
 }
+
+func (set IntSet) Clone() IntSet {
+	n := make(map[int64]struct{})
+	for k, v := range set {
+		n[k] = v
+	}
+	return n
+}

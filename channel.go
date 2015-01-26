@@ -16,19 +16,21 @@ func NewSubscriber() *Subscriber {
 }
 
 type Channel struct {
-	addr string
-	wt   chan *Message
+	addr            string
+	wt              chan *Message
 
-	mutex       sync.Mutex
-	subscribers map[int64]*Subscriber
+	mutex           sync.Mutex
+	subscribers     map[int64]*Subscriber
 
-	dispatch func(*AppMessage)
+	dispatch        func(*AppMessage)
+	dispatch_group  func(*AppMessage)
 }
 
-func NewChannel(addr string, f func(*AppMessage)) *Channel {
+func NewChannel(addr string, f func(*AppMessage), g func(*AppMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
+	channel.dispatch_group = g
 	channel.addr = addr
 	channel.wt = make(chan *Message, 10)
 	return channel
@@ -92,10 +94,6 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64) {
 func (channel *Channel) Publish(amsg *AppMessage) {
 	msg := &Message{cmd: MSG_PUBLISH, body: amsg}
 	channel.wt <- msg
-}
-
-func (channel *Channel) PublishGroup(amsg *AppMessage) {
-	
 }
 
 func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {

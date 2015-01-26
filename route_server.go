@@ -43,20 +43,30 @@ func FindClientSet(id *AppUserID) ClientSet {
 	return s
 }
 
-
 type Route struct {
 	appid     int64
 	mutex     sync.Mutex
 	uids      IntSet
-	group_ids IntSet
 }
 
 func NewRoute(appid int64) *Route {
 	r := new(Route)
 	r.appid = appid
 	r.uids = NewIntSet()
-	r.group_ids = NewIntSet()
 	return r
+}
+
+
+func (route *Route) IsIntersect(s IntSet) bool {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+	
+	for uid := range(route.uids) {
+		if s.IsMember(uid) {
+			return true
+		}
+	}
+	return false
 }
 
 func (route *Route) ContainUserID(uid int64) bool {
@@ -104,6 +114,7 @@ func (client *Client) ContainAppUserID(id *AppUserID) bool {
 
 	return route.ContainUserID(id.uid)
 }
+
 
 func (client *Client) Read() {
 	AddClient(client)
@@ -192,9 +203,6 @@ func (client *Client) close() {
 }
 
 
-func (client *Client) HandlePublishGroup(amsg *AppMessage) {
-
-}
 
 func handle_client(conn *net.TCPConn) {
 	conn.SetKeepAlive(true)

@@ -13,14 +13,14 @@ func Dispatch(amsg *AppMessage) {
 func main() {
 	flag.Parse()
 
-	channel1 := NewChannel(route_addr, Dispatch)
+	channel1 := NewChannel(route_addr, Dispatch, Dispatch)
 	channel1.Start()
 
 	channel1.Subscribe(appid, 1000)
 
 	time.Sleep(1*time.Second)
 
-	channel2 := NewChannel(route_addr, Dispatch)
+	channel2 := NewChannel(route_addr, Dispatch, Dispatch)
 	channel2.Start()
 
 	im := &IMMessage{}

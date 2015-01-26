@@ -13,6 +13,7 @@ func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
+	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(AppMessage)}
 
 	message_descriptions[MSG_SUBSCRIBE] = "MSG_SUBSCRIBE"
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
