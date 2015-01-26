@@ -30,6 +30,12 @@ func NewGroupServer(port int) *GroupServer {
 	return server
 }
 
+
+func (group_server *GroupServer) GetStorageConnPool(appid int64) *StorageConnPool {
+	index := appid%int64(len(storage_pools))
+	return storage_pools[index]
+}
+
 func (group_server *GroupServer) SendGroupNotification(appid int64, gid int64, 
 	op map[string]interface{}, members IntSet) {
 
@@ -46,6 +52,7 @@ func (group_server *GroupServer) SendGroupNotification(appid int64, gid int64,
 		i++
 	}
 
+	storage_pool := group_server.GetStorageConnPool(appid)
 	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)

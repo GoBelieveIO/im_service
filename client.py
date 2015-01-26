@@ -496,7 +496,7 @@ def _TestGroupMessage(port):
     t3.setDaemon(True)
     t3.start()
 
-    time.sleep(10)
+    time.sleep(1)
     
     t2 = threading.Thread(target=send_client, args=(13635273142, group_id, MSG_GROUP_IM))
     t2.setDaemon(True)
@@ -564,16 +564,16 @@ def TestSubscribeState():
     
     
 def main():
-    #TestGroup()
-    #time.sleep(1)
-    #TestGroupNotification()
-    #time.sleep(1)
-    #TestGroupMessage()
-    #time.sleep(1)
+    TestGroup()
+    time.sleep(1)
+    TestGroupNotification()
+    time.sleep(1)
+    TestGroupMessage()
+    time.sleep(1)
 
     TestClusterGroupMessage()
     time.sleep(1)
-    return
+
 
     TestSubscribeState()
     time.sleep(1)

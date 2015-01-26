@@ -92,7 +92,13 @@ func (client *Client) HandleMessage(msg *Message) {
 	}
 }
 
+func (client *Client) GetStorageConnPool(appid int64) *StorageConnPool {
+	index := appid%int64(len(storage_pools))
+	return storage_pools[index]
+}
+
 func (client *Client) SendOfflineMessage() {
+	storage_pool := client.GetStorageConnPool(client.appid)
 	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
@@ -266,6 +272,7 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, body: msg}
 
+	storage_pool := client.GetStorageConnPool(client.appid)
 	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
@@ -297,6 +304,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_GROUP_IM, body: msg}
 
+	storage_pool := client.GetStorageConnPool(client.appid)
 	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
@@ -363,6 +371,7 @@ func (client *Client) HandleACK(ack *MessageACK) {
 		ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
 		m := &Message{cmd: MSG_PEER_ACK, body: ack}
 
+		storage_pool := client.GetStorageConnPool(client.appid)
 		storage, err := storage_pool.Get()
 		if err != nil {
 			log.Error("connect storage err:", err)
@@ -397,8 +406,7 @@ func (client *Client) HandlePing() {
 }
 
 func (client *Client) DequeueMessage(msgid int64) {
-	storage := NewStorageConn()
-
+	storage_pool := client.GetStorageConnPool(client.appid)
 	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)

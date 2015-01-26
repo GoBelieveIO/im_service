@@ -11,7 +11,7 @@ var config *APIConfig
 var group_server *GroupServer
 var group_manager *GroupManager
 var redis_pool *redis.Pool
-var storage_pool *StorageConnPool
+var storage_pools []*StorageConnPool
 
 func NewRedisPool(server, password string) *redis.Pool {
 	return &redis.Pool{
@@ -37,7 +37,7 @@ func NewRedisPool(server, password string) *redis.Pool {
 func DialStorageFun(addr string) func()(*StorageConn, error) {
 	f := func() (*StorageConn, error){
 		storage := NewStorageConn()
-		err := storage.Dial(config.storage_address)
+		err := storage.Dial(addr)
 		if err != nil {
 			log.Error("connect storage err:", err)
 			return nil, err
@@ -60,12 +60,20 @@ func main() {
 
 	redis_pool = NewRedisPool(config.redis_address, "")
 
-	channels = make([]*Channel, 1)
-	channels[0] = NewChannel("127.0.0.1:4444", nil, nil)
-	channels[0].Start()
 
-	f := DialStorageFun(config.storage_address)
-	storage_pool = NewStorageConnPool(100, 500, 600 * time.Second, f) 
+	storage_pools = make([]*StorageConnPool, 0)
+	for _, addr := range(config.storage_addrs) {
+		f := DialStorageFun(addr)
+		pool := NewStorageConnPool(100, 500, 600 * time.Second, f) 
+		storage_pools = append(storage_pools, pool)
+	}
+
+	channels = make([]*Channel, 0)
+	for _, addr := range(config.route_addrs) {
+		channel := NewChannel(addr, nil, nil)
+		channel.Start()
+		channels = append(channels, channel)
+	}
 
 
 	group_manager = NewGroupManager()

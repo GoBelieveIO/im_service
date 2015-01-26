@@ -12,15 +12,11 @@ import log "github.com/golang/glog"
 type GroupManager struct {
 	mutex  sync.Mutex
 	groups map[int64]*Group
-
-	ob_mutex sync.Mutex
-	observers map[IGroupObserver]struct{}
 }
 
 func NewGroupManager() *GroupManager {
 	m := new(GroupManager)
 	m.groups = make(map[int64]*Group)
-	m.observers = make(map[IGroupObserver]struct{})
 	return m
 }
 

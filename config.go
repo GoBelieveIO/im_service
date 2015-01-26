@@ -2,15 +2,18 @@ package main
 
 import "strconv"
 import "log"
+import "strings"
 import "github.com/jimlawless/cfg"
 
 type Config struct {
 	port                int
-	storage_address     string
 	mysqldb_datasource  string
 	redis_address       string
 	http_listen_address string
 	socket_io_address   string
+
+	storage_addrs       []string
+	route_addrs         []string
 }
 
 type StorageConfig struct {
@@ -26,9 +29,11 @@ type RouteConfig struct {
 
 type APIConfig struct {
 	port  int
-	storage_address     string
 	redis_address       string
 	mysqldb_datasource  string
+
+	storage_addrs       []string
+	route_addrs         []string
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -68,11 +73,24 @@ func read_cfg(cfg_path string) *Config {
 	}
 
 	config.port = get_int(app_cfg, "port")
-	config.storage_address = get_string(app_cfg, "storage_address")
 	config.http_listen_address = get_string(app_cfg, "http_listen_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.socket_io_address = get_string(app_cfg, "socket_io_address")
+
+	str := get_string(app_cfg, "storage_pool")
+    array := strings.Split(str, " ")
+	config.storage_addrs = array
+	if len(config.storage_addrs) == 0 {
+		log.Fatal("storage pool config")
+	}
+
+	str = get_string(app_cfg, "route_pool")
+    array = strings.Split(str, " ")
+	config.route_addrs = array
+	if len(config.route_addrs) == 0 {
+		log.Fatal("route pool config")
+	}
 
 	return config
 }
@@ -113,8 +131,22 @@ func read_api_cfg(cfg_path string) *APIConfig {
 	}
 
 	config.port = get_int(app_cfg, "port")
-	config.storage_address = get_string(app_cfg, "storage_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
+
+	str := get_string(app_cfg, "storage_pool")
+    array := strings.Split(str, " ")
+	config.storage_addrs = array
+	if len(config.storage_addrs) == 0 {
+		log.Fatal("storage pool config")
+	}
+
+	str = get_string(app_cfg, "route_pool")
+    array = strings.Split(str, " ")
+	config.route_addrs = array
+	if len(config.route_addrs) == 0 {
+		log.Fatal("route pool config")
+	}
+
 	return config
 }
