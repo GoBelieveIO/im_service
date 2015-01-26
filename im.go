@@ -11,7 +11,6 @@ import log "github.com/golang/glog"
 var channels []*Channel
 var app_route *AppRoute
 var group_manager *GroupManager
-var group_server *GroupServer
 var redis_pool *redis.Pool
 var storage_pool *StorageConnPool
 var config *Config
@@ -127,8 +126,6 @@ func main() {
 	f := DialStorageFun(config.storage_address)
 	storage_pool = NewStorageConnPool(100, 500, 600 * time.Second, f) 
 
-	group_server = NewGroupServer(config.group_api_port)
-	group_server.Start()
 	group_manager = NewGroupManager()
 	group_manager.Start()
 

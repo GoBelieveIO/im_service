@@ -2,6 +2,7 @@ CREATE DATABASE IF NOT EXISTS im;
 use im;
 CREATE TABLE IF NOT EXISTS im_group(
 	   id BIGINT AUTO_INCREMENT PRIMARY KEY,
+           appid  BIGINT,
 	   master BIGINT,
 	   name VARCHAR(255));
 CREATE TABLE IF NOT EXISTS group_member(group_id BIGINT, uid BIGINT, PRIMARY KEY(group_id, uid));

@@ -4,6 +4,7 @@ import "fmt"
 import "net/http"
 import "strconv"
 import "io/ioutil"
+import "errors"
 import "encoding/json"
 import "github.com/gorilla/mux"
 import "github.com/garyburd/redigo/redis"
@@ -42,7 +43,43 @@ func (group_server *GroupServer) OpenDB() (*sql.DB, error) {
 	return db, err
 }
 
-func (group_server *GroupServer) CreateGroup(gname string,
+
+func (group_server *GroupServer) AuthToken(token string) (int64, int64, error) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("tokens_%s", token)
+
+	var uid int64
+	var appid int64
+	
+	reply, err := redis.Values(conn.Do("HMGET", key, "uid", "app_id"))
+	if err != nil {
+		log.Info("hmget error:", err)
+		return 0, 0, err
+	}
+
+	_, err = redis.Scan(reply, &uid, &appid)
+	if err != nil {
+		log.Warning("scan error:", err)
+		return 0, 0, err
+	}
+	return appid, uid, nil
+}
+
+
+func (group_server *GroupServer) AuthRequest(r *http.Request) (int64, int64, error) {
+	token := r.Header.Get("Authorization");
+	if len(token) <= 7 {
+		return 0, 0, errors.New("no authorization header")
+	}
+	if token[:7] != "Bearer " {
+		return 0, 0, errors.New("no authorization header")
+	}
+	return group_server.AuthToken(token[7:])
+}
+
+func (group_server *GroupServer) CreateGroup(appid int64, gname string,
 	master int64, members []int64) int64 {
 	db, err := group_server.OpenDB()
 	if err != nil {
@@ -50,7 +87,7 @@ func (group_server *GroupServer) CreateGroup(gname string,
 		return 0
 	}
 	defer db.Close()
-	gid := CreateGroup(db, master, gname)
+	gid := CreateGroup(db, appid, master, gname)
 	if gid == 0 {
 		return 0
 	}
@@ -176,6 +213,12 @@ func (group_server *GroupServer) QuitGroup(gid int64, uid int64) bool {
 }
 
 func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	appid, _, err := group_server.AuthRequest(r)
+	if err != nil {
+		w.WriteHeader(403)
+		return
+	}
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(400)
@@ -220,7 +263,7 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
 	}
 	log.Info("create group master:", master, " members:", members)
 
-	gid := group_server.CreateGroup(name, master, members)
+	gid := group_server.CreateGroup(appid, name, master, members)
 	if gid == 0 {
 		w.WriteHeader(500)
 		return
@@ -232,6 +275,12 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
 }
 
 func (group_server *GroupServer) HandleDisband(w http.ResponseWriter, r *http.Request) {
+	_, _, err := group_server.AuthRequest(r)
+	if err != nil {
+		w.WriteHeader(403)
+		return
+	}
+
 	vars := mux.Vars(r)
 	gid, err := strconv.ParseInt(vars["gid"], 10, 64)
 	if err != nil {
@@ -249,6 +298,12 @@ func (group_server *GroupServer) HandleDisband(w http.ResponseWriter, r *http.Re
 }
 
 func (group_server *GroupServer) HandleAddGroupMember(w http.ResponseWriter, r *http.Request) {
+	_, _, err := group_server.AuthRequest(r)
+	if err != nil {
+		w.WriteHeader(403)
+		return
+	}
+
 	vars := mux.Vars(r)
 	gid, err := strconv.ParseInt(vars["gid"], 10, 64)
 	if err != nil {
@@ -283,6 +338,12 @@ func (group_server *GroupServer) HandleAddGroupMember(w http.ResponseWriter, r *
 }
 
 func (group_server *GroupServer) HandleQuitGroup(w http.ResponseWriter, r *http.Request) {
+	_, _, err := group_server.AuthRequest(r)
+	if err != nil {
+		w.WriteHeader(403)
+		return
+	}
+
 	vars := mux.Vars(r)
 	gid, _ := strconv.ParseInt(vars["gid"], 10, 64)
 	mid, _ := strconv.ParseInt(vars["mid"], 10, 64)

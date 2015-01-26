@@ -7,6 +7,7 @@ import log "github.com/golang/glog"
 
 type Group struct {
 	gid     int64
+	appid   int64
 	mutex   sync.Mutex
 	members IntSet
 }
@@ -46,14 +47,14 @@ func (group *Group) RemoveMember(uid int64) {
 	group.members.Remove(uid)
 }
 
-func CreateGroup(db *sql.DB, master int64, name string) int64 {
-	stmtIns, err := db.Prepare("INSERT INTO im_group(master, name) VALUES( ?, ? )")
+func CreateGroup(db *sql.DB, appid int64, master int64, name string) int64 {
+	stmtIns, err := db.Prepare("INSERT INTO im_group(appid, master, name) VALUES( ?, ?, ? )")
 	if err != nil {
 		log.Info("error:", err)
 		return 0
 	}
 	defer stmtIns.Close()
-	result, err := stmtIns.Exec(master, name)
+	result, err := stmtIns.Exec(appid, master, name)
 	if err != nil {
 		log.Info("error:", err)
 		return 0
