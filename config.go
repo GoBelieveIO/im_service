@@ -26,6 +26,7 @@ type RouteConfig struct {
 
 type APIConfig struct {
 	port  int
+	storage_address     string
 	redis_address       string
 	mysqldb_datasource  string
 }
@@ -112,6 +113,7 @@ func read_api_cfg(cfg_path string) *APIConfig {
 	}
 
 	config.port = get_int(app_cfg, "port")
+	config.storage_address = get_string(app_cfg, "storage_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	return config

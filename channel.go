@@ -94,6 +94,10 @@ func (channel *Channel) Publish(amsg *AppMessage) {
 	channel.wt <- msg
 }
 
+func (channel *Channel) PublishGroup(amsg *AppMessage) {
+	
+}
+
 func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 	for appid, s := range channel.subscribers {
 		for uid, _ := range s.uids {

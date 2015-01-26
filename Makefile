@@ -9,8 +9,8 @@ ims:storage_server.go protocol.go storage.go config.go storage_message.go storag
 imr:route_server.go app_route.go protocol.go config.go set.go route_message.go
 	go build -o imr route_server.go app_route.go protocol.go config.go set.go route_message.go
 
-im_api:api.go group_server.go group_manager.go config.go protocol.go group.go set.go 
-	go build -o im_api api.go group_server.go group_manager.go config.go protocol.go group.go set.go
+im_api:api.go group_server.go group_manager.go config.go protocol.go group.go set.go storage_message.go storage_client.go route_message.go channel.go
+	go build -o im_api api.go group_server.go group_manager.go config.go protocol.go group.go set.go storage_message.go storage_client.go route_message.go channel.go
 
 benchmark:benchmark.go protocol.go
 	go build benchmark.go protocol.go

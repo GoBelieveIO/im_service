@@ -6,11 +6,12 @@ import "time"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 
+var channels []*Channel
 var config *APIConfig
 var group_server *GroupServer
 var group_manager *GroupManager
 var redis_pool *redis.Pool
-
+var storage_pool *StorageConnPool
 
 func NewRedisPool(server, password string) *redis.Pool {
 	return &redis.Pool{
@@ -33,6 +34,18 @@ func NewRedisPool(server, password string) *redis.Pool {
 	}
 }
 
+func DialStorageFun(addr string) func()(*StorageConn, error) {
+	f := func() (*StorageConn, error){
+		storage := NewStorageConn()
+		err := storage.Dial(config.storage_address)
+		if err != nil {
+			log.Error("connect storage err:", err)
+			return nil, err
+		}
+		return storage, nil
+	}
+	return f
+}
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -46,6 +59,14 @@ func main() {
 	log.Infof("port:%d \n",	config.port)
 
 	redis_pool = NewRedisPool(config.redis_address, "")
+
+	channels = make([]*Channel, 1)
+	channels[0] = NewChannel("127.0.0.1:4444", nil)
+	channels[0].Start()
+
+	f := DialStorageFun(config.storage_address)
+	storage_pool = NewStorageConnPool(100, 500, 600 * time.Second, f) 
+
 
 	group_manager = NewGroupManager()
 	group_manager.Start()

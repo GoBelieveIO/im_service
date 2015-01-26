@@ -22,17 +22,14 @@ func NewGroup(gid int64, members []int64) *Group {
 	return group
 }
 
-func (group *Group) Members() chan int64 {
-	c := make(chan int64)
-	go func() {
-		group.mutex.Lock()
-		defer group.mutex.Unlock()
-		for gid, _ := range group.members {
-			c <- gid
-		}
-		close(c)
-	}()
-	return c
+func (group *Group) Members() []int64 {
+	members := make([]int64, 0, len(group.members))
+	group.mutex.Lock()
+	defer group.mutex.Unlock()
+	for member, _ := range group.members {
+		members = append(members, member)
+	}
+	return members
 }
 
 func (group *Group) AddMember(uid int64) {
