@@ -31,8 +31,8 @@ func NewGroupServer(port int) *GroupServer {
 }
 
 
-func (group_server *GroupServer) GetStorageConnPool(appid int64) *StorageConnPool {
-	index := appid%int64(len(storage_pools))
+func (group_server *GroupServer) GetStorageConnPool(uid int64) *StorageConnPool {
+	index := uid%int64(len(storage_pools))
 	return storage_pools[index]
 }
 
@@ -42,31 +42,28 @@ func (group_server *GroupServer) SendGroupNotification(appid int64, gid int64,
 	b, _ := json.Marshal(op)
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{string(b)}}
 
-	sae := &SAEMessage{}
-	sae.msg = msg
-	sae.receivers = make([]*AppUserID, len(members))
-	i := 0
 	for member := range(members) {
+		sae := &SAEMessage{}
+		sae.msg = msg
+		sae.receivers = make([]*AppUserID, 1)
 		id := &AppUserID{appid:appid, uid:member}
-		sae.receivers[i] = id
-		i++
-	}
+		sae.receivers[0] = id
 
-	storage_pool := group_server.GetStorageConnPool(appid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		return
-	}
-	defer storage_pool.Release(storage)
+		storage_pool := group_server.GetStorageConnPool(member)
 
-	msgid, err := storage.SaveAndEnqueueMessage(sae)
-	if err != nil {
-		log.Error("saveandequeue message err:", err)
-		return
-	}
+		storage, err := storage_pool.Get()
+		if err != nil {
+			log.Error("connect storage err:", err)
+			return
+		}
+		defer storage_pool.Release(storage)
 
-	for member := range(members) {
+		msgid, err := storage.SaveAndEnqueueMessage(sae)
+		if err != nil {
+			log.Error("saveandequeue message err:", err)
+			return
+		}
+
 		channel := group_server.GetChannel(member)
 		amsg := &AppMessage{appid:appid, receiver:member, 
 			msgid:msgid, msg:msg}
