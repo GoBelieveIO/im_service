@@ -1,3 +1,14 @@
 *~
 .idea
 bin
+*.cfg
+im
+ims
+imr
+im_api
+benchmark
+benchmark_connection
+benchmark_sender
+main.test
+benchmark_storage
+benchmark_route
