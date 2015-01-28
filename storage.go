@@ -140,6 +140,25 @@ func (storage *Storage) ReadMessage(msg_id int64) *Message {
 		log.Warning("seek file")
 		return nil
 	}
+	//校验消息起始位置的magic
+	buf := make([]byte, 4)
+	n, err := storage.file.Read(buf)
+	if err != nil {
+		log.Warning("read file err:", err)
+		return nil
+	}
+	if n != len(buf) {
+		log.Warning("can't read 4 bytes")
+		return nil
+	}
+
+	buffer := bytes.NewBuffer(buf)
+	var magic int32
+	binary.Read(buffer, binary.BigEndian, &magic)
+	if magic != MAGIC {
+		log.Warning("magic err:", magic)
+		return nil
+	}
 	return ReceiveMessage(storage.file)
 }
 
@@ -184,7 +203,19 @@ func (storage *Storage) SaveMessage(msg *Message) int64 {
 		log.Fatalln(err)
 	}
 	
-	SendMessage(storage.file, msg)
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
+	SendMessage(buffer, msg)
+	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
+	buf := buffer.Bytes()
+	n, err := storage.file.Write(buf)
+	if err != nil {
+		log.Fatal("file write err:", err)
+	}
+	if n != len(buf) {
+		log.Fatal("file write size:", len(buf), " nwrite:", n)
+	}
+
 	master.ewt <- &EMessage{msgid:msgid, msg:msg}
 	log.Info("save message:", msgid)
 	return msgid
