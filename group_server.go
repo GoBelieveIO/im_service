@@ -412,32 +412,6 @@ func (group_server *GroupServer) HandleQuitGroup(w http.ResponseWriter, r *http.
 	}
 }
 
-func (group_server *GroupServer) Run() {
-	r := mux.NewRouter()
-	r.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
-		group_server.HandleCreate(w, r)
-	}).Methods("POST")
-
-	r.HandleFunc("/groups/{gid}", func(w http.ResponseWriter, r *http.Request) {
-		group_server.HandleDisband(w, r)
-	}).Methods("DELETE")
-
-	r.HandleFunc("/groups/{gid}/members", func(w http.ResponseWriter, r *http.Request) {
-		group_server.HandleAddGroupMember(w, r)
-	}).Methods("POST")
-
-	r.HandleFunc("/groups/{gid}/members/{mid}", func(w http.ResponseWriter, r *http.Request) {
-		group_server.HandleQuitGroup(w, r)
-	}).Methods("DELETE")
-
-	http.Handle("/", r)
-
-	var PORT = group_server.port
-	var BIND_ADDR = ""
-	addr := fmt.Sprintf("%s:%d", BIND_ADDR, PORT)
-	http.ListenAndServe(addr, nil)
-}
-
 func (group_server *GroupServer) Publish(channel string, msg string) bool {
 	if group_server.redis == nil {
 		c, err := redis.Dial("tcp", config.redis_address)

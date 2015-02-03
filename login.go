@@ -97,26 +97,3 @@ func (client *Client) ListLoginInfo() []*LoginPoint {
 
 	return points
 }
-
-func (client *Client) AuthToken(token string) (int64, int64, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	key := fmt.Sprintf("tokens_%s", token)
-
-	var uid int64
-	var appid int64
-	
-	reply, err := redis.Values(conn.Do("HMGET", key, "uid", "app_id"))
-	if err != nil {
-		log.Info("hmget error:", err)
-		return 0, 0, err
-	}
-
-	_, err = redis.Scan(reply, &uid, &appid)
-	if err != nil {
-		log.Warning("scan error:", err)
-		return 0, 0, err
-	}
-	return appid, uid, nil
-}

@@ -115,15 +115,16 @@ def recv_message(sock):
 
 APP_ID = 8
 APP_SECRET = 'sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44'
-URL = "http://127.0.0.1:8888/auth/token"
+URL = "http://127.0.0.1:23002"
 
 def login(uid):
+    url = URL + "/auth/grant"
     obj = {"uid":uid, "user_name":str(uid)}
     basic = base64.b64encode(str(APP_ID) + ":" + APP_SECRET)
     headers = {'Content-Type': 'application/json; charset=UTF-8',
                'Authorization': 'Basic ' + basic}
      
-    res = requests.post(URL, data=json.dumps(obj), headers=headers)
+    res = requests.post(url, data=json.dumps(obj), headers=headers)
     if res.status_code != 200:
         return None
     obj = json.loads(res.text)
@@ -441,10 +442,21 @@ def TestPingPong():
         else:
             continue
 
+
+def TestBindToken():
+    access_token = login(13635273142)
+    url = URL + "/device/bind"
+
+    obj = {"apns_device_token":"11"}
+    headers = {}
+    headers["Authorization"] = "Bearer " + access_token
+    headers["Content-Type"] = "application/json; charset=UTF-8"
+
+    r = requests.post(url, data=json.dumps(obj), headers = headers)
+    print "bind device token:", r.status_code
+    
     
 def TestGroup():
-    URL = "http://127.0.0.1:23002"
-
     access_token = login(13635273142)
     url = URL + "/groups"
 
@@ -474,8 +486,6 @@ def TestGroup():
 
 
 def _TestGroupMessage(port):
-    URL = "http://127.0.0.1:23002"
-
     access_token = login(13635273142)
 
     url = URL + "/groups"
@@ -526,7 +536,6 @@ def TestGroupNotification():
     t3.start()
     time.sleep(1)
 
-    URL = "http://127.0.0.1:23002"
 
     access_token = login(13635273142)
 
@@ -564,6 +573,9 @@ def TestSubscribeState():
     
     
 def main():
+    TestBindToken()
+    time.sleep(1)
+
     TestGroup()
     time.sleep(1)
     TestGroupNotification()

@@ -161,24 +161,17 @@ func (client *Client) SendMessage(uid int64, msg *Message) bool {
 }
 
 func (client *Client) SendLoginPoint() {
-	points := client.ListLoginInfo()
-	for _, point := range(points) {
-		log.Infof("login point platform id:%d device id:%s\n", 
-			point.platform_id, point.device_id)
-		if point.platform_id == client.platform_id && 
-			point.device_id == client.device_id {
-			continue
-		}
-		msg := &Message{cmd:MSG_LOGIN_POINT, body:point}
-		client.wt <- msg
-	}
-	
 	point := &LoginPoint{}
 	point.up_timestamp = int32(client.tm.Unix())
 	point.platform_id = client.platform_id
 	point.device_id = client.device_id
 	msg := &Message{cmd:MSG_LOGIN_POINT, body:point}
 	client.SendMessage(client.uid, msg)
+}
+
+func (client *Client) AuthToken(token string) (int64, int64, error) {
+	appid, uid, _, err := LoadUserAccessToken(token)
+	return appid, uid, err
 }
 
 func (client *Client) HandleAuthToken(login *AuthenticationToken) {

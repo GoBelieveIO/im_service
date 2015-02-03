@@ -3,8 +3,10 @@ import "runtime"
 import "flag"
 import "fmt"
 import "time"
+import "net/http"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
+import "github.com/gorilla/mux"
 
 var channels []*Channel
 var config *APIConfig
@@ -47,6 +49,35 @@ func DialStorageFun(addr string) func()(*StorageConn, error) {
 	return f
 }
 
+
+func RunAPI() {
+	r := mux.NewRouter()
+	r.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleCreate(w, r)
+	}).Methods("POST")
+
+	r.HandleFunc("/groups/{gid}", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleDisband(w, r)
+	}).Methods("DELETE")
+
+	r.HandleFunc("/groups/{gid}/members", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleAddGroupMember(w, r)
+	}).Methods("POST")
+
+	r.HandleFunc("/groups/{gid}/members/{mid}", func(w http.ResponseWriter, r *http.Request) {
+		group_server.HandleQuitGroup(w, r)
+	}).Methods("DELETE")
+
+	r.HandleFunc("/device/bind", BindToken).Methods("POST")
+	r.HandleFunc("/auth/grant", AuthGrant).Methods("POST")
+	http.Handle("/", r)
+
+	var PORT = config.port
+	var BIND_ADDR = ""
+	addr := fmt.Sprintf("%s:%d", BIND_ADDR, PORT)
+	http.ListenAndServe(addr, nil)
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -81,5 +112,6 @@ func main() {
 
 	group_server = NewGroupServer(config.port)
 	go group_server.RunPublish()
-	group_server.Run()
+
+	RunAPI()
 }
