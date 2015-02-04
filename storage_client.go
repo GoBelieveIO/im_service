@@ -243,7 +243,9 @@ func (p *StorageConnPool) Get() (*StorageConn, error) {
 }
 
 func (p *StorageConnPool) Release(c *StorageConn) {
-	p.sem <- 0
+	defer func() {
+		p.sem <- 0
+	}()
 
 	if !c.e {
 		p.mu.Lock()
