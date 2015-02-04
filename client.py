@@ -23,6 +23,7 @@ MSG_PING = 13
 MSG_PONG = 14
 MSG_AUTH_TOKEN = 15
 MSG_LOGIN_POINT = 16
+MSG_RT = 17
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -52,7 +53,7 @@ def send_message(cmd, seq, msg, sock):
         length = len(b)
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
         sock.sendall(h+b)
-    elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
+    elif cmd == MSG_IM or cmd == MSG_GROUP_IM or cmd == MSG_RT:
         length = 24 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
@@ -94,7 +95,7 @@ def recv_message(sock):
         up_timestamp, platform_id = struct.unpack("!ib", content[:5])
         device_id = content[5:]
         return cmd, seq, (up_timestamp, platform_id, device_id)
-    elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
+    elif cmd == MSG_IM or cmd == MSG_GROUP_IM or cmd == MSG_RT:
         im = IMMessage()
         im.sender, im.receiver, _, _ = struct.unpack("!qqii", content[:24])
         im.content = content[24:]
@@ -215,6 +216,18 @@ def recv_message_client(uid, port=23000):
     recv_client(uid, port, handle_message)
     print "recv message success"
 
+def recv_rt_message_client(uid, port=23000):
+    def handle_message(cmd, s, msg):
+        if cmd == MSG_RT:
+            print "cmd:", cmd, msg.content, msg.sender, msg.receiver
+            return True
+        else:
+            print "cmd:", cmd
+            return False
+
+    recv_client(uid, port, handle_message)
+    print "recv rt message success"
+
 def recv_group_message_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_GROUP_IM:
@@ -252,6 +265,8 @@ def send_client(uid, receiver, msg_type):
     im.receiver = receiver
     if msg_type == MSG_IM:
         im.content = "test im"
+    elif msg_type == MSG_RT:
+        im.content = "test rt"
     else:
         im.content = "test group im"
     seq += 1
@@ -340,6 +355,24 @@ def TestCluster():
         time.sleep(1)
 
     print "test cluster completed"
+
+def TestRTSendAndRecv():
+    global task
+    task = 0
+ 
+    t3 = threading.Thread(target=recv_rt_message_client, args=(13635273142,))
+    t3.setDaemon(True)
+    t3.start()
+
+    time.sleep(1)
+    
+    t2 = threading.Thread(target=send_client, args=(13635273143,13635273142, MSG_RT))
+    t2.setDaemon(True)
+    t2.start()
+    
+    while task < 2:
+        time.sleep(1)
+    print "test rt  completed"
 
 def TestSendAndRecv():
     global task
@@ -575,24 +608,28 @@ def TestSubscribeState():
 def main():
     TestBindToken()
     time.sleep(1)
-
+     
     TestGroup()
     time.sleep(1)
     TestGroupNotification()
     time.sleep(1)
     TestGroupMessage()
     time.sleep(1)
-
+     
     TestClusterGroupMessage()
     time.sleep(1)
-
-
+     
+     
     TestSubscribeState()
     time.sleep(1)
     TestPeerACK()
     time.sleep(1)
     TestInputing()
     time.sleep(1)
+
+    TestRTSendAndRecv()
+    time.sleep(1)
+
     TestSendAndRecv()
     time.sleep(1)
     TestOffline()

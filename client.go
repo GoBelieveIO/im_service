@@ -87,6 +87,8 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleInputing(msg.body.(*MessageInputing))
 	case MSG_SUBSCRIBE_ONLINE_STATE:
 		client.HandleSubsribe(msg.body.(*MessageSubsribeState))
+	case MSG_RT:
+		client.HandleRTMessage(msg)
 	default:
 		log.Info("unknown msg:", msg.cmd)
 	}
@@ -259,6 +261,18 @@ func (client *Client) PublishPeerMessage(im *IMMessage) {
 	if err != nil {
 		log.Info("rpush error:", err)
 	}
+}
+
+func (client *Client) HandleRTMessage(msg *Message) {
+	im := msg.body.(*IMMessage)
+	im.timestamp = int32(time.Now().Unix())
+	
+	m := &Message{cmd:MSG_RT, body:im}
+	client.SendMessage(im.receiver, m)
+
+	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+	atomic.AddInt64(&server_summary.in_message_count, 1)
+	log.Infof("realtime message sender:%d receiver:%d", im.sender, im.receiver)
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
@@ -451,6 +465,9 @@ func (client *Client) Write() {
 				log.Infof("client:%d socket closed", client.uid)
 				break
 			}
+			if msg.cmd == MSG_RT {
+				atomic.AddInt64(&server_summary.out_message_count, 1)
+			}
 			seq++
 			msg.seq = seq
 			client.send(msg)
@@ -460,6 +477,7 @@ func (client *Client) Write() {
 			msg.seq = seq
 			
 			client.AddUnAckMessage(emsg)
+
 			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}

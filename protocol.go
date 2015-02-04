@@ -24,7 +24,7 @@ const MSG_PING = 13
 const MSG_PONG = 14
 const MSG_AUTH_TOKEN = 15
 const MSG_LOGIN_POINT = 16
-
+const MSG_RT = 17
 
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
@@ -49,7 +49,7 @@ func init() {
 	message_creators[MSG_ONLINE_STATE] = func()IMessage{return new(MessageOnlineState)}
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
 	message_creators[MSG_LOGIN_POINT] = func()IMessage{return new(LoginPoint)}
-
+	message_creators[MSG_RT] = func()IMessage{return new(IMMessage)}
 
 	message_descriptions[MSG_AUTH] = "MSG_AUTH"
 	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
@@ -65,6 +65,7 @@ func init() {
 	message_descriptions[MSG_PONG] = "MSG_PONG"
 	message_descriptions[MSG_AUTH_TOKEN] = "MSG_AUTH_TOKEN"
 	message_descriptions[MSG_LOGIN_POINT] = "MSG_LOGIN_POINT"
+	message_descriptions[MSG_RT] = "MSG_RT"
 }
 
 type Command int
