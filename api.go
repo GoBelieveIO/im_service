@@ -4,6 +4,7 @@ import "flag"
 import "fmt"
 import "time"
 import "net/http"
+import "math/rand"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 import "github.com/gorilla/mux"
@@ -80,6 +81,7 @@ func RunAPI() {
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	rand.Seed(time.Now().UnixNano())
 	flag.Parse()
 	if len(flag.Args()) == 0 {
 		fmt.Println("usage: im_api config")
