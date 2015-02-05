@@ -360,7 +360,16 @@ func (client *Client) HandleInputing(inputing *MessageInputing) {
 
 func (client *Client) HandleACK(ack *MessageACK) {
 	log.Info("ack:", ack)
-	msg := client.RemoveUnAckMessage(ack)
+	emsg := client.RemoveUnAckMessage(ack)
+	if emsg == nil {
+		return
+	}
+
+	if (emsg.msgid > 0) {
+		client.DequeueMessage(emsg.msgid)
+	}
+
+	msg := emsg.msg
 	if msg == nil {
 		return
 	}
@@ -420,23 +429,26 @@ func (client *Client) DequeueMessage(msgid int64) {
 	}
 }
 
-func (client *Client) RemoveUnAckMessage(ack *MessageACK) *Message {
+func (client *Client) RemoveUnAckMessage(ack *MessageACK) *EMessage {
 	client.mutex.Lock()
 	defer client.mutex.Unlock()
+	var msgid int64
+	var msg *Message
+	var ok bool
+
 	seq := int(ack.seq)
-	if msgid, ok := client.unacks[seq]; ok {
+	if msgid, ok = client.unacks[seq]; ok {
 		log.Infof("dequeue offline msgid:%d uid:%d\n", msgid, client.uid)
-		client.DequeueMessage(msgid)
 		delete(client.unacks, seq)
 	} else {
 		log.Warning("can't find msgid with seq:", seq)
 	}
 	if emsg, ok := client.unackMessages[seq]; ok {
-		msg := emsg.msg
+		msg = emsg.msg
 		delete(client.unackMessages, seq)
-		return msg
 	}
-	return nil
+
+	return &EMessage{msgid:msgid, msg:msg}
 }
 
 func (client *Client) AddUnAckMessage(emsg *EMessage) {
@@ -484,6 +496,7 @@ func (client *Client) Write() {
 			client.send(msg)
 			if msg.cmd == MSG_PEER_ACK {
 				client.RemoveUnAckMessage(&MessageACK{int32(seq)})
+				client.DequeueMessage(emsg.msgid)
 			}
 		}
 	}
