@@ -224,7 +224,8 @@ func (p *StorageConnPool) Get() (*StorageConn, error) {
 	}
 
 	if p.MaxActive > 0 && p.active >= p.MaxActive {
-		log.Error("pool exhausted")
+		log.Error("storage pool exhausted")
+		p.sem <- 0
 		return nil, errors.New("exhausted")
 	}
 
@@ -238,6 +239,7 @@ func (p *StorageConnPool) Get() (*StorageConn, error) {
 		p.active -= 1
 		p.mu.Unlock()
 		c = nil
+		p.sem <- 0
 	}
 	return c, err
 }
