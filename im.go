@@ -21,27 +21,14 @@ func init() {
 	server_summary = NewServerSummary()
 }
 
-func handle_client(conn *net.TCPConn) {
+func handle_client(conn net.Conn) {
+	log.Infoln("handle_client")
 	client := NewClient(conn)
 	client.Run()
 }
 
-func Listen(f func(*net.TCPConn), port int) {
-	ip := net.ParseIP("0.0.0.0")
-	addr := net.TCPAddr{ip, port, ""}
-
-	listen, err := net.ListenTCP("tcp", &addr)
-	if err != nil {
-		fmt.Println("初始化失败", err.Error())
-		return
-	}
-	for {
-		client, err := listen.AcceptTCP()
-		if err != nil {
-			return
-		}
-		f(client)
-	}
+func Listen(f func(net.Conn), port int) {
+	SocketService(fmt.Sprintf("0.0.0.0:%d", port), f)
 
 }
 func ListenClient() {
@@ -149,5 +136,5 @@ func main() {
 
 	go StartSocketIO(config.socket_io_address)
 	ListenClient()
-
+	Wait()
 }

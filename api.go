@@ -76,7 +76,7 @@ func RunAPI() {
 	var PORT = config.port
 	var BIND_ADDR = ""
 	addr := fmt.Sprintf("%s:%d", BIND_ADDR, PORT)
-	http.ListenAndServe(addr, nil)
+	SingleHTTPService(addr, nil)
 }
 
 func main() {

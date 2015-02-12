@@ -46,10 +46,7 @@ func Stack(rw http.ResponseWriter, req *http.Request) {
 }
 
 func StartHttpServer(addr string) {
-	go func() {
-		http.HandleFunc("/summary", Summary)
-		http.HandleFunc("/stack", Stack)
-		err := http.ListenAndServe(addr, nil)
-		log.Info("http server err:", err)
-	}()
+	http.HandleFunc("/summary", Summary)
+	http.HandleFunc("/stack", Stack)
+	HTTPService(addr, nil)
 }
