@@ -71,6 +71,20 @@ func (channel *Channel) RemoveSubscribe(appid, uid int64) int {
 	return count
 }
 
+func (channel *Channel) GetAllSubscriber() []*AppUserID {
+	channel.mutex.Lock()
+	defer channel.mutex.Unlock()
+
+	subs := make([]*AppUserID, 0, 100)
+	for appid, s := range channel.subscribers {
+		for uid, _ := range s.uids {
+			id := &AppUserID{appid: appid, uid: uid}
+			subs = append(subs, id)
+		}
+	}
+	return subs
+}
+
 func (channel *Channel) Subscribe(appid int64, uid int64) {
 	count := channel.AddSubscribe(appid, uid)
 	log.Info("sub count:", count)
@@ -97,14 +111,12 @@ func (channel *Channel) Publish(amsg *AppMessage) {
 }
 
 func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
-	for appid, s := range channel.subscribers {
-		for uid, _ := range s.uids {
-			id := &AppUserID{appid: appid, uid: uid}
-			msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
-			seq = seq + 1
-			msg.seq = seq
-			SendMessage(conn, msg)
-		}
+	subs := channel.GetAllSubscriber()
+	for _, id := range(subs) {
+		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+		seq = seq + 1
+		msg.seq = seq
+		SendMessage(conn, msg)
 	}
 	return seq
 }
@@ -143,7 +155,11 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 		case msg := <-channel.wt:
 			seq = seq + 1
 			msg.seq = seq
-			SendMessage(conn, msg)
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			err := SendMessage(conn, msg)
+			if err != nil {
+				log.Info("channel send message:", err)
+			}
 		}
 	}
 }
