@@ -4,7 +4,6 @@ import "net"
 import "time"
 import "sync"
 import "sync/atomic"
-import "encoding/json"
 import log "github.com/golang/glog"
 import "github.com/googollee/go-engine.io"
 
@@ -243,23 +242,6 @@ func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
 		state := &MessageOnlineState{uid, 0}
 		m := &Message{cmd: MSG_ONLINE_STATE, body: state}
 		client.wt <- m
-	}
-}
-
-//离线消息入apns队列
-func (client *Client) PublishPeerMessage(im *IMMessage) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	v := make(map[string]interface{})
-	v["sender"] = im.sender
-	v["receiver"] = im.receiver
-	v["content"] = im.content
-
-	b, _ := json.Marshal(v)
-	_, err := conn.Do("RPUSH", "push_queue", b)
-	if err != nil {
-		log.Info("rpush error:", err)
 	}
 }
 

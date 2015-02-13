@@ -1,6 +1,7 @@
 package main
 import "math/rand"
 import "fmt"
+import "time"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 
@@ -77,12 +78,23 @@ func SaveUserDeviceToken(appid int64, uid int64, device_token string, ng_device_
 	conn := redis_pool.Get()
 	defer conn.Close()
 
+	now := time.Now().Unix()
 	key := fmt.Sprintf("users_%d_%d", appid, uid)
-	_, err := conn.Do("HMSET", key, "apns_device_token", device_token, 
-		"ng_device_token", ng_device_token)
-	if err != nil {
-		log.Info("hget err:", err)
-		return err
+	if len(device_token) > 0 {
+		_, err := conn.Do("HMSET", key, "apns_device_token", device_token, 
+			"apns_timestamp", now)
+		if err != nil {
+			log.Info("hget err:", err)
+			return err
+		}
+	}
+	if len(ng_device_token) > 0 {
+		_, err := conn.Do("HMSET", key, "ng_device_token", ng_device_token, 
+			"ng_timestamp", now)
+		if err != nil {
+			log.Info("hget err:", err)
+			return err
+		}
 	}
 	return nil	
 }

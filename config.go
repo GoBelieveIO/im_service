@@ -25,12 +25,14 @@ type StorageConfig struct {
 
 type RouteConfig struct {
 	listen string
+	redis_address       string
 }
 
 type APIConfig struct {
 	port  int
 	redis_address       string
 	mysqldb_datasource  string
+	appdb_datasource    string
 
 	storage_addrs       []string
 	route_addrs         []string
@@ -119,6 +121,7 @@ func read_route_cfg(cfg_path string) *RouteConfig {
 	}
 
 	config.listen = get_string(app_cfg, "listen")
+	config.redis_address = get_string(app_cfg, "redis_address")
 	return config
 }
 
@@ -133,6 +136,7 @@ func read_api_cfg(cfg_path string) *APIConfig {
 	config.port = get_int(app_cfg, "port")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
+	config.appdb_datasource = get_string(app_cfg, "appdb_source")
 
 	str := get_string(app_cfg, "storage_pool")
     array := strings.Split(str, " ")

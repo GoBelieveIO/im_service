@@ -8,6 +8,8 @@ import "strings"
 import "strconv"
 import "encoding/base64"
 import "github.com/bitly/go-simplejson"
+import "database/sql"
+import _ "github.com/go-sql-driver/mysql"
 
 func WriteError(status int, err string, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
@@ -22,6 +24,29 @@ func WriteObj(obj map[string]interface{}, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	b, _ := json.Marshal(obj)
 	w.Write(b)
+}
+
+func GetClient(client_id int64) (int64, string, error) {
+	db, err := sql.Open("mysql", config.appdb_datasource)
+	if err != nil {
+		return 0, "", err
+	}
+	defer db.Close()
+	stmtIns, err := db.Prepare("SELECT app_id, secret FROM client where id=?")
+	if err != nil {
+		return 0, "", err
+	}
+
+	defer stmtIns.Close()
+	var appid int64
+	var secret string
+
+	rows, err := stmtIns.Query(client_id)
+	for rows.Next() {
+		rows.Scan(&appid, &secret)
+		break
+	}
+	return appid, secret, nil
 }
 
 func BasicAuthorization(r *http.Request) (int64, error) {
@@ -46,12 +71,24 @@ func BasicAuthorization(r *http.Request) (int64, error) {
 	if err != nil {
 		return 0, errors.New("invalid client id")
 	}
+	
+	if len(p[1]) == 0 {
+		return 0, errors.New("invalid auth header")
+	}
 
 	if (p[1] == "eopklfnsiulxaeuo" && client_id == 0) {
-		return client_id, nil
+		return 0, nil
 	}
-	//todo get appid
-	return client_id, nil
+
+	appid, secret, err:= GetClient(client_id)
+	if err != nil {
+		return 0, errors.New("invalid client id")
+	}
+
+	if p[1] != secret {
+		return 0, errors.New("invalid client id")
+	}
+	return appid, nil
 }
 
 func AuthGrant(w http.ResponseWriter, r *http.Request) {

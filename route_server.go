@@ -5,11 +5,14 @@ import "runtime"
 import "flag"
 import "fmt"
 import "time"
+import "encoding/json"
 import log "github.com/golang/glog"
+import "github.com/garyburd/redigo/redis"
 
 var config *RouteConfig
 var clients ClientSet
 var mutex   sync.Mutex
+var redis_pool *redis.Pool
 
 func init() {
 	clients = NewClientSet()
@@ -155,10 +158,37 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 	route.RemoveUserID(id.uid)
 }
 
+
+//离线消息入apns队列
+func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["sender"] = im.sender
+	v["receiver"] = im.receiver
+	v["content"] = im.content
+
+	b, _ := json.Marshal(v)
+	_, err := conn.Do("RPUSH", "push_queue", b)
+	if err != nil {
+		log.Info("rpush error:", err)
+	}
+}
+
 func (client *Client) HandlePublish(amsg *AppMessage) {
 	log.Infof("publish message appid:%d uid:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
 	receiver := &AppUserID{appid:amsg.appid, uid:amsg.receiver}
 	s := FindClientSet(receiver)
+
+	if len(s) == 0 {
+		if amsg.msg.cmd == MSG_IM {
+			client.PublishPeerMessage(amsg.appid, amsg.msg.body.(*IMMessage))
+		}
+		return
+	}
+
 	msg := &Message{cmd:MSG_PUBLISH, body:amsg}
 	for c := range(s) {
 		//不发送给自身
@@ -202,8 +232,6 @@ func (client *Client) close() {
 	client.conn.Close()
 }
 
-
-
 func handle_client(conn *net.TCPConn) {
 	conn.SetKeepAlive(true)
 	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
@@ -236,6 +264,27 @@ func ListenClient() {
 	Listen(handle_client, config.listen)
 }
 
+func NewRedisPool(server, password string) *redis.Pool {
+	return &redis.Pool{
+		MaxIdle:     100,
+		MaxActive:   500,
+		IdleTimeout: 480 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", server)
+			if err != nil {
+				return nil, err
+			}
+			if len(password) > 0 {
+				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+			return c, err
+		},
+	}
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -246,6 +295,8 @@ func main() {
 
 	config = read_route_cfg(flag.Args()[0])
 	log.Infof("listen:%s\n", config.listen)
+
+	redis_pool = NewRedisPool(config.redis_address, "")
 
 	ListenClient()
 }
