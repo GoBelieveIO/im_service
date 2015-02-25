@@ -189,3 +189,38 @@ func BindToken(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(200)
 }
+
+func UnbindToken(w http.ResponseWriter, r *http.Request) {
+	appid, uid, err := BearerAuthentication(r)
+	if err != nil {
+		WriteHttpError(401, "require auth", w)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+	
+	obj, err := simplejson.NewJson(body)
+	if err != nil {
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+
+	device_token, _ := obj.Get("apns_device_token").String()
+	ng_device_token, _ := obj.Get("ng_device_token").String()
+
+	if len(device_token) == 0 && len(ng_device_token) == 0 {
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+	
+	err = SaveUserDeviceToken(appid, uid, device_token, ng_device_token)
+	if err != nil {
+		WriteHttpError(400, "server error", w)
+		return
+	}
+	w.WriteHeader(200)	
+}

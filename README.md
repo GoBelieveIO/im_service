@@ -121,3 +121,18 @@
 
 - 操作失败:
 状态码:400
+
+### 解除用户id和推送token之间的绑定
+- 请求地址：**POST /device/unbind **
+- 是否认证：客户端授权
+- 请求内容：
+
+        {
+            "apns_device_token": "IOS设备token，16进制字符串(可选)",
+            "ng_device_token": "android设备token，16进制字符串(可选)",
+        }
+
+- 成功响应 200
+
+- 操作失败:
+状态码:400

@@ -70,6 +70,7 @@ func RunAPI() {
 	}).Methods("DELETE")
 
 	r.HandleFunc("/device/bind", BindToken).Methods("POST")
+	r.HandleFunc("/device/unbind", UnbindToken).Methods("POST")
 	r.HandleFunc("/auth/grant", AuthGrant).Methods("POST")
 	http.Handle("/", r)
 
