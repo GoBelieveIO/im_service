@@ -11,17 +11,22 @@ import "github.com/bitly/go-simplejson"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 
-func WriteError(status int, err string, w http.ResponseWriter) {
+func WriteHttpError(status int, err string, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	obj := make(map[string]interface{})
-	obj["error"] = err
+	meta := make(map[string]interface{})
+	meta["code"] = status
+	meta["message"] = err
+	obj["meta"] = meta
 	b, _ := json.Marshal(obj)
 	w.WriteHeader(status)
 	w.Write(b)
 }
 
-func WriteObj(obj map[string]interface{}, w http.ResponseWriter) {
+func WriteHttpObj(data map[string]interface{}, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
+	obj := make(map[string]interface{})
+	obj["data"] = data
 	b, _ := json.Marshal(obj)
 	w.Write(b)
 }
@@ -94,25 +99,25 @@ func BasicAuthorization(r *http.Request) (int64, error) {
 func AuthGrant(w http.ResponseWriter, r *http.Request) {
 	appid, err := BasicAuthorization(r)
 	if err != nil {
-		WriteError(401, "require auth", w)
+		WriteHttpError(401, "require auth", w)
 		return
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		WriteError(400, "invalid param", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	
 	obj, err := simplejson.NewJson(body)
 	if err != nil {
-		WriteError(400, "invalid param", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 
 	uid, err := obj.Get("uid").Int64()
 	if err != nil {
-		WriteError(400, "invalid param", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 
@@ -123,19 +128,19 @@ func AuthGrant(w http.ResponseWriter, r *http.Request) {
 	if token != "" {
 		obj := make(map[string]interface{})
 		obj["token"] = token
-		WriteObj(obj, w)
+		WriteHttpObj(obj, w)
 		return
 	}
 	
 	token = GenUserToken()
 	err = SaveUserAccessToken(appid, uid, uname, token)
 	if err != nil {
-		WriteError(400, "server error", w)
+		WriteHttpError(400, "server error", w)
 		return
 	}
 	resp := make(map[string]interface{})
 	resp["token"] = token
-	WriteObj(resp, w)
+	WriteHttpObj(resp, w)
 }
 
 func BearerAuthentication(r *http.Request) (int64, int64, error) {
@@ -153,19 +158,19 @@ func BearerAuthentication(r *http.Request) (int64, int64, error) {
 func BindToken(w http.ResponseWriter, r *http.Request) {
 	appid, uid, err := BearerAuthentication(r)
 	if err != nil {
-		WriteError(401, "require auth", w)
+		WriteHttpError(401, "require auth", w)
 		return
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		WriteError(400, "invalid param", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	
 	obj, err := simplejson.NewJson(body)
 	if err != nil {
-		WriteError(400, "invalid param", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 
@@ -173,13 +178,13 @@ func BindToken(w http.ResponseWriter, r *http.Request) {
 	ng_device_token, _ := obj.Get("ng_device_token").String()
 
 	if len(device_token) == 0 && len(ng_device_token) == 0 {
-		WriteError(400, "invalid param", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	
 	err = SaveUserDeviceToken(appid, uid, device_token, ng_device_token)
 	if err != nil {
-		WriteError(400, "server error", w)
+		WriteHttpError(400, "server error", w)
 		return
 	}
 	w.WriteHeader(200)

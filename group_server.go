@@ -4,7 +4,6 @@ import "fmt"
 import "net/http"
 import "strconv"
 import "io/ioutil"
-import "errors"
 import "encoding/json"
 import "github.com/gorilla/mux"
 import "github.com/garyburd/redigo/redis"
@@ -85,39 +84,16 @@ func (group_server *GroupServer) OpenDB() (*sql.DB, error) {
 	return db, err
 }
 
-func (group_server *GroupServer) AuthToken(token string) (int64, int64, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	key := fmt.Sprintf("tokens_%s", token)
-
-	var uid int64
-	var appid int64
-	
-	reply, err := redis.Values(conn.Do("HMGET", key, "uid", "app_id"))
-	if err != nil {
-		log.Info("hmget error:", err)
-		return 0, 0, err
-	}
-
-	_, err = redis.Scan(reply, &uid, &appid)
-	if err != nil {
-		log.Warning("scan error:", err)
-		return 0, 0, err
-	}
-	return appid, uid, nil
-}
-
-
 func (group_server *GroupServer) AuthRequest(r *http.Request) (int64, int64, error) {
-	token := r.Header.Get("Authorization");
-	if len(token) <= 7 {
-		return 0, 0, errors.New("no authorization header")
+	var appid int64
+	var uid int64
+	var err error
+
+	appid, uid, err = BearerAuthentication(r)
+	if err != nil {
+		appid, err = BasicAuthorization(r)
 	}
-	if token[:7] != "Bearer " {
-		return 0, 0, errors.New("no authorization header")
-	}
-	return group_server.AuthToken(token[7:])
+	return appid, uid, err
 }
 
 func (group_server *GroupServer) CreateGroup(appid int64, gname string,
@@ -270,39 +246,39 @@ func (group_server *GroupServer) QuitGroup(appid int64, gid int64, uid int64) bo
 func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	appid, _, err := group_server.AuthRequest(r)
 	if err != nil {
-		w.WriteHeader(403)
+		WriteHttpError(403, err.Error(), w)
 		return
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(400)
+		WriteHttpError(400, err.Error(), w)
 		return
 	}
 	var v map[string]interface{}
 	err = json.Unmarshal(body, &v)
 	if err != nil {
 		log.Info("error:", err)
-		w.WriteHeader(400)
+		WriteHttpError(400, "invalid json format", w)
 		return
 	}
 	if v["master"] == nil || v["members"] == nil || v["name"] == nil {
 		log.Info("error:", err)
-		w.WriteHeader(400)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	if _, ok := v["master"].(float64); !ok {
 		log.Info("error:", err)
-		w.WriteHeader(400)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	master := int64(v["master"].(float64))
 	if _, ok := v["members"].([]interface{}); !ok {
-		w.WriteHeader(400)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	if _, ok := v["name"].(string); !ok {
-		w.WriteHeader(400)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	name := v["name"].(string)
@@ -311,7 +287,7 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
 	members := make([]int64, len(ms))
 	for i, m := range ms {
 		if _, ok := m.(float64); !ok {
-			w.WriteHeader(400)
+			WriteHttpError(400, "invalid param", w)
 			return
 		}
 		members[i] = int64(m.(float64))
@@ -320,33 +296,32 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
 
 	gid := group_server.CreateGroup(appid, name, master, members)
 	if gid == 0 {
-		w.WriteHeader(500)
+		WriteHttpError(500, "db error", w)
 		return
 	}
 	v = make(map[string]interface{})
 	v["group_id"] = gid
-	b, _ := json.Marshal(v)
-	w.Write(b)
+	WriteHttpObj(v, w)
 }
 
 func (group_server *GroupServer) HandleDisband(w http.ResponseWriter, r *http.Request) {
 	appid, _, err := group_server.AuthRequest(r)
 	if err != nil {
-		w.WriteHeader(403)
+		WriteHttpError(403, err.Error(), w)
 		return
 	}
 
 	vars := mux.Vars(r)
 	gid, err := strconv.ParseInt(vars["gid"], 10, 64)
 	if err != nil {
-		w.WriteHeader(400)
+		WriteHttpError(400, "group id is't integer", w)
 		return
 	}
 
 	log.Info("disband:", gid)
 	res := group_server.DisbandGroup(appid, gid)
 	if !res {
-		w.WriteHeader(500)
+		WriteHttpError(500, "db error", w)
 	} else {
 		w.WriteHeader(200)
 	}
@@ -355,38 +330,38 @@ func (group_server *GroupServer) HandleDisband(w http.ResponseWriter, r *http.Re
 func (group_server *GroupServer) HandleAddGroupMember(w http.ResponseWriter, r *http.Request) {
 	appid, _, err := group_server.AuthRequest(r)
 	if err != nil {
-		w.WriteHeader(403)
+		WriteHttpError(403, err.Error(), w)
 		return
 	}
 
 	vars := mux.Vars(r)
 	gid, err := strconv.ParseInt(vars["gid"], 10, 64)
 	if err != nil {
-		w.WriteHeader(400)
+		WriteHttpError(400, "group id is't integer", w)
 		return
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(400)
+		WriteHttpError(400, err.Error(), w)
 		return
 	}
 
 	var v map[string]float64
 	err = json.Unmarshal(body, &v)
 	if err != nil {
-		w.WriteHeader(400)
+		WriteHttpError(400, "invalid json format", w)
 		return
 	}
 	if v["uid"] == 0 {
-		w.WriteHeader(400)
+		WriteHttpError(400, "uid can't be zero", w)
 		return
 	}
 	uid := int64(v["uid"])
 	log.Infof("gid:%d add member:%d\n", gid, uid)
 	res := group_server.AddGroupMember(appid, gid, uid)
 	if !res {
-		w.WriteHeader(500)
+		WriteHttpError(500, "db error", w)
 	} else {
 		w.WriteHeader(200)
 	}
@@ -395,7 +370,7 @@ func (group_server *GroupServer) HandleAddGroupMember(w http.ResponseWriter, r *
 func (group_server *GroupServer) HandleQuitGroup(w http.ResponseWriter, r *http.Request) {
 	appid, _, err := group_server.AuthRequest(r)
 	if err != nil {
-		w.WriteHeader(403)
+		WriteHttpError(403, err.Error(), w)
 		return
 	}
 
@@ -406,7 +381,7 @@ func (group_server *GroupServer) HandleQuitGroup(w http.ResponseWriter, r *http.
 
 	res := group_server.QuitGroup(appid, gid, mid)
 	if !res {
-		w.WriteHeader(500)
+		WriteHttpError(500, "db error", w)
 	} else {
 		w.WriteHeader(200)
 	}

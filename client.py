@@ -43,9 +43,6 @@ class IMMessage:
         self.msgid = 0
         self.content = ""
 
-class SubsribeState:
-    def __init__(self):
-        self.uids = []
 
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
@@ -61,12 +58,6 @@ def send_message(cmd, seq, msg, sock):
     elif cmd == MSG_ACK:
         h = struct.pack("!iibbbb", 4, seq, cmd, 0, 0, 0)
         b = struct.pack("!i", msg)
-        sock.sendall(h + b)
-    elif cmd == MSG_SUBSCRIBE_ONLINE_STATE:
-        b = struct.pack("!i", len(msg.uids))
-        for u in msg.uids:
-            b += struct.pack("!q", u)
-        h = struct.pack("!iibbbb", len(b), seq, cmd, 0, 0, 0)
         sock.sendall(h + b)
     elif cmd == MSG_INPUTING:
         sender, receiver = msg
@@ -103,9 +94,6 @@ def recv_message(sock):
     elif cmd == MSG_ACK:
         ack, = struct.unpack("!i", content)
         return cmd, seq, ack
-    elif cmd == MSG_ONLINE_STATE:
-        sender, state = struct.unpack("!qi", content)
-        return cmd, seq, (sender, state)
     elif cmd == MSG_INPUTING:
         sender, receiver = struct.unpack("!qq", content)
         return cmd, seq, (sender, receiver)
@@ -129,7 +117,7 @@ def login(uid):
     if res.status_code != 200:
         return None
     obj = json.loads(res.text)
-    return obj["token"]
+    return obj["data"]["token"]
 
 
 task = 0
@@ -165,19 +153,14 @@ def recv_rst(uid):
 def recv_login_point(uid):
     global task
     sock1, seq1 = connect_server(uid, 23000)
-    sock2, seq2 = connect_server(uid, 23000)
 
-    while True:
-        cmd, s, msg = recv_message(sock2)
-        if cmd == MSG_LOGIN_POINT:
-            print "up timestamp:", msg[0], " platform id:", msg[1], " device_id", msg[2]
-            break
+    time.sleep(1)
+    sock2, seq2 = connect_server(uid, 23000)
 
     while True:
         cmd, s, msg = recv_message(sock1)
         if cmd == MSG_LOGIN_POINT:
             print "up timestamp:", msg[0], " platform id:", msg[1], " device_id", msg[2]
-            task += 1
             break
 
 
@@ -314,29 +297,6 @@ def send_inputing(uid, receiver):
     send_message(MSG_INPUTING, seq, m, sock)
     task += 1
     
-
-def subscribe_state(uid, target):
-    global task
-    sock, seq =  connect_server(uid, 23000)
-    sub = SubsribeState()
-    sub.uids.append(target)
-    seq += 1
-    send_message(MSG_SUBSCRIBE_ONLINE_STATE, seq, sub, sock)
-
-    connected = False
-    while True:
-        cmd, _, msg = recv_message(sock)
-        if cmd == MSG_ONLINE_STATE:
-            print "online:", msg
-            break
-        elif cmd == 0:
-            assert(False)
-        else:
-            print "cmd:", cmd, " ", msg
-
-    task += 1
-    print "subscribe state success"
-
 
 def TestCluster():
     global task
@@ -501,7 +461,7 @@ def TestGroup():
     r = requests.post(url, data=json.dumps(group), headers = headers)
     print r.status_code, r.text
     obj = json.loads(r.content)
-    group_id = obj["group_id"]
+    group_id = obj["data"]["group_id"]
 
     url = URL + "/groups/%s/members"%str(group_id)
     r = requests.post(url, data=json.dumps({"uid":13635273143}), headers = headers)
@@ -530,7 +490,7 @@ def _TestGroupMessage(port):
     r = requests.post(url, data=json.dumps(group), headers = headers)
     print r.status_code
     obj = json.loads(r.content)
-    group_id = obj["group_id"]
+    group_id = obj["data"]["group_id"]
     
     global task
     task = 0
@@ -581,7 +541,7 @@ def TestGroupNotification():
     r = requests.post(url, data=json.dumps(group), headers=headers)
     print r.status_code
     obj = json.loads(r.content)
-    group_id = obj["group_id"]
+    group_id = obj["data"]["group_id"]
 
     while task < 1:
         time.sleep(1)
@@ -592,20 +552,10 @@ def TestGroupNotification():
 
     print "test group notification completed"  
 
-def TestSubscribeState():
-    global task
-    task = 0
-    t2 = threading.Thread(target=subscribe_state, args=(13635273143,13635273142))
-    t2.setDaemon(True)
-    t2.start()
-
-    while task < 1:
-        time.sleep(1)
-
-    print "test subsribe state completed"
-    
     
 def main():
+    cluster = False
+
     TestBindToken()
     time.sleep(1)
      
@@ -616,12 +566,10 @@ def main():
     TestGroupMessage()
     time.sleep(1)
      
-    TestClusterGroupMessage()
-    time.sleep(1)
-     
-     
-    TestSubscribeState()
-    time.sleep(1)
+    if cluster:
+        TestClusterGroupMessage()
+        time.sleep(1)
+
     TestPeerACK()
     time.sleep(1)
     TestInputing()
@@ -634,8 +582,11 @@ def main():
     time.sleep(1)
     TestOffline()
     time.sleep(1)
-    TestCluster()
-    time.sleep(1)
+
+    if cluster:
+        TestCluster()
+        time.sleep(1)
+
     TestLoginPoint()
     time.sleep(1)
     TestPingPong()
