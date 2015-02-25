@@ -1,16 +1,16 @@
 all:im ims imr im_api benchmark benchmark_connection benchmark_sender main.test benchmark_storage benchmark_route
 
-im:im.go client.go route.go app_route.go protocol.go  group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go user.go
-	go build im.go client.go route.go app_route.go protocol.go group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go user.go
+im:im.go client.go route.go app_route.go protocol.go  group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go user.go reload.go
+	go build im.go client.go route.go app_route.go protocol.go group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go login.go storage_message.go route_message.go user.go reload.go
 
 ims:storage_server.go protocol.go storage.go config.go storage_message.go storage_sync.go
 	go build -o ims storage_server.go protocol.go storage.go config.go storage_message.go storage_sync.go
 
-imr:route_server.go app_route.go protocol.go config.go set.go route_message.go 
-	go build -o imr route_server.go app_route.go protocol.go config.go set.go route_message.go 
+imr:route_server.go app_route.go protocol.go config.go set.go route_message.go
+	go build -o imr route_server.go app_route.go protocol.go config.go set.go route_message.go
 
-im_api:api.go group_server.go group_manager.go config.go protocol.go group.go set.go storage_message.go storage_client.go route_message.go channel.go auth.go user.go
-	go build -o im_api api.go group_server.go group_manager.go config.go protocol.go group.go set.go storage_message.go storage_client.go route_message.go channel.go auth.go user.go
+im_api:api.go group_server.go group_manager.go config.go protocol.go group.go set.go storage_message.go storage_client.go route_message.go channel.go auth.go user.go reload.go
+	go build -o im_api api.go group_server.go group_manager.go config.go protocol.go group.go set.go storage_message.go storage_client.go route_message.go channel.go auth.go user.go reload.go
 
 benchmark:benchmark.go protocol.go
 	go build benchmark.go protocol.go

@@ -29,7 +29,7 @@ type Client struct {
 
 func NewClient(conn interface{}) *Client {
 	client := new(Client)
-	client.conn = conn // conn is *net.TCPConn or engineio.Conn
+	client.conn = conn // conn is net.Conn or engineio.Conn
 	client.wt = make(chan *Message, 10)
 	client.ewt = make(chan *EMessage, 10)
 
@@ -486,7 +486,7 @@ func (client *Client) Write() {
 
 // 根据连接类型获取消息
 func (client *Client) read() *Message {
-	if conn, ok := client.conn.(*net.TCPConn); ok {
+	if conn, ok := client.conn.(net.Conn); ok {
 		conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
 		return ReceiveMessage(conn)
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
@@ -497,7 +497,7 @@ func (client *Client) read() *Message {
 
 // 根据连接类型发送消息
 func (client *Client) send(msg *Message) {
-	if conn, ok := client.conn.(*net.TCPConn); ok {
+	if conn, ok := client.conn.(net.Conn); ok {
 		SendMessage(conn, msg)
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		SendEngineIOMessage(conn, msg)
@@ -506,7 +506,7 @@ func (client *Client) send(msg *Message) {
 
 // 根据连接类型关闭
 func (client *Client) close() {
-	if conn, ok := client.conn.(*net.TCPConn); ok {
+	if conn, ok := client.conn.(net.Conn); ok {
 		conn.Close()
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		conn.Close()

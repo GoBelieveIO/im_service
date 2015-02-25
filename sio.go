@@ -46,7 +46,7 @@ func StartSocketIO(socket_io_address string) {
 	mux := http.NewServeMux()
 	mux.Handle("/engine.io/", &SIOServer{server})
 	log.Infof("EngineIO Serving at %s...", socket_io_address)
-	log.Fatal(http.ListenAndServe(socket_io_address, mux))
+	HTTPService(socket_io_address, mux)
 
 }
 
