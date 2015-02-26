@@ -216,8 +216,8 @@ func UnbindToken(w http.ResponseWriter, r *http.Request) {
 		WriteHttpError(400, "invalid param", w)
 		return
 	}
-	
-	err = SaveUserDeviceToken(appid, uid, device_token, ng_device_token)
+
+	err = ResetUserDeviceToken(appid, uid, device_token, ng_device_token)
 	if err != nil {
 		WriteHttpError(400, "server error", w)
 		return
