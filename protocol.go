@@ -177,6 +177,28 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 		data.uid = uid
 		message.body = data
 		return true
+	case MSG_AUTH_TOKEN:
+		token, err := msg.Get("body").Get("access_token").String()
+		if err != nil {
+			log.Info("get access token fail")
+			return false
+		}
+		platform_id, err := msg.Get("body").Get("platform_id").Int()
+		if err != nil {
+			log.Info("get platform id fail")
+			return false
+		}
+		device_id, err := msg.Get("body").Get("device_id").String()
+		if err != nil {
+			log.Info("get device id fail")
+			return false
+		}
+		data := &AuthenticationToken{}
+		data.token = token
+		data.platform_id = int8(platform_id)
+		data.device_id = device_id
+		message.body = data
+		return true
 	case MSG_AUTH_STATUS:
 		status, err := msg.Get("body").Get("status").Int()
 		if err != nil {

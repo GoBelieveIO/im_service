@@ -98,3 +98,44 @@ func SaveUserDeviceToken(appid int64, uid int64, device_token string, ng_device_
 	}
 	return nil	
 }
+
+func ResetUserDeviceToken(appid int64, uid int64, device_token string, ng_device_token string) error {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("users_%d_%d", appid, uid)
+	if len(device_token) > 0 {
+		token, err := redis.String(conn.Do("HGET", key, "apns_device_token"))
+		if err != nil {
+			log.Info("hget err:", err)
+			return err
+		}
+		if token != device_token {
+			log.Infof("reset apns token:%s device token:%s\n", token, device_token)
+			return nil
+		}
+		_, err = conn.Do("HDEL", key, "apns_device_token", "apns_timestamp")
+		if err != nil {
+			log.Info("hdel err:", err)
+			return err
+		}
+	}
+
+	if len(ng_device_token) > 0 {
+		token, err := redis.String(conn.Do("HGET", key, "ng_device_token"))
+		if err != nil {
+			log.Info("hget err:", err)
+			return err
+		}
+		if token != ng_device_token {
+			log.Infof("reset ng token:%s device token:%s\n", token, ng_device_token)
+			return nil
+		}
+		_, err = conn.Do("HDEL", key, "ng_device_token", "ng_timestamp")
+		if err != nil {
+			log.Info("hdel err:", err)
+			return err
+		}
+	}
+	return nil	
+}

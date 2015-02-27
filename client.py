@@ -447,6 +447,10 @@ def TestBindToken():
 
     r = requests.post(url, data=json.dumps(obj), headers = headers)
     print "bind device token:", r.status_code
+
+    url = URL + "/device/unbind"
+    r = requests.post(url, data=json.dumps(obj), headers = headers)
+    print "unbind device token:", r.status_code
     
     
 def TestGroup():
