@@ -110,27 +110,48 @@ func (sl *stoppableListener) Close() error {
 // wait signal and restart service, then close listener, finally wait
 func Wait() {
     waitSignal()
+    log.Println("close main process")
+}
+
+func shutdown() {
     lock.Lock()
     for _, listener := range (listeners) {
         listener.Close()
     }
     lock.Unlock()
-    listenerWaitGroup.Wait()
-    log.Println("close main process")
 }
 
+func gracefulShutdown() {
+    shutdown()
+    listenerWaitGroup.Wait()
+}
+
+// Signal handler
 func waitSignal() error {
     ch := make(chan os.Signal, 1)
-    signal.Notify(ch, syscall.SIGTERM, syscall.SIGHUP)
+    signal.Notify(
+    ch,
+    syscall.SIGHUP,
+    syscall.SIGINT,
+    syscall.SIGQUIT,
+    syscall.SIGTERM,
+    )
     for {
         sig := <-ch
         log.Println(sig.String())
         switch sig {
-
-            case syscall.SIGTERM:
+            //TERM, INT	Quick shutdown
+            case syscall.SIGTERM, syscall.SIGINT:
+            shutdown()
             return nil
+            //QUIT	Graceful shutdown
+            case syscall.SIGQUIT:
+            gracefulShutdown()
+            return nil
+            //HUP	reload
             case syscall.SIGHUP:
             restart(sig)
+            gracefulShutdown()
             return nil
         }
     }
@@ -166,18 +187,28 @@ func getInitListener(laddr string) (net.Listener, error) {
 
     graceful := os.Getenv(Graceful)
     if graceful != "" {
-        // get current file descriptor
-        currFdStr := os.Getenv(laddr)
-        currFd, err := strconv.Atoi(currFdStr)
+        signal, err := strconv.Atoi(graceful)
         if err != nil {
-            log.Printf("%s get fd fail: %v", laddr, err)
+            log.Printf("%s get singal %s fail: %v", laddr, graceful, err)
         }
-        log.Printf("main: %s Listening to existing file descriptor %v.", laddr, currFd)
-        f := os.NewFile(uintptr(currFd), "")
-        // file listener dup fd
-        l, err = net.FileListener(f)
-        // close current file descriptor
-        f.Close()
+        sig := syscall.Signal(signal)
+        switch sig {
+            case syscall.SIGHUP:
+            // get current file descriptor
+            currFdStr := os.Getenv(laddr)
+            currFd, err := strconv.Atoi(currFdStr)
+            if err != nil {
+                log.Printf("%s get fd fail: %v", laddr, err)
+            }
+            log.Printf("main: %s Listening to existing file descriptor %v.", laddr, currFd)
+            f := os.NewFile(uintptr(currFd), "")
+            // file listener dup fd
+            l, err = net.FileListener(f)
+            // close current file descriptor
+            f.Close()
+            default:
+            log.Printf("%s get singal %s fail: no thing to do", laddr, graceful)
+        }
     } else {
         log.Printf("listen to %s.", laddr)
         l, err = net.Listen("tcp", laddr)
