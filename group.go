@@ -42,7 +42,7 @@ func (group *Group) RemoveMember(uid int64) {
 }
 
 func CreateGroup(db *sql.DB, appid int64, master int64, name string) int64 {
-	stmtIns, err := db.Prepare("INSERT INTO im_group(appid, master, name) VALUES( ?, ?, ? )")
+	stmtIns, err := db.Prepare("INSERT INTO group(appid, master, name) VALUES( ?, ?, ? )")
 	if err != nil {
 		log.Info("error:", err)
 		return 0
@@ -70,7 +70,7 @@ func DeleteGroup(db *sql.DB, group_id int64) bool {
 		return false
 	}
 
-	stmt1, err = tx.Prepare("DELETE FROM im_group WHERE id=?")
+	stmt1, err = tx.Prepare("DELETE FROM group WHERE id=?")
 	if err != nil {
 		log.Info("error:", err)
 		goto ROLLBACK
@@ -133,7 +133,7 @@ func RemoveGroupMember(db *sql.DB, group_id int64, uid int64) bool {
 }
 
 func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
-	stmtIns, err := db.Prepare("SELECT id, appid FROM im_group")
+	stmtIns, err := db.Prepare("SELECT id, appid FROM group")
 	if err != nil {
 		log.Info("error:", err)
 		return nil, nil
