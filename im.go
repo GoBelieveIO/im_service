@@ -28,7 +28,7 @@ func handle_client(conn net.Conn) {
 }
 
 func Listen(f func(net.Conn), port int) {
-	SocketService(fmt.Sprintf("0.0.0.0:%d", port), f)
+	TCPService(fmt.Sprintf("0.0.0.0:%d", port), f)
 
 }
 func ListenClient() {

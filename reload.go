@@ -12,7 +12,6 @@ import (
     "net/http"
     "strconv"
     "reflect"
-    "strings"
 )
 
 const (
@@ -51,6 +50,7 @@ func (c *Conn) Close() error {
 type stoppableListener struct {
     net.Listener
     wg      sync.WaitGroup
+    laddr string
 }
 
 // restart cmd
@@ -62,11 +62,11 @@ var lock sync.Mutex
 // listener wait group
 var listenerWaitGroup sync.WaitGroup
 
-// listener object
-var listeners map[uintptr]net.Listener
+// listener object map
+var listeners map[uintptr]*stoppableListener
 
 func init() {
-    listeners = make(map[uintptr]net.Listener)
+    listeners = make(map[uintptr]*stoppableListener)
     path, err := exec.LookPath(os.Args[0])
     if nil != err {
         log.Fatalf("gracefulRestart: Failed to launch, error: %v", err)
@@ -77,14 +77,16 @@ func init() {
     cmd.Stderr = os.Stderr
 }
 
-func newStoppable(l net.Listener) (sl *stoppableListener) {
+func newStoppable(l net.Listener, address string) (sl *stoppableListener) {
     lock.Lock()
     defer lock.Unlock()
 
-    sl = &stoppableListener{Listener: l}
+    sl = &stoppableListener{Listener: l, laddr: address}
+
     v := reflect.ValueOf(l).Elem().FieldByName("fd").Elem()
     fd := uintptr(v.FieldByName("sysfd").Int())
-    listeners[fd] = l
+    listeners[fd] = sl
+
     return
 }
 
@@ -101,34 +103,55 @@ func (sl *stoppableListener) Accept() (c net.Conn, err error) {
 }
 
 func (sl *stoppableListener) Close() error {
-    log.Printf("close listener: %s", sl.Addr())
+    log.Printf("close listener: %s", sl.laddr)
     return sl.Listener.Close()
 }
 
 // wait signal and restart service, then close listener, finally wait
 func Wait() {
     waitSignal()
+    log.Println("close main process")
+}
+
+func shutdown() {
     lock.Lock()
     for _, listener := range (listeners) {
         listener.Close()
     }
     lock.Unlock()
-    listenerWaitGroup.Wait()
-    log.Println("close main process")
 }
 
+func gracefulShutdown() {
+    shutdown()
+    listenerWaitGroup.Wait()
+}
+
+// Signal handler
 func waitSignal() error {
     ch := make(chan os.Signal, 1)
-    signal.Notify(ch, syscall.SIGTERM, syscall.SIGHUP)
+    signal.Notify(
+    ch,
+    syscall.SIGHUP,
+    syscall.SIGINT,
+    syscall.SIGQUIT,
+    syscall.SIGTERM,
+    )
     for {
         sig := <-ch
         log.Println(sig.String())
         switch sig {
-
-            case syscall.SIGTERM:
+            //TERM, INT	Quick shutdown
+            case syscall.SIGTERM, syscall.SIGINT:
+            shutdown()
             return nil
+            //QUIT	Graceful shutdown
+            case syscall.SIGQUIT:
+            gracefulShutdown()
+            return nil
+            //HUP	reload
             case syscall.SIGHUP:
             restart(sig)
+            gracefulShutdown()
             return nil
         }
     }
@@ -142,11 +165,11 @@ func restart(s os.Signal) {
     i := 3
     for fd, listener := range (listeners) {
         // get listener fd
-        os.Setenv(listener.Addr().String(), fmt.Sprintf("%d", i))
+        os.Setenv(listener.laddr, fmt.Sprintf("%d", i))
         // entry i becomes file descriptor 3+i
         cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(
         fd,
-        listener.Addr().String(),
+        listener.laddr,
         ))
         i++
     }
@@ -157,39 +180,38 @@ func restart(s os.Signal) {
     }
 }
 
-func getFormattedAddr(addr string) string {
-    // If host has colons or a percent sign, have to bracket it.
-    result := strings.IndexByte(addr, ':')
-    if result == 0 {
-        return "0.0.0.0" + addr
-    }
-    return addr
-}
-
 func getInitListener(laddr string) (net.Listener, error) {
     var l net.Listener
     var err error
     listenerWaitGroup.Add(1)
-    // format addr
-    laddr = getFormattedAddr(laddr)
 
     graceful := os.Getenv(Graceful)
     if graceful != "" {
-        // get current file descriptor
-        currFdStr := os.Getenv(laddr)
-        currFd, err := strconv.Atoi(currFdStr)
+        signal, err := strconv.Atoi(graceful)
         if err != nil {
-            log.Printf("%s get fd fail: %v", laddr, err)
+            log.Printf("%s get singal %s fail: %v", laddr, graceful, err)
         }
-        log.Printf("main: %s Listening to existing file descriptor %v.", laddr, currFd)
-        f := os.NewFile(uintptr(currFd), "")
-        // file listener dup fd
-        l, err = net.FileListener(f)
-        // close current file descriptor
-        f.Close()
+        sig := syscall.Signal(signal)
+        switch sig {
+            case syscall.SIGHUP:
+            // get current file descriptor
+            currFdStr := os.Getenv(laddr)
+            currFd, err := strconv.Atoi(currFdStr)
+            if err != nil {
+                log.Printf("%s get fd fail: %v", laddr, err)
+            }
+            log.Printf("main: %s Listening to existing file descriptor %v.", laddr, currFd)
+            f := os.NewFile(uintptr(currFd), "")
+            // file listener dup fd
+            l, err = net.FileListener(f)
+            // close current file descriptor
+            f.Close()
+            default:
+            log.Printf("%s get singal %s fail: no thing to do", laddr, graceful)
+        }
     } else {
         log.Printf("listen to %s.", laddr)
-        l, err = net.Listen("tcp4", laddr)
+        l, err = net.Listen("tcp", laddr)
     }
     return l, err
 }
@@ -200,7 +222,7 @@ func Serve(laddr string, handler func(net.Conn)) {
     if err != nil {
         log.Fatalf("start fail: %v", err)
     }
-    theStoppable := newStoppable(l)
+    theStoppable := newStoppable(l, laddr)
     serve(theStoppable, handler)
     log.Printf("%s wait all connection close...", laddr)
     theStoppable.wg.Wait()
@@ -232,7 +254,7 @@ func ListenAndServe(laddr string, handler http.Handler) {
     if err != nil {
         log.Fatalf("start fail: %v", err)
     }
-    theStoppable := newStoppable(l)
+    theStoppable := newStoppable(l, laddr)
     log.Printf("Serving on http://%s/", laddr)
     server := &http.Server{Handler: handler}
     err = server.Serve(theStoppable)
@@ -245,8 +267,8 @@ func ListenAndServe(laddr string, handler http.Handler) {
     log.Printf("close http %s", laddr)
 }
 
-// socket service
-func SocketService(laddr string, handler func(net.Conn)) {
+// TCP service
+func TCPService(laddr string, handler func(net.Conn)) {
     go func() {
         Serve(laddr, handler)
     }()
@@ -266,7 +288,7 @@ func SingleHTTPService(laddr string, handler http.Handler) {
 }
 
 // single socket service
-func SingleSocketService(laddr string, handler func(net.Conn)) {
-    SocketService(laddr, handler)
+func SingleTCPService(laddr string, handler func(net.Conn)) {
+    TCPService(laddr, handler)
     Wait()
 }
