@@ -158,6 +158,9 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 	route.RemoveUserID(id.uid)
 }
 
+func (client *Client) IsROMApp(appid int64) bool {
+	return appid == 17
+}
 
 //离线消息入apns队列
 func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
@@ -171,7 +174,13 @@ func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
 	v["content"] = im.content
 
 	b, _ := json.Marshal(v)
-	_, err := conn.Do("RPUSH", "push_queue", b)
+	var queue_name string
+	if client.IsROMApp(appid) {
+		queue_name = fmt.Sprintf("push_queue_%d", appid)
+	} else {
+		queue_name = "push_queue"
+	}
+	_, err := conn.Do("RPUSH", queue_name, b)
 	if err != nil {
 		log.Info("rpush error:", err)
 	}

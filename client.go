@@ -186,6 +186,13 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		client.wt <- msg
 		return
 	}
+	if  client.uid == 0 {
+		log.Info("auth token uid==0")
+		msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{1}}
+		client.wt <- msg
+		return
+	}
+
 	client.version = version
 	client.device_id = login.device_id
 	client.platform_id = login.platform_id
@@ -251,6 +258,10 @@ func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
 
 func (client *Client) HandleRTMessage(msg *Message) {
 	rt := msg.body.(*RTMessage)
+	if rt.sender != client.uid {
+		log.Warningf("rt message sender:%d client uid:%d\n", rt.sender, client.uid)
+		return
+	}
 	
 	m := &Message{cmd:MSG_RT, body:rt}
 	client.SendMessage(rt.receiver, m)
@@ -260,6 +271,10 @@ func (client *Client) HandleRTMessage(msg *Message) {
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
+	if msg.sender != client.uid {
+		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
+		return
+	}
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
