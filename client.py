@@ -28,6 +28,7 @@ MSG_RT = 17
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
 
+PROTOCOL_VERSION = 1
 
 class AuthenticationToken:
     def __init__(self):
@@ -42,30 +43,39 @@ class IMMessage:
         self.timestamp = 0
         self.msgid = 0
         self.content = ""
-
-
+class RTMessage:
+    def __init__(self):
+        self.sender = 0
+        self.receiver = 0
+        self.content = ""
+    
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
         b = struct.pack("!BB", msg.platform_id, len(msg.token)) + msg.token + struct.pack("!B", len(msg.device_id)) + msg.device_id
         length = len(b)
-        h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
+        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h+b)
-    elif cmd == MSG_IM or cmd == MSG_GROUP_IM or cmd == MSG_RT:
+    elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         length = 24 + len(msg.content)
-        h = struct.pack("!iibbbb", length, seq, cmd, 0, 0, 0)
+        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
         sock.sendall(h+b+msg.content)
+    elif cmd == MSG_RT:
+        length = 16 + len(msg.content)
+        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!qq", msg.sender, msg.receiver)
+        sock.sendall(h+b+msg.content)
     elif cmd == MSG_ACK:
-        h = struct.pack("!iibbbb", 4, seq, cmd, 0, 0, 0)
+        h = struct.pack("!iibbbb", 4, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!i", msg)
         sock.sendall(h + b)
     elif cmd == MSG_INPUTING:
         sender, receiver = msg
-        h = struct.pack("!iibbbb", 16, seq, cmd, 0, 0, 0)
+        h = struct.pack("!iibbbb", 16, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qq", sender, receiver)
         sock.sendall(h + b)
     elif cmd == MSG_PING:
-        h = struct.pack("!iibbbb", 0, seq, cmd, 0, 0, 0)
+        h = struct.pack("!iibbbb", 0, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h)
     else:
         print "eeeeee"
@@ -86,11 +96,16 @@ def recv_message(sock):
         up_timestamp, platform_id = struct.unpack("!ib", content[:5])
         device_id = content[5:]
         return cmd, seq, (up_timestamp, platform_id, device_id)
-    elif cmd == MSG_IM or cmd == MSG_GROUP_IM or cmd == MSG_RT:
+    elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         im = IMMessage()
         im.sender, im.receiver, _, _ = struct.unpack("!qqii", content[:24])
         im.content = content[24:]
         return cmd, seq, im
+    elif cmd == MSG_RT:
+        rt = RTMessage()
+        rt.sender, rt.receiver, = struct.unpack("!qq", content[:16])
+        rt.content = content[16:]
+        return cmd, seq, rt
     elif cmd == MSG_ACK:
         ack, = struct.unpack("!i", content)
         return cmd, seq, ack
@@ -115,6 +130,7 @@ def login(uid):
      
     res = requests.post(url, data=json.dumps(obj), headers=headers)
     if res.status_code != 200:
+        print res.status_code
         return None
     obj = json.loads(res.text)
     return obj["data"]["token"]
@@ -240,6 +256,19 @@ def notification_recv_client(uid, port=23000):
     recv_client(uid, port, handle_message)
     print "recv notification success"
 
+def send_rt_client(uid, receiver):
+    global task
+    sock, seq =  connect_server(uid, 23000)
+    im = RTMessage()
+    im.sender = uid
+    im.receiver = receiver
+    im.content = "test rt"
+    seq += 1
+    send_message(MSG_RT, seq, im, sock)
+    task += 1
+    print "send success"
+
+
 def send_client(uid, receiver, msg_type):
     global task
     sock, seq =  connect_server(uid, 23000)
@@ -248,8 +277,6 @@ def send_client(uid, receiver, msg_type):
     im.receiver = receiver
     if msg_type == MSG_IM:
         im.content = "test im"
-    elif msg_type == MSG_RT:
-        im.content = "test rt"
     else:
         im.content = "test group im"
     seq += 1
@@ -326,7 +353,7 @@ def TestRTSendAndRecv():
 
     time.sleep(1)
     
-    t2 = threading.Thread(target=send_client, args=(13635273143,13635273142, MSG_RT))
+    t2 = threading.Thread(target=send_rt_client, args=(13635273143,13635273142))
     t2.setDaemon(True)
     t2.start()
     
@@ -463,21 +490,23 @@ def TestGroup():
     headers["Content-Type"] = "application/json; charset=UTF-8"
 
     r = requests.post(url, data=json.dumps(group), headers = headers)
-    print r.status_code, r.text
+    assert(r.status_code == 200)
     obj = json.loads(r.content)
     group_id = obj["data"]["group_id"]
 
     url = URL + "/groups/%s/members"%str(group_id)
     r = requests.post(url, data=json.dumps({"uid":13635273143}), headers = headers)
-    print r.status_code, r.text
+    assert(r.status_code == 200)
 
     url = URL + "/groups/%s/members/13635273143"%str(group_id)
     r = requests.delete(url, headers = headers)
-    print r.status_code, r.text
+
+    assert(r.status_code == 200)
 
     url = URL + "/groups/%s"%str(group_id)
     r = requests.delete(url, headers = headers)
-    print r.status_code, r.text
+
+
     print "test group completed"
 
 
@@ -492,7 +521,7 @@ def _TestGroupMessage(port):
     headers["Authorization"] = "Bearer " + access_token
     headers["Content-Type"] = "application/json; charset=UTF-8"
     r = requests.post(url, data=json.dumps(group), headers = headers)
-    print r.status_code
+    assert(r.status_code == 200)
     obj = json.loads(r.content)
     group_id = obj["data"]["group_id"]
     
@@ -514,7 +543,7 @@ def _TestGroupMessage(port):
 
     url = URL + "/groups/%s"%str(group_id)
     r = requests.delete(url, headers=headers)
-    print r.status_code, r.text
+    assert(r.status_code == 200)
 
     print "test group message completed"
 
@@ -581,6 +610,7 @@ def main():
 
     TestRTSendAndRecv()
     time.sleep(1)
+
 
     TestSendAndRecv()
     time.sleep(1)

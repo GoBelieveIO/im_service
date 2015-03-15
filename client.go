@@ -12,6 +12,8 @@ const CLIENT_TIMEOUT = (60 * 6)
 
 
 type Client struct {
+	//客户端协议版本号
+	version int
 	tm     time.Time
 	wt     chan *Message
 	ewt    chan *EMessage
@@ -69,9 +71,9 @@ func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", Command(msg.cmd))
 	switch msg.cmd {
 	case MSG_AUTH:
-		client.HandleAuth(msg.body.(*Authentication))
+		client.HandleAuth(msg.body.(*Authentication), msg.version)
 	case MSG_AUTH_TOKEN:
-		client.HandleAuthToken(msg.body.(*AuthenticationToken))
+		client.HandleAuthToken(msg.body.(*AuthenticationToken), msg.version)
 	case MSG_IM:
 		client.HandleIMMessage(msg.body.(*IMMessage), msg.seq)
 	case MSG_GROUP_IM:
@@ -175,7 +177,7 @@ func (client *Client) AuthToken(token string) (int64, int64, error) {
 	return appid, uid, err
 }
 
-func (client *Client) HandleAuthToken(login *AuthenticationToken) {
+func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	var err error
 	client.appid, client.uid, err = client.AuthToken(login.token)
 	if err != nil {
@@ -184,6 +186,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken) {
 		client.wt <- msg
 		return
 	}
+	client.version = version
 	client.device_id = login.device_id
 	client.platform_id = login.platform_id
 	client.tm = time.Now()
@@ -207,7 +210,8 @@ func (client *Client) GetChannel(uid int64) *Channel{
 	return channels[index]
 }
 
-func (client *Client) HandleAuth(login *Authentication) {
+func (client *Client) HandleAuth(login *Authentication, version int) {
+	client.version = version
 	client.appid = 0
 	client.uid = login.uid
 	client.device_id = "00000000"
@@ -246,20 +250,18 @@ func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
 }
 
 func (client *Client) HandleRTMessage(msg *Message) {
-	im := msg.body.(*IMMessage)
-	im.timestamp = int32(time.Now().Unix())
+	rt := msg.body.(*RTMessage)
 	
-	m := &Message{cmd:MSG_RT, body:im}
-	client.SendMessage(im.receiver, m)
+	m := &Message{cmd:MSG_RT, body:rt}
+	client.SendMessage(rt.receiver, m)
 
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
-	log.Infof("realtime message sender:%d receiver:%d", im.sender, im.receiver)
+	log.Infof("realtime message sender:%d receiver:%d", rt.sender, rt.receiver)
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
-	m := &Message{cmd: MSG_IM, body: msg}
+	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
 	storage_pool := client.GetStorageConnPool(msg.receiver)
 	storage, err := storage_pool.Get()
@@ -463,15 +465,18 @@ func (client *Client) Write() {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
 			seq++
-			msg.seq = seq
-			client.send(msg)
+
+			//以当前客户端所用版本号发送消息
+			vmsg := &Message{msg.cmd, seq, client.version, msg.body}
+			client.send(vmsg)
 		case emsg := <- client.ewt:
-			msg := emsg.msg
 			seq++
-			msg.seq = seq
-			
+
+			emsg.msg.seq = seq
 			client.AddUnAckMessage(emsg)
 
+			//以当前客户端所用版本号发送消息
+			msg := &Message{emsg.msg.cmd, seq, client.version, emsg.msg.body}
 			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}

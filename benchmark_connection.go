@@ -36,7 +36,7 @@ func receive(uid int64) {
 	}
 
 	seq := 1
-	SendMessage(conn, &Message{MSG_AUTH, seq, &Authentication{uid: uid}})
+	SendMessage(conn, &Message{MSG_AUTH, seq, DEFAULT_VERSION, &Authentication{uid: uid}})
 	ReceiveMessage(conn)
 
 	q := make(chan bool, 10)
@@ -54,10 +54,10 @@ func receive(uid int64) {
 				msgid++
 				receiver := first + rand.Int63()%(last-first)
 				im := &IMMessage{uid, receiver, 0, int32(msgid), "test"}
-				SendMessage(conn, &Message{MSG_IM, seq, im})
+				SendMessage(conn, &Message{MSG_IM, seq, DEFAULT_VERSION, im})
 			case <-ticker.C:
 				seq++
-				SendMessage(conn, &Message{MSG_PING, seq, nil})
+				SendMessage(conn, &Message{MSG_PING, seq, DEFAULT_VERSION, nil})
 			case m := <-wt:
 				if m == nil {
 					q <- true

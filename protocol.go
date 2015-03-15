@@ -30,26 +30,34 @@ const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
 
+const DEFAULT_VERSION = 1
 
 var message_descriptions map[int]string = make(map[int]string)
 
 type MessageCreator func()IMessage
 var message_creators map[int]MessageCreator = make(map[int]MessageCreator)
 
+type VersionMessageCreator func()IVersionMessage
+var vmessage_creators map[int]VersionMessageCreator = make(map[int]VersionMessageCreator)
+
+
 func init() {
 	message_creators[MSG_AUTH] = func()IMessage {return new(Authentication)}
 	message_creators[MSG_AUTH_STATUS] = func()IMessage {return new(AuthenticationStatus)}
-	message_creators[MSG_IM] = func()IMessage{return new(IMMessage)}
+
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
 	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
-	message_creators[MSG_GROUP_IM] = func()IMessage{return new(IMMessage)}
+
 	message_creators[MSG_PEER_ACK] = func()IMessage{return new(MessagePeerACK)}
 	message_creators[MSG_INPUTING] = func()IMessage{return new(MessageInputing)}
 	message_creators[MSG_SUBSCRIBE_ONLINE_STATE] = func()IMessage{return new(MessageSubsribeState)}
 	message_creators[MSG_ONLINE_STATE] = func()IMessage{return new(MessageOnlineState)}
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
 	message_creators[MSG_LOGIN_POINT] = func()IMessage{return new(LoginPoint)}
-	message_creators[MSG_RT] = func()IMessage{return new(IMMessage)}
+	message_creators[MSG_RT] = func()IMessage{return new(RTMessage)}
+
+	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
+	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
 
 	message_descriptions[MSG_AUTH] = "MSG_AUTH"
 	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
@@ -83,16 +91,28 @@ type IMessage interface {
 	FromData(buff []byte) bool
 }
 
+type IVersionMessage interface {
+	ToData(version int) []byte
+	FromData(version int, buff []byte) bool
+}
 
 type Message struct {
 	cmd  int
 	seq  int
-	body IMessage
+	version int
+	
+	body interface{}
 }
 
 func (message *Message) ToData() []byte {
 	if message.body != nil {
-		return message.body.ToData()
+		if m, ok := message.body.(IMessage); ok {
+			return m.ToData()
+		}
+		if m, ok := message.body.(IVersionMessage); ok {
+			return m.ToData(message.version)
+		}
+		return nil
 	} else {
 		return nil
 	}
@@ -100,13 +120,20 @@ func (message *Message) ToData() []byte {
 
 func (message *Message) FromData(buff []byte) bool {
 	cmd := message.cmd
-	creator, ok := message_creators[cmd]
-	if !ok {
-		return len(buff) == 0
-	} else {
-		message.body = creator()
-		return message.body.FromData(buff)
+	if creator, ok := message_creators[cmd]; ok {
+		c := creator()
+		r := c.FromData(buff)
+		message.body = c
+		return r
 	}
+	if creator, ok := vmessage_creators[cmd]; ok {
+		c := creator()
+		r := c.FromData(message.version, buff)
+		message.body = c
+		return r
+	}
+
+	return len(buff) == 0
 }
 
 func (message *Message) ToMap() map[string]interface{} {
@@ -333,24 +360,51 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 	}
 }
 
-func WriteHeader(len int32, seq int32, cmd byte, buffer *bytes.Buffer) {
+func WriteHeader(len int32, seq int32, cmd byte, version byte, buffer *bytes.Buffer) {
 	binary.Write(buffer, binary.BigEndian, len)
 	binary.Write(buffer, binary.BigEndian, seq)
 	buffer.WriteByte(cmd)
-	buffer.WriteByte(byte(0))
+	buffer.WriteByte(byte(version))
 	buffer.WriteByte(byte(0))
 	buffer.WriteByte(byte(0))
 }
 
-func ReadHeader(buff []byte) (int, int, int) {
+func ReadHeader(buff []byte) (int, int, int, int) {
 	var length int32
 	var seq int32
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &length)
 	binary.Read(buffer, binary.BigEndian, &seq)
 	cmd, _ := buffer.ReadByte()
-	return int(length), int(seq), int(cmd)
+	version, _ := buffer.ReadByte()
+	return int(length), int(seq), int(cmd), int(version)
 }
+
+type RTMessage struct {
+	sender    int64
+	receiver  int64
+	content   string
+}
+func (message *RTMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, message.sender)
+	binary.Write(buffer, binary.BigEndian, message.receiver)
+	buffer.Write([]byte(message.content))
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (rt *RTMessage) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &rt.sender)
+	binary.Read(buffer, binary.BigEndian, &rt.receiver)
+	rt.content = string(buff[16:])
+	return true
+}
+
 
 type IMMessage struct {
 	sender    int64
@@ -360,7 +414,31 @@ type IMMessage struct {
 	content   string
 }
 
-func (message *IMMessage) ToData() []byte {
+
+func (message *IMMessage) ToDataV0() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, message.sender)
+	binary.Write(buffer, binary.BigEndian, message.receiver)
+	binary.Write(buffer, binary.BigEndian, message.msgid)
+	buffer.Write([]byte(message.content))
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (im *IMMessage) FromDataV0(buff []byte) bool {
+	if len(buff) < 20 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &im.sender)
+	binary.Read(buffer, binary.BigEndian, &im.receiver)
+	binary.Read(buffer, binary.BigEndian, &im.msgid)
+	im.content = string(buff[20:])
+	return true
+}
+
+
+func (message *IMMessage) ToDataV1() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, message.sender)
 	binary.Write(buffer, binary.BigEndian, message.receiver)
@@ -371,7 +449,7 @@ func (message *IMMessage) ToData() []byte {
 	return buf
 }
 
-func (im *IMMessage) FromData(buff []byte) bool {
+func (im *IMMessage) FromDataV1(buff []byte) bool {
 	if len(buff) < 24 {
 		return false
 	}
@@ -383,6 +461,24 @@ func (im *IMMessage) FromData(buff []byte) bool {
 	im.content = string(buff[24:])
 	return true
 }
+
+
+func (im *IMMessage) ToData(version int) []byte {
+	if version == 0 {
+		return im.ToDataV0()
+	} else {
+		return im.ToDataV1()
+	}
+}
+
+func (im *IMMessage) FromData(version int, buff []byte) bool {
+	if version == 0 {
+		return im.FromDataV0(buff)
+	} else {
+		return im.FromDataV1(buff)
+	}
+}
+
 
 type Authentication struct {
 	uid         int64
@@ -659,7 +755,7 @@ func (id *AppUserID) FromData(buff []byte) bool {
 func SendMessage(conn io.Writer, msg *Message) error {
 	body := msg.ToData()
 	buffer := new(bytes.Buffer)
-	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), buffer)
+	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), byte(msg.version), buffer)
 	buffer.Write(body)
 	buf := buffer.Bytes()
 	n, err := conn.Write(buf)
@@ -682,7 +778,7 @@ func ReceiveMessage(conn io.Reader) *Message {
 		return nil
 	}
 
-	length, seq, cmd := ReadHeader(buff)
+	length, seq, cmd, version := ReadHeader(buff)
 	if length < 0 || length > 64*1024 {
 		log.Info("invalid len:", length)
 		return nil
@@ -697,6 +793,7 @@ func ReceiveMessage(conn io.Reader) *Message {
 	message := new(Message)
 	message.cmd = cmd
 	message.seq = seq
+	message.version = version
 	if !message.FromData(buff) {
 		log.Warning("parse error")
 		return nil
