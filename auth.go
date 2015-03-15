@@ -54,6 +54,68 @@ func GetClient(client_id int64) (int64, string, error) {
 	return appid, secret, nil
 }
 
+type Application struct {
+	appid int64
+	android_client_id int64
+	android_secret string
+	ios_client_id int64
+	ios_secret string
+}
+
+func GetROMClient(client_id int64) (int64, string, error) {
+	rom := make(map[int64]*Application)
+	var app *Application
+
+	app = &Application{}
+	app.appid = 0
+	app.android_client_id = 0
+	app.android_secret = "eopklfnsiulxaeuo"
+	app.ios_client_id = 0
+	app.ios_secret = "eopklfnsiulxaeuo"
+	rom[0] = app
+
+	app = &Application{}
+	app.appid = 7
+	app.android_client_id = 8
+	app.android_secret = "sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44"
+	app.ios_client_id = 9
+	app.ios_secret = "0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1"
+	
+	rom[8] = app
+	rom[9] = app
+
+	app = &Application{}
+	app.appid = 17
+	app.android_client_id = 18
+	app.android_secret = "lc83RwzODvxaGELdHiOiOmI4vqWC6GkA"
+	app.ios_client_id = 19
+	app.ios_secret = "5tFTKsZTYTmrZBCW71JZWOczZQBrxRHK"
+
+	rom[18] = app
+	rom[19] = app
+
+
+	app = &Application{}
+	app.appid = 27
+	app.android_client_id = 28
+	app.android_secret = "r5lvLhXb6TeC5e2c1HYTxLB5qzHfhXOJ"
+	app.ios_client_id = 29
+	app.ios_secret = "t9fAVadX0GVQF9QaCaNqYPxXKXvCJPvc"
+
+	rom[28] = app
+	rom[29] = app
+
+	if app, ok := rom[client_id]; ok {
+		if client_id == app.android_client_id {
+			return app.appid, app.android_secret, nil
+		} else if client_id == app.ios_client_id {
+			return app.appid, app.ios_secret, nil
+		}
+	} 
+	return 0, "", errors.New("not exist")
+}
+
+
 func BasicAuthorization(r *http.Request) (int64, error) {
 	auth := r.Header.Get("Authorization");
 	if len(auth) <= 6 {
@@ -81,13 +143,12 @@ func BasicAuthorization(r *http.Request) (int64, error) {
 		return 0, errors.New("invalid auth header")
 	}
 
-	if (p[1] == "eopklfnsiulxaeuo" && client_id == 0) {
-		return 0, nil
-	}
-
-	appid, secret, err:= GetClient(client_id)
+	appid, secret, err := GetROMClient(client_id)
 	if err != nil {
-		return 0, errors.New("invalid client id")
+		appid, secret, err = GetClient(client_id)
+		if err != nil {
+			return 0, errors.New("invalid client id")
+		}
 	}
 
 	if p[1] != secret {
@@ -99,7 +160,7 @@ func BasicAuthorization(r *http.Request) (int64, error) {
 func AuthGrant(w http.ResponseWriter, r *http.Request) {
 	appid, err := BasicAuthorization(r)
 	if err != nil {
-		WriteHttpError(401, "require auth", w)
+		WriteHttpError(401, err.Error(), w)
 		return
 	}
 

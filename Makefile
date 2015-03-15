@@ -35,9 +35,6 @@ install:all
 	cp ims ./bin
 	cp imr ./bin
 	cp im_api ./bin
-	cp benchmark ./bin
-	cp benchmark_connection ./bin
-	cp benchmark_sender ./bin
 
 clean:
 	rm -f im ims imr im_api benchmark benchmark_connection benchmark_sender benchmark_storage benchmark_route main.test
