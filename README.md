@@ -42,7 +42,7 @@
 
 
      {
-        "master_id":"管理员id(整型)",
+        "master":"管理员id(整型)",
         "name":"群主题名",
         "members":["uid",...]
      }
