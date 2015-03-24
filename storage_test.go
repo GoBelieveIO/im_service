@@ -52,3 +52,27 @@ func Test_Dequeue(t *testing.T) {
 	storage.DequeueOffline(msgid, appid, im.receiver)
 	storage.DequeueOffline(msgid, appid, im.receiver)
 }
+
+func Test_LoadLatest(t *testing.T) {
+	im := &IMMessage{sender:1, receiver:2, content:"test"}
+	msg := &Message{cmd:MSG_IM, body:im}
+
+	msgid := storage.SaveMessage(msg)
+	storage.EnqueueOffline(msgid, appid, im.receiver)
+
+	im = &IMMessage{sender:1, receiver:2, content:"test2"}
+	msg = &Message{cmd:MSG_IM, body:im}
+	msgid = storage.SaveMessage(msg)
+	storage.EnqueueOffline(msgid, appid, im.receiver)
+
+	messages := storage.LoadLatestMessages(appid, im.receiver, 2)
+	latest := messages[0]
+	im2 := latest.msg.body.(*IMMessage)
+	log.Println("sender:", im2.sender, " receiver:", im2.receiver, " content:", string(im2.content))
+
+
+	latest = messages[1]
+	im2 = latest.msg.body.(*IMMessage)
+	log.Println("sender:", im2.sender, " receiver:", im2.receiver, " content:", string(im2.content))
+
+}

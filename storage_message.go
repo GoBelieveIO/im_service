@@ -111,6 +111,7 @@ type OfflineMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
+	prev_msgid  int64
 }
 type DQMessage OfflineMessage 
 
@@ -119,18 +120,20 @@ func (off *OfflineMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, off.appid)
 	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.msgid)
+	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
 	buf := buffer.Bytes()
 	return buf
 }
 
 func (off *OfflineMessage) FromData(buff []byte) bool {
-	if len(buff) < 24 {
+	if len(buff) < 32 {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &off.appid)
 	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
 	return true
 }
 

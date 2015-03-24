@@ -267,12 +267,46 @@ func (storage *Storage) HasOffline(msg_id int64, appid int64, receiver int64) bo
 	return has
 }
 
+//获取最近离线消息ID
+func (storage *Storage) GetLastMessageID(appid int64, receiver int64) (int64, error) {
+	key := fmt.Sprintf("%d_%d_0", appid, receiver)
+	value, err := storage.db.Get([]byte(key), nil)
+	if err != nil {
+		log.Error("put err:", err)
+		return 0, err
+	}
+
+	msgid, err := strconv.ParseInt(string(value), 10, 64)
+	if err != nil {
+		log.Error("parseint err:", err)
+		return 0, err
+	}
+	return msgid, nil
+}
+
+//设置最近离线消息ID
+func (storage *Storage) SetLastMessageID(appid int64, receiver int64, msg_id int64) {
+	key := fmt.Sprintf("%d_%d_0", appid, receiver)
+	value := fmt.Sprintf("%d", msg_id)
+	err := storage.db.Put([]byte(key), []byte(value), nil)
+	if err != nil {
+		log.Error("put err:", err)
+		return
+	}
+}
+
 func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64) {
 	log.Infof("enqueue offline:%d %d %d\n", appid, receiver, msg_id)
 	storage.AddOffline(msg_id, appid, receiver)
-	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
+
+	last_id, _ := storage.GetLastMessageID(appid, receiver)
+
+
+	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, prev_msgid:last_id}
+
 	msg := &Message{cmd:MSG_OFFLINE, body:off}
-	storage.SaveMessage(msg)
+	last_id = storage.SaveMessage(msg)
+	storage.SetLastMessageID(appid, receiver, last_id)
 }
 
 func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64) {
@@ -292,7 +326,7 @@ func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64
 func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
 	log.Infof("load offline message appid:%d uid:%d\n", appid, uid)
 	c := make([]*EMessage, 0, 10)
-	start := fmt.Sprintf("%d_%d_0", appid, uid)
+	start := fmt.Sprintf("%d_%d_1", appid, uid)
 	end := fmt.Sprintf("%d_%d_9223372036854775807", appid, uid)
 
 	r := &util.Range{Start:[]byte(start), Limit:[]byte(end)}
@@ -358,12 +392,48 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 	if emsg.msg.cmd == MSG_OFFLINE {
 		off := emsg.msg.body.(*OfflineMessage)
 		storage.AddOffline(off.msgid, off.appid, off.receiver)
+		storage.SetLastMessageID(off.appid, off.receiver, emsg.msgid)
 	} else if emsg.msg.cmd == MSG_ACK_IN {
 		off := emsg.msg.body.(*OfflineMessage)
 		storage.RemoveOffline(off.msgid, off.appid, off.receiver)
 	}
 	log.Info("save sync message:", emsg.msgid)
 	return nil
+}
+
+func (storage *Storage) LoadLatestMessages(appid int64, receiver int64, limit int) []*EMessage {
+	last_id, err := storage.GetLastMessageID(appid, receiver)
+	if err != nil {
+		return nil
+	}
+	messages := make([]*EMessage, 0, 10)
+	for {
+		if last_id == 0 {
+			break
+		}
+
+		msg := storage.LoadMessage(last_id)
+		if msg == nil {
+			break
+		}
+		if msg.cmd != MSG_OFFLINE {
+			log.Warning("invalid message cmd:", msg.cmd)
+			break
+		}
+		off := msg.body.(*OfflineMessage)
+		msg = storage.LoadMessage(off.msgid)
+		if msg == nil {
+			break
+		}
+
+		emsg := &EMessage{msgid:off.msgid, msg:msg}
+		messages = append(messages, emsg)
+		if len(messages) >= limit {
+			break
+		}
+		last_id = off.prev_msgid
+	}
+	return messages
 }
 
 
