@@ -132,7 +132,39 @@ func (storage *Storage) ListKeyValue() {
 		log.Info("key:", string(iter.Key()), " value:", string(iter.Value()))
 	}
 }
-func (storage *Storage) ReadMessage(msg_id int64) *Message {
+
+func (storage *Storage) ReadMessage(file *os.File) *Message {
+	//校验消息起始位置的magic
+	var magic int32
+	err := binary.Read(file, binary.BigEndian, &magic)
+	if err != nil {
+		log.Info("read file err:", err)
+		return nil
+	}
+
+	if magic != MAGIC {
+		log.Warning("magic err:", magic)
+		return nil
+	}
+	msg := ReceiveMessage(file)
+	if msg == nil {
+		return msg
+	}
+	
+	err = binary.Read(file, binary.BigEndian, &magic)
+	if err != nil {
+		log.Info("read file err:", err)
+		return nil
+	}
+	
+	if magic != MAGIC {
+		log.Warning("magic err:", magic)
+		return nil
+	}
+	return msg
+}
+
+func (storage *Storage) LoadMessage(msg_id int64) *Message {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 	_, err := storage.file.Seek(msg_id, os.SEEK_SET)
@@ -140,26 +172,7 @@ func (storage *Storage) ReadMessage(msg_id int64) *Message {
 		log.Warning("seek file")
 		return nil
 	}
-	//校验消息起始位置的magic
-	buf := make([]byte, 4)
-	n, err := storage.file.Read(buf)
-	if err != nil {
-		log.Warning("read file err:", err)
-		return nil
-	}
-	if n != len(buf) {
-		log.Warning("can't read 4 bytes")
-		return nil
-	}
-
-	buffer := bytes.NewBuffer(buf)
-	var magic int32
-	binary.Read(buffer, binary.BigEndian, &magic)
-	if magic != MAGIC {
-		log.Warning("magic err:", magic)
-		return nil
-	}
-	return ReceiveMessage(storage.file)
+	return storage.ReadMessage(storage.file)
 }
 
 func (storage *Storage) ReadHeader(file *os.File) (magic int, version int) {
@@ -195,6 +208,21 @@ func (storage *Storage) WriteHeader(file *os.File) {
 	}
 }
 
+func (storage *Storage) WriteMessage(file *os.File, msg *Message) {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
+	SendMessage(buffer, msg)
+	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
+	buf := buffer.Bytes()
+	n, err := file.Write(buf)
+	if err != nil {
+		log.Fatal("file write err:", err)
+	}
+	if n != len(buf) {
+		log.Fatal("file write size:", len(buf), " nwrite:", n)
+	}
+}
+
 func (storage *Storage) SaveMessage(msg *Message) int64 {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
@@ -203,18 +231,7 @@ func (storage *Storage) SaveMessage(msg *Message) int64 {
 		log.Fatalln(err)
 	}
 	
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
-	SendMessage(buffer, msg)
-	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
-	buf := buffer.Bytes()
-	n, err := storage.file.Write(buf)
-	if err != nil {
-		log.Fatal("file write err:", err)
-	}
-	if n != len(buf) {
-		log.Fatal("file write size:", len(buf), " nwrite:", n)
-	}
+	storage.WriteMessage(storage.file, msg)
 
 	master.ewt <- &EMessage{msgid:msgid, msg:msg}
 	log.Info("save message:", msgid)
@@ -229,7 +246,6 @@ func (storage *Storage) AddOffline(msg_id int64, appid int64, receiver int64) {
 		log.Error("put err:", err)
 		return
 	}
-	
 }
 
 func (storage *Storage) RemoveOffline(msg_id int64, appid int64, receiver int64) {
@@ -289,7 +305,7 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
 			continue
 		}
 		log.Info("offline msgid:", msgid)
-		msg := storage.ReadMessage(msgid)
+		msg := storage.LoadMessage(msgid)
 		if msg == nil {
 			log.Error("can't load offline message:", msgid)
 			continue
@@ -337,10 +353,7 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 		}
 	}
 	
-	err = SendMessage(storage.file, emsg.msg)
-	if err != nil {
-		log.Fatal("file write:", err)
-	}
+	storage.WriteMessage(storage.file, emsg.msg)
 
 	if emsg.msg.cmd == MSG_OFFLINE {
 		off := emsg.msg.body.(*OfflineMessage)
@@ -389,7 +402,7 @@ func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *EMessage
 				log.Info("seek file err:", err)
 				break
 			}
-			msg := ReceiveMessage(file)
+			msg := storage.ReadMessage(file)
 			if msg == nil {
 				break
 			}

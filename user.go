@@ -4,7 +4,7 @@ import "fmt"
 import "time"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
-
+import "errors"
 
 const CHARACTER_SET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
@@ -35,10 +35,18 @@ func LoadUserAccessToken(token string) (int64, int64, string, error) {
 	defer conn.Close()
 
 	key := fmt.Sprintf("access_token_%s", token)
-
 	var uid int64
 	var appid int64
 	var uname string
+
+	exists, err := redis.Bool(conn.Do("EXISTS", key))
+	if err != nil {
+		return 0, 0, "", err
+	}
+	if !exists {
+		return 0, 0, "", errors.New("token non exists")
+	}
+
 	reply, err := redis.Values(conn.Do("HMGET", key, "user_id", "app_id", "user_name"))
 	if err != nil {
 		log.Info("hmget error:", err)

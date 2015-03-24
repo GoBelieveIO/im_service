@@ -15,7 +15,7 @@ func Test_Storage(t *testing.T) {
 	im := &IMMessage{sender:1, receiver:2, content:"test"}
 	msg := &Message{cmd:MSG_IM, body:im}
 	msgid := storage.SaveMessage(msg)
-	msg2 := storage.ReadMessage(msgid)
+	msg2 := storage.LoadMessage(msgid)
 	if msg2 != nil {
 		log.Println("msg2 cmd:", msg2.cmd)
 	} else {
