@@ -117,8 +117,9 @@ def recv_message(sock):
     else:
         return cmd, seq, content
 
-APP_ID = 8
-APP_SECRET = 'sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44'
+APP_ID = 7
+APP_KEY = "sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44"
+APP_SECRET = '0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1'
 URL = "http://127.0.0.1:23002"
 
 def login(uid):
@@ -130,7 +131,7 @@ def login(uid):
      
     res = requests.post(url, data=json.dumps(obj), headers=headers)
     if res.status_code != 200:
-        print res.status_code
+        print res.status_code, res.content
         return None
     obj = json.loads(res.text)
     return obj["data"]["token"]
