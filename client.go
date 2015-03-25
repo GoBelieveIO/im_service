@@ -61,7 +61,6 @@ func (client *Client) HandleRemoveClient() {
 	}
 	route.RemoveClient(client)
 	if client.uid > 0 {
-		client.RemoveLoginInfo()
 		channel := client.GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid)
 	}
@@ -200,7 +199,6 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	log.Infof("auth token:%s appid:%d uid:%d device id:%s", 
 		login.token, client.appid, client.uid, client.device_id)
 
-	client.SaveLoginInfo()
 	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
 	client.wt <- msg
 
@@ -226,7 +224,6 @@ func (client *Client) HandleAuth(login *Authentication, version int) {
 	client.tm = time.Now()
 	log.Info("auth:", login.uid)
 
-	client.SaveLoginInfo()
 	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
 	client.wt <- msg
 
@@ -409,7 +406,6 @@ func (client *Client) HandlePing() {
 		log.Warning("client has't been authenticated")
 		return
 	}
-	client.RefreshLoginInfo()
 }
 
 func (client *Client) DequeueMessage(msgid int64) {
