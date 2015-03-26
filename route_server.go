@@ -158,8 +158,9 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 	route.RemoveUserID(id.uid)
 }
 
+//定制推送脚本的app
 func (client *Client) IsROMApp(appid int64) bool {
-	return appid == 17
+	return false
 }
 
 //离线消息入apns队列
