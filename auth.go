@@ -122,14 +122,10 @@ func AuthGrant(w http.ResponseWriter, r *http.Request) {
 	uname, _ := obj.Get("user_name").String()
 	
 	token := GetUserAccessToken(appid, uid)
-	if token != "" {
-		obj := make(map[string]interface{})
-		obj["token"] = token
-		WriteHttpObj(obj, w)
-		return
+	if token == "" {
+		token = GenUserToken()
 	}
-	
-	token = GenUserToken()
+
 	err = SaveUserAccessToken(appid, uid, uname, token)
 	if err != nil {
 		WriteHttpError(400, "server error", w)
