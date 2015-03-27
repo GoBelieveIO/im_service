@@ -124,6 +124,7 @@ func AuthGrant(w http.ResponseWriter, r *http.Request) {
 	token := GetUserAccessToken(appid, uid)
 	if token == "" {
 		token = GenUserToken()
+		CountUser(appid, uid)
 	}
 
 	err = SaveUserAccessToken(appid, uid, uname, token)

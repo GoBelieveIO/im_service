@@ -207,6 +207,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.AddClient()
 	channel := client.GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
+	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
 }
 
@@ -231,7 +232,7 @@ func (client *Client) HandleAuth(login *Authentication, version int) {
 	client.AddClient()
 	channel := client.GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
-
+	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
 }
 

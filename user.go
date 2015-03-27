@@ -74,12 +74,37 @@ func SaveUserAccessToken(appid int64, uid int64, uname string, token string) err
 	}
 
 	key = fmt.Sprintf("users_%d_%d", appid, uid)
-	_, err = conn.Do("HSET", key, "access_token", token)
+	_, err = conn.Do("HMSET", key, "access_token", token, "name", uname)
 	if err != nil {
 		log.Info("hget err:", err)
 		return err
 	}
+
 	return nil
+}
+
+func CountUser(appid int64, uid int64) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("statistics_users_%d", appid)
+	_, err := conn.Do("PFADD", key, uid)
+	if err != nil {
+		log.Info("pfadd err:", err)
+	}
+}
+
+func CountDAU(appid int64, uid int64) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+	
+	now := time.Now()
+	date := fmt.Sprintf("%d_%d_%d", now.Year(), int(now.Month()), now.Day())
+	key := fmt.Sprintf("statistics_dau_%s_%d", date, appid)
+	_, err := conn.Do("PFADD", key, uid)
+	if err != nil {
+		log.Info("pfadd err:", err)
+	}
 }
 
 func SaveUserDeviceToken(appid int64, uid int64, device_token string, ng_device_token string) error {
