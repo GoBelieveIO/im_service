@@ -8,7 +8,7 @@ import uuid
 import base64
 
 MSG_HEARTBEAT = 1
-MSG_AUTH = 2
+#MSG_AUTH = 2
 MSG_AUTH_STATUS = 3
 MSG_IM = 4
 MSG_ACK = 5
@@ -85,6 +85,10 @@ def recv_message(sock):
     if len(buf) != 12:
         return 0, 0, None
     length, seq, cmd = struct.unpack("!iib", buf[:9])
+
+    if length == 0:
+        return cmd, seq, None
+
     content = sock.recv(length)
     if len(content) != length:
         return 0, 0, None
@@ -120,6 +124,7 @@ def recv_message(sock):
 APP_ID = 7
 APP_KEY = "sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44"
 APP_SECRET = '0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1'
+HOST = "127.0.0.1"
 URL = "http://127.0.0.1:23002"
 
 def login(uid):
@@ -144,7 +149,7 @@ def connect_server(uid, port):
     if not token:
         return None, 0
     seq = 0
-    address = ("127.0.0.1", port)
+    address = (HOST, port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
     sock.connect(address)
     auth = AuthenticationToken()
@@ -589,7 +594,7 @@ def TestGroupNotification():
     
 def main():
     cluster = False
-
+     
     TestBindToken()
     time.sleep(1)
      
@@ -603,25 +608,24 @@ def main():
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)
-
+     
     TestPeerACK()
     time.sleep(1)
     TestInputing()
     time.sleep(1)
-
+     
     TestRTSendAndRecv()
     time.sleep(1)
-
-
+     
     TestSendAndRecv()
     time.sleep(1)
     TestOffline()
     time.sleep(1)
-
+     
     if cluster:
         TestCluster()
         time.sleep(1)
-
+     
     TestLoginPoint()
     time.sleep(1)
     TestPingPong()
