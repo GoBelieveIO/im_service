@@ -169,7 +169,7 @@ func (channel *Channel) Run() {
 	for {
 		conn, err := net.Dial("tcp", channel.addr)
 		if err != nil {
-			log.Info("connect storage server error:", err)
+			log.Info("connect route server error:", err)
 			nsleep *= 2
 			if nsleep > 60*1000 {
 				nsleep = 60 * 1000
