@@ -2,7 +2,6 @@ package main
 
 import (
     "fmt"
-    "log"
     "net"
     "os"
     "os/exec"
@@ -12,6 +11,7 @@ import (
     "net/http"
     "strconv"
     "reflect"
+	log "github.com/golang/glog"
 )
 
 const (
@@ -36,7 +36,7 @@ type Conn struct {
 }
 
 func (c *Conn) Close() error {
-    log.Printf("close %s", c.RemoteAddr())
+    log.Infof("close %s", c.RemoteAddr())
     c.lock.Lock()
     defer c.lock.Unlock()
     err := c.Conn.Close()
@@ -103,14 +103,14 @@ func (sl *stoppableListener) Accept() (c net.Conn, err error) {
 }
 
 func (sl *stoppableListener) Close() error {
-    log.Printf("close listener: %s", sl.laddr)
+    log.Infof("close listener: %s", sl.laddr)
     return sl.Listener.Close()
 }
 
 // wait signal and restart service, then close listener, finally wait
 func Wait() {
     waitSignal()
-    log.Println("close main process")
+    log.Info("close main process")
 }
 
 func shutdown() {
@@ -138,7 +138,7 @@ func waitSignal() error {
     )
     for {
         sig := <-ch
-        log.Println(sig.String())
+        log.Info("singal:", sig.String())
         switch sig {
             //TERM, INT	Quick shutdown
             case syscall.SIGTERM, syscall.SIGINT:
@@ -189,7 +189,7 @@ func getInitListener(laddr string) (net.Listener, error) {
     if graceful != "" {
         signal, err := strconv.Atoi(graceful)
         if err != nil {
-            log.Printf("%s get singal %s fail: %v", laddr, graceful, err)
+            log.Infof("%s get singal %s fail: %v", laddr, graceful, err)
         }
         sig := syscall.Signal(signal)
         switch sig {
@@ -198,19 +198,19 @@ func getInitListener(laddr string) (net.Listener, error) {
             currFdStr := os.Getenv(laddr)
             currFd, err := strconv.Atoi(currFdStr)
             if err != nil {
-                log.Printf("%s get fd fail: %v", laddr, err)
+                log.Info("%s get fd fail: %v", laddr, err)
             }
-            log.Printf("main: %s Listening to existing file descriptor %v.", laddr, currFd)
+            log.Infof("main: %s Listening to existing file descriptor %v.", laddr, currFd)
             f := os.NewFile(uintptr(currFd), "")
             // file listener dup fd
             l, err = net.FileListener(f)
             // close current file descriptor
             f.Close()
             default:
-            log.Printf("%s get singal %s fail: no thing to do", laddr, graceful)
+            log.Infof("%s get singal %s fail: no thing to do", laddr, graceful)
         }
     } else {
-        log.Printf("listen to %s.", laddr)
+        log.Infof("listen to %s.", laddr)
         l, err = net.Listen("tcp", laddr)
     }
     return l, err
@@ -224,10 +224,10 @@ func Serve(laddr string, handler func(net.Conn)) {
     }
     theStoppable := newStoppable(l, laddr)
     serve(theStoppable, handler)
-    log.Printf("%s wait all connection close...", laddr)
+    log.Infof("%s wait all connection close...", laddr)
     theStoppable.wg.Wait()
     listenerWaitGroup.Done()
-    log.Printf("close socket %s", laddr)
+    log.Infof("close socket %s", laddr)
 }
 
 func serve(l net.Listener, handle func(net.Conn)) {
@@ -236,12 +236,12 @@ func serve(l net.Listener, handle func(net.Conn)) {
         c, err := l.Accept()
         if nil != err {
             if IsErrClosing(err) {
-                log.Println("error closing")
+                log.Info("error closing")
                 return
             }
             log.Fatalln(err)
         }
-        log.Println("handle client", c.RemoteAddr())
+        log.Info("handle client", c.RemoteAddr())
         handle(c)
     }
 }
@@ -255,16 +255,16 @@ func ListenAndServe(laddr string, handler http.Handler) {
         log.Fatalf("start fail: %v", err)
     }
     theStoppable := newStoppable(l, laddr)
-    log.Printf("Serving on http://%s/", laddr)
+    log.Infof("Serving on http://%s/", laddr)
     server := &http.Server{Handler: handler}
     err = server.Serve(theStoppable)
     if err != nil {
-        log.Println("ListenAndServe: ", err)
+        log.Info("ListenAndServe: ", err)
     }
-    log.Printf("%s wait all connection close...", laddr)
+    log.Infof("%s wait all connection close...", laddr)
     theStoppable.wg.Wait()
     listenerWaitGroup.Done()
-    log.Printf("close http %s", laddr)
+    log.Infof("close http %s", laddr)
 }
 
 // TCP service
