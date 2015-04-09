@@ -10,6 +10,7 @@ import "github.com/garyburd/redigo/redis"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
+import "strings"
 
 type BroadcastMessage struct {
 	channel string
@@ -30,49 +31,31 @@ func NewGroupServer(port int) *GroupServer {
 }
 
 
-func (group_server *GroupServer) GetStorageConnPool(uid int64) *StorageConnPool {
-	index := uid%int64(len(storage_pools))
-	return storage_pools[index]
-}
-
 func (group_server *GroupServer) SendGroupNotification(appid int64, gid int64, 
-	op map[string]interface{}, members IntSet) {
+	op map[string]interface{}, members []int64) {
 
 	b, _ := json.Marshal(op)
-	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{string(b)}}
 
-	for member := range(members) {
-		sae := &SAEMessage{}
-		sae.msg = msg
-		sae.receivers = make([]*AppUserID, 1)
-		id := &AppUserID{appid:appid, uid:member}
-		sae.receivers[0] = id
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["group_id"] = gid
+	v["notification"] = string(b)
 
-		storage_pool := group_server.GetStorageConnPool(member)
-
-		storage, err := storage_pool.Get()
-		if err != nil {
-			log.Error("connect storage err:", err)
-			return
-		}
-		defer storage_pool.Release(storage)
-
-		msgid, err := storage.SaveAndEnqueueMessage(sae)
-		if err != nil {
-			log.Error("saveandequeue message err:", err)
-			return
-		}
-
-		channel := group_server.GetChannel(member)
-		amsg := &AppMessage{appid:appid, receiver:member, 
-			msgid:msgid, msg:msg}
-		channel.Publish(amsg)
+	if len(members) > 0 {
+		v["members"] = members
 	}
-}
 
-func (group_server *GroupServer) GetChannel(uid int64) *Channel{
-	index := uid%int64(len(channels))
-	return channels[index]
+	body, _ := json.Marshal(v)
+
+	url := fmt.Sprintf("%s/post_group_notification", config.im_url)
+	resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		log.Info("post err:", err)
+		return
+	}
+
+	resp.Body.Close()
+	log.Info("send group notification success")
 }
 
 func (group_server *GroupServer) PublishMessage(channel string, msg string) {
@@ -128,11 +111,7 @@ func (group_server *GroupServer) CreateGroup(appid int64, gname string,
 	op := make(map[string]interface{})
 	op["create"] = v
 
-	s := NewIntSet()
-	for _, m := range(members) {
-		s.Add(m)
-	}
-	group_server.SendGroupNotification(appid, gid, op, s)
+	group_server.SendGroupNotification(appid, gid, op, members)
 
 	return gid
 }
@@ -148,26 +127,16 @@ func (group_server *GroupServer) DisbandGroup(appid int64, gid int64) bool {
 	if !DeleteGroup(db, gid) {
 		return false
 	}
-	content := fmt.Sprintf("%d", gid)
-	group_server.PublishMessage("group_disband", content)
-
-	group := group_manager.FindGroup(gid)
-	if group == nil {
-		log.Info("can't find group:", gid)
-		return true
-	}
-	members := group.Members()
-	if len(members) == 0 {
-		log.Info("group no member", gid)
-		return true
-	}
 
 	v := make(map[string]interface{})
 	v["group_id"] = gid
 	op := make(map[string]interface{})
 	op["disband"] = v
 
-	group_server.SendGroupNotification(appid, gid, op, members)
+	group_server.SendGroupNotification(appid, gid, op, nil)
+
+	content := fmt.Sprintf("%d", gid)
+	group_server.PublishMessage("group_disband", content)
 
 	return true
 }
@@ -183,19 +152,6 @@ func (group_server *GroupServer) AddGroupMember(appid int64, gid int64, uid int6
 	if !AddGroupMember(db, gid, uid) {
 		return false
 	}
-	content := fmt.Sprintf("%d,%d", gid, uid)
-	group_server.PublishMessage("group_member_add", content)
-
-	group := group_manager.FindGroup(gid)
-	if group == nil {
-		log.Info("can't find group:", gid)
-		return true
-	}
-	members := group.Members()
-	if len(members) == 0 {
-		log.Info("group no member", gid)
-		return true
-	}
 
 	v := make(map[string]interface{})
 	v["group_id"] = gid
@@ -203,7 +159,10 @@ func (group_server *GroupServer) AddGroupMember(appid int64, gid int64, uid int6
 	op := make(map[string]interface{})
 	op["add_member"] = v
 
-	group_server.SendGroupNotification(appid, gid, op, members)
+	group_server.SendGroupNotification(appid, gid, op, []int64{uid})
+
+	content := fmt.Sprintf("%d,%d", gid, uid)
+	group_server.PublishMessage("group_member_add", content)
 
 	return true
 }
@@ -219,26 +178,16 @@ func (group_server *GroupServer) QuitGroup(appid int64, gid int64, uid int64) bo
 	if !RemoveGroupMember(db, gid, uid) {
 		return false
 	}
-	content := fmt.Sprintf("%d,%d", gid, uid)
-	group_server.PublishMessage("group_member_remove", content)
 
-	//发送变更的通知消息到客户端
-	group := group_manager.FindGroup(gid)
-	if group == nil {
-		log.Info("can't find group:", gid)
-		return true
-	}
-	members := group.Members()
-	if len(members) == 0 {
-		log.Info("group no member", gid)
-		return true
-	}
 	v := make(map[string]interface{})
 	v["group_id"] = gid
 	v["member_id"] = uid
 	op := make(map[string]interface{})
 	op["quit_group"] = v
-	group_server.SendGroupNotification(appid, gid, op, members)
+	group_server.SendGroupNotification(appid, gid, op, []int64{uid})
+
+	content := fmt.Sprintf("%d,%d", gid, uid)
+	group_server.PublishMessage("group_member_remove", content)
 
 	return true
 }

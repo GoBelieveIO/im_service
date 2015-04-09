@@ -9,12 +9,10 @@ import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 import "github.com/gorilla/mux"
 
-var channels []*Channel
 var config *APIConfig
 var group_server *GroupServer
-var group_manager *GroupManager
 var redis_pool *redis.Pool
-var storage_pools []*StorageConnPool
+
 
 func NewRedisPool(server, password string) *redis.Pool {
 	return &redis.Pool{
@@ -35,19 +33,6 @@ func NewRedisPool(server, password string) *redis.Pool {
 			return c, err
 		},
 	}
-}
-
-func DialStorageFun(addr string) func()(*StorageConn, error) {
-	f := func() (*StorageConn, error){
-		storage := NewStorageConn()
-		err := storage.Dial(addr)
-		if err != nil {
-			log.Error("connect storage err:", err)
-			return nil, err
-		}
-		return storage, nil
-	}
-	return f
 }
 
 
@@ -93,25 +78,6 @@ func main() {
 	log.Infof("port:%d \n",	config.port)
 
 	redis_pool = NewRedisPool(config.redis_address, "")
-
-
-	storage_pools = make([]*StorageConnPool, 0)
-	for _, addr := range(config.storage_addrs) {
-		f := DialStorageFun(addr)
-		pool := NewStorageConnPool(100, 500, 600 * time.Second, f) 
-		storage_pools = append(storage_pools, pool)
-	}
-
-	channels = make([]*Channel, 0)
-	for _, addr := range(config.route_addrs) {
-		channel := NewChannel(addr, nil, nil)
-		channel.Start()
-		channels = append(channels, channel)
-	}
-
-
-	group_manager = NewGroupManager()
-	group_manager.Start()
 
 	group_server = NewGroupServer(config.port)
 	go group_server.RunPublish()

@@ -34,8 +34,8 @@ type APIConfig struct {
 	mysqldb_datasource  string
 	appdb_datasource    string
 
-	storage_addrs       []string
-	route_addrs         []string
+	//发送群组通知消息
+	im_url              string
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -137,20 +137,7 @@ func read_api_cfg(cfg_path string) *APIConfig {
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.appdb_datasource = get_string(app_cfg, "appdb_source")
-
-	str := get_string(app_cfg, "storage_pool")
-    array := strings.Split(str, " ")
-	config.storage_addrs = array
-	if len(config.storage_addrs) == 0 {
-		log.Fatal("storage pool config")
-	}
-
-	str = get_string(app_cfg, "route_pool")
-    array = strings.Split(str, " ")
-	config.route_addrs = array
-	if len(config.route_addrs) == 0 {
-		log.Fatal("route pool config")
-	}
+	config.im_url = get_string(app_cfg, "im_url")
 
 	return config
 }
