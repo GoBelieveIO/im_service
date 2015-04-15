@@ -170,13 +170,16 @@ func BindToken(w http.ResponseWriter, r *http.Request) {
 
 	device_token, _ := obj.Get("apns_device_token").String()
 	ng_device_token, _ := obj.Get("ng_device_token").String()
+	xg_device_token, _ := obj.Get("xg_device_token").String()
 
-	if len(device_token) == 0 && len(ng_device_token) == 0 {
+	if len(device_token) == 0 && 
+		len(ng_device_token) == 0 && 
+		len(xg_device_token) == 0 {
 		WriteHttpError(400, "invalid param", w)
 		return
 	}
 	
-	err = SaveUserDeviceToken(appid, uid, device_token, ng_device_token)
+	err = SaveUserDeviceToken(appid, uid, device_token, ng_device_token, xg_device_token)
 	if err != nil {
 		WriteHttpError(400, "server error", w)
 		return
@@ -205,13 +208,16 @@ func UnbindToken(w http.ResponseWriter, r *http.Request) {
 
 	device_token, _ := obj.Get("apns_device_token").String()
 	ng_device_token, _ := obj.Get("ng_device_token").String()
+	xg_device_token, _ := obj.Get("xg_device_token").String()
 
-	if len(device_token) == 0 && len(ng_device_token) == 0 {
+	if len(device_token) == 0 && 
+		len(ng_device_token) == 0 && 
+		len(xg_device_token) == 0 {
 		WriteHttpError(400, "invalid param", w)
 		return
 	}
 
-	err = ResetUserDeviceToken(appid, uid, device_token, ng_device_token)
+	err = ResetUserDeviceToken(appid, uid, device_token, ng_device_token, xg_device_token)
 	if err != nil {
 		WriteHttpError(400, "server error", w)
 		return

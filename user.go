@@ -107,7 +107,7 @@ func CountDAU(appid int64, uid int64) {
 	}
 }
 
-func SaveUserDeviceToken(appid int64, uid int64, device_token string, ng_device_token string) error {
+func SaveUserDeviceToken(appid int64, uid int64, device_token string, ng_device_token string, xg_device_token string) error {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -129,10 +129,18 @@ func SaveUserDeviceToken(appid int64, uid int64, device_token string, ng_device_
 			return err
 		}
 	}
+	if len(xg_device_token) > 0 {
+		_, err := conn.Do("HMSET", key, "xg_device_token", xg_device_token, 
+			"xg_timestamp", now)
+		if err != nil {
+			log.Info("hget err:", err)
+			return err
+		}
+	}
 	return nil	
 }
 
-func ResetUserDeviceToken(appid int64, uid int64, device_token string, ng_device_token string) error {
+func ResetUserDeviceToken(appid int64, uid int64, device_token string, ng_device_token string, xg_device_token string) error {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -165,6 +173,23 @@ func ResetUserDeviceToken(appid int64, uid int64, device_token string, ng_device
 			return nil
 		}
 		_, err = conn.Do("HDEL", key, "ng_device_token", "ng_timestamp")
+		if err != nil {
+			log.Info("hdel err:", err)
+			return err
+		}
+	}
+
+	if len(xg_device_token) > 0 {
+		token, err := redis.String(conn.Do("HGET", key, "xg_device_token"))
+		if err != nil {
+			log.Info("hget err:", err)
+			return err
+		}
+		if token != xg_device_token {
+			log.Infof("reset xg token:%s device token:%s\n", token, ng_device_token)
+			return nil
+		}
+		_, err = conn.Do("HDEL", key, "xg_device_token", "xg_timestamp")
 		if err != nil {
 			log.Info("hdel err:", err)
 			return err
