@@ -7,6 +7,8 @@ import "errors"
 import "strings"
 import "strconv"
 import "encoding/base64"
+import "encoding/hex"
+import "crypto/md5"
 import "github.com/bitly/go-simplejson"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
@@ -87,8 +89,11 @@ func BasicAuthorization(r *http.Request) (int64, error) {
 		log.Info("mysql err:", err)
 		return 0, errors.New("invalid client id")
 	}
-	if p[1] != secret {
-		return 0, errors.New("invalid client id")
+	md5_secret := md5.Sum([]byte(secret))
+	app_secret := hex.EncodeToString(md5_secret[:])
+
+	if p[1] != app_secret {
+		return 0, errors.New("invalid app id")
 	}
 	return appid, nil
 }
