@@ -206,6 +206,30 @@ func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
 	}
 }
 
+func (client *Client) PublishGroupMessage(appid int64, receiver int64, im *IMMessage) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["sender"] = im.sender
+	v["receiver"] = receiver
+	v["content"] = im.content
+	v["group_id"] = im.receiver
+
+	b, _ := json.Marshal(v)
+	var queue_name string
+	if client.IsROMApp(appid) {
+		queue_name = fmt.Sprintf("push_queue_%d", appid)
+	} else {
+		queue_name = "push_queue"
+	}
+	_, err := conn.Do("RPUSH", queue_name, b)
+	if err != nil {
+		log.Info("rpush error:", err)
+	}
+}
+
 func (client *Client) HandlePublish(amsg *AppMessage) {
 	log.Infof("publish message appid:%d uid:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
 	receiver := &AppUserID{appid:amsg.appid, uid:amsg.receiver}
@@ -214,6 +238,8 @@ func (client *Client) HandlePublish(amsg *AppMessage) {
 	if len(s) == 0 {
 		if amsg.msg.cmd == MSG_IM {
 			client.PublishPeerMessage(amsg.appid, amsg.msg.body.(*IMMessage))
+		} else if amsg.msg.cmd == MSG_GROUP_IM {
+			client.PublishGroupMessage(amsg.appid, amsg.receiver, amsg.msg.body.(*IMMessage))
 		}
 		return
 	}
