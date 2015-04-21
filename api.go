@@ -24,9 +24,12 @@ import "fmt"
 import "time"
 import "net/http"
 import "math/rand"
+import "os"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 import "github.com/gorilla/mux"
+import "github.com/gorilla/handlers"
+
 
 var config *APIConfig
 var group_server *GroupServer
@@ -76,7 +79,8 @@ func RunAPI() {
 	r.HandleFunc("/device/bind", BindToken).Methods("POST")
 	r.HandleFunc("/device/unbind", UnbindToken).Methods("POST")
 	r.HandleFunc("/auth/grant", AuthGrant).Methods("POST")
-	http.Handle("/", r)
+
+	http.Handle("/", handlers.LoggingHandler(os.Stdout, r))
 
 	var PORT = config.port
 	var BIND_ADDR = ""
