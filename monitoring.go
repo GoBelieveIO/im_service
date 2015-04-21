@@ -111,6 +111,7 @@ func SendGroupNotification(appid int64, gid int64,
 			msgid:msgid, msg:msg}
 		channel.Publish(amsg)
 
+		emsg := &EMessage{msgid:msgid, msg:msg}
 		route := app_route.FindRoute(appid)
 		if route == nil {
 			continue
@@ -118,7 +119,7 @@ func SendGroupNotification(appid int64, gid int64,
 		clients := route.FindClientSet(member)
 		if clients != nil {
 			for c, _ := range(clients) {
-				c.wt <- msg
+				c.ewt <- emsg
 			}
 		}
 	}
