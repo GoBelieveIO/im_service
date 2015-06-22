@@ -29,6 +29,8 @@ const MSG_SAVE_AND_ENQUEUE = 200
 const MSG_DEQUEUE = 201
 const MSG_LOAD_OFFLINE = 202
 const MSG_RESULT = 203
+const MSG_LOAD_HISTORY = 204
+
 
 //主从同步消息
 const MSG_SYNC_BEGIN = 210
@@ -44,9 +46,10 @@ func init() {
 	message_creators[MSG_DEQUEUE] = func()IMessage{return new(OfflineMessage)}
 	message_creators[MSG_LOAD_OFFLINE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_RESULT] = func()IMessage{return new(MessageResult)}
+	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
 	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage)}
 	message_creators[MSG_ACK_IN] = func()IMessage{return new(OfflineMessage)}
-	
+
 	message_creators[MSG_SYNC_BEGIN] = func()IMessage{return new(SyncCursor)}
 	message_creators[MSG_SYNC_MESSAGE] = func()IMessage{return new(EMessage)}
 	
@@ -54,6 +57,7 @@ func init() {
 	message_descriptions[MSG_DEQUEUE] = "MSG_DEQUEUE"
 	message_descriptions[MSG_LOAD_OFFLINE] = "MSG_LOAD_OFFLINE"
 	message_descriptions[MSG_RESULT] = "MSG_RESULT"
+	message_descriptions[MSG_LOAD_HISTORY] = "MSG_LOAD_HISTORY"
 	message_descriptions[MSG_SYNC_BEGIN] = "MSG_SYNC_BEGIN"
 	message_descriptions[MSG_SYNC_MESSAGE] = "MSG_SYNC_MESSAGE"
 
@@ -251,3 +255,30 @@ func (result *MessageResult) FromData(buff []byte) bool {
 	result.content = buff[4:]
 	return true
 }
+
+type LoadHistory struct {
+	app_uid AppUserID
+	limit int32
+}
+
+
+func (lh *LoadHistory) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, lh.app_uid.appid)
+	binary.Write(buffer, binary.BigEndian, lh.app_uid.uid)
+	binary.Write(buffer, binary.BigEndian, lh.limit)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (lh *LoadHistory) FromData(buff []byte) bool {
+	if len(buff) < 20 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &lh.app_uid.appid)
+	binary.Read(buffer, binary.BigEndian, &lh.app_uid.uid)
+	binary.Read(buffer, binary.BigEndian, &lh.limit)
+	return true
+}
+

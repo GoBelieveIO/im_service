@@ -25,6 +25,11 @@ import "time"
 import "net/http"
 import "math/rand"
 import "os"
+import "net/url"
+import "strconv"
+import "strings"
+import "io/ioutil"
+import "errors"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 import "github.com/gorilla/mux"
@@ -58,6 +63,90 @@ func NewRedisPool(server, password string) *redis.Pool {
 }
 
 
+func SendIMMessage(body string, appid int64, sender int64) error {
+	url := fmt.Sprintf("%s/post_im_message?appid=%d&sender=%d", config.im_url, appid, sender)
+	resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
+	if err != nil {
+		log.Info("post err:", err)
+		return err
+	}
+
+	resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return errors.New("server internal error")
+	}
+	log.Info("send im message success")
+	return nil
+}
+
+func PostIMMessage(w http.ResponseWriter, r *http.Request) {
+	var appid int64
+	var uid int64
+	var err error
+
+	appid, uid, err = BearerAuthentication(r)
+	if err != nil {
+		WriteHttpError(403, err.Error(), w)
+		return
+	}
+	
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	err = SendIMMessage(string(body), appid, uid)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	w.WriteHeader(200)
+}
+
+func LoadLatestMessage(w http.ResponseWriter, r *http.Request) {
+	var appid int64
+	var uid int64
+	var err error
+
+	appid, uid, err = BearerAuthentication(r)
+	if err != nil {
+		WriteHttpError(403, err.Error(), w)
+		return
+	}
+	m, _ := url.ParseQuery(r.URL.RawQuery)
+
+	limit := int64(1024)
+	if len(m.Get("limit")) > 0 {
+		limit, err = strconv.ParseInt(m.Get("limit"), 10, 32)
+		if err != nil {
+			log.Info("error:", err)
+			WriteHttpError(400, "invalid json format", w)
+			return
+		}
+	}
+
+	url := fmt.Sprintf("%s/load_latest_message?appid=%d&uid=%d&limit=%d", config.im_url, appid, uid, limit)
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Info("post err:", err)
+		return
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil || resp.StatusCode != 200 {
+		WriteHttpError(400, "server internal error", w)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(body)
+}
+
 func RunAPI() {
 	r := mux.NewRouter()
 	r.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +168,8 @@ func RunAPI() {
 	r.HandleFunc("/device/bind", BindToken).Methods("POST")
 	r.HandleFunc("/device/unbind", UnbindToken).Methods("POST")
 	r.HandleFunc("/auth/grant", AuthGrant).Methods("POST")
+	r.HandleFunc("/messages", PostIMMessage).Methods("POST")
+	r.HandleFunc("/messages", LoadLatestMessage).Methods("GET")
 
 	http.Handle("/", handlers.LoggingHandler(os.Stdout, r))
 

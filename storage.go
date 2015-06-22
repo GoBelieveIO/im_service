@@ -444,6 +444,10 @@ func (storage *Storage) LoadLatestMessages(appid int64, receiver int64, limit in
 		if msg == nil {
 			break
 		}
+		if msg.cmd != MSG_GROUP_IM && msg.cmd != MSG_IM {
+			last_id = off.prev_msgid
+			continue
+		}
 
 		emsg := &EMessage{msgid:off.msgid, msg:msg}
 		messages = append(messages, emsg)

@@ -111,10 +111,7 @@ func (client *StorageConn) ReadEMessage(buf []byte) *EMessage {
 	return emsg
 }
 
-func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64) ([]*EMessage, error) {
-	id := &AppUserID{appid:appid, uid:uid}
-	msg := &Message{cmd:MSG_LOAD_OFFLINE, body:id}
-	SendMessage(client.conn, msg)
+func (client *StorageConn) ReceiveMessages() ([]*EMessage, error) {
 	r := ReceiveMessage(client.conn)
 	if r == nil {
 		client.e = true
@@ -152,6 +149,24 @@ func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64) ([]*EMessa
 		messages[i] = emsg
 	}
 	return messages, nil
+}
+
+func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64) ([]*EMessage, error) {
+	id := &AppUserID{appid:appid, uid:uid}
+	msg := &Message{cmd:MSG_LOAD_OFFLINE, body:id}
+	SendMessage(client.conn, msg)
+	return client.ReceiveMessages()
+}
+
+func (client *StorageConn) LoadLatestMessage(appid int64, uid int64, limit int32) ([]*EMessage, error) {
+	lh := &LoadHistory{}
+	lh.limit = limit
+	lh.app_uid.appid = appid
+	lh.app_uid.uid = uid
+
+	msg := &Message{cmd:MSG_LOAD_HISTORY, body:lh}
+	SendMessage(client.conn, msg)
+	return client.ReceiveMessages()
 }
 
 var nowFunc = time.Now // for testing
