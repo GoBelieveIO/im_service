@@ -14,8 +14,8 @@ from im_client import Client
 
 #调用app自身的登陆接口获取im服务必须的access token
 def login(uid):
-#    URL = "http://demo.gobelieve.io"
-    URL = "http://192.168.33.10"
+    #URL = "http://192.168.33.10"
+    URL = "http://demo.gobelieve.io"
     url = URL + "/auth/token"
     obj = {"uid":uid, "user_name":str(uid)}
     headers = {'Content-Type': 'application/json; charset=UTF-8'}
@@ -57,7 +57,8 @@ def send():
     token = login(2)
     if not token:
         return
-    post_message(token, "test")
+    obj = {"text":"test"}
+    post_message(token, json.dumps(obj))
     
 def recv():
     token = login(1)
@@ -67,7 +68,8 @@ def recv():
     while True:
         client = Client()
         try:
-            r = client.connect_server(token)
+            #host可以使用app自己得地址
+            r = client.connect_server(token, host=None)
             if not r:
                 print "connect fail"
                 time.sleep(1)
