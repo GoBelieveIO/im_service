@@ -136,6 +136,28 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 }
 
+func  SendEMessage(appid int64, uid int64, emsg *EMessage) bool {
+	channel := GetChannel(uid)
+	amsg := &AppMessage{appid:appid, receiver:uid, 
+		msgid:emsg.msgid, msg:emsg.msg}
+	channel.Publish(amsg)
+
+	route := app_route.FindRoute(appid)
+	if route == nil {
+		log.Warning("can't find app route, msg cmd:", 
+			Command(emsg.msg.cmd))
+		return false
+	}
+	clients := route.FindClientSet(uid)
+	if clients != nil || clients.Count() > 0 {
+		for c, _ := range(clients) {
+			c.ewt <- emsg
+		}
+		return true
+	}
+	return false
+}
+
 func SendIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
 
@@ -159,17 +181,8 @@ func SendIMMessage(im *IMMessage, appid int64) {
 	}
 
 	emsg := &EMessage{msgid:msgid, msg:m}
+	SendEMessage(appid, im.receiver, emsg)
 
-	route := app_route.FindRoute(appid)
-	if route == nil {
-		return
-	}
-	clients := route.FindClientSet(im.receiver)
-	if clients != nil {
-		for c, _ := range(clients) {
-			c.ewt <- emsg
-		}
-	}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("peer message sender:%d receiver:%d", im.sender, im.receiver)
 }
@@ -234,7 +247,6 @@ func PostIMMessage(w http.ResponseWriter, req *http.Request) {
 	im.content = content
 
 	SendIMMessage(im, appid)
-
 	log.Info("post im message success")
 	w.WriteHeader(200)
 }
