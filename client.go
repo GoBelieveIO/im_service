@@ -80,7 +80,7 @@ func (client *Client) HandleRemoveClient() {
 	}
 	route.RemoveClient(client)
 	if client.uid > 0 {
-		channel := client.GetChannel(client.uid)
+		channel := GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid)
 	}
 }
@@ -113,13 +113,8 @@ func (client *Client) HandleMessage(msg *Message) {
 	}
 }
 
-func (client *Client) GetStorageConnPool(uid int64) *StorageConnPool {
-	index := uid%int64(len(storage_pools))
-	return storage_pools[index]
-}
-
 func (client *Client) SendOfflineMessage() {
-	storage_pool := client.GetStorageConnPool(client.uid)
+	storage_pool := GetStorageConnPool(client.uid)
 	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)
@@ -139,46 +134,8 @@ func (client *Client) SendOfflineMessage() {
 	}
 }
 
-func (client *Client) SendEMessage(uid int64, emsg *EMessage) bool {
-	channel := client.GetChannel(uid)
-	amsg := &AppMessage{appid:client.appid, receiver:uid, 
-		msgid:emsg.msgid, msg:emsg.msg}
-	channel.Publish(amsg)
-
-	route := app_route.FindRoute(client.appid)
-	if route == nil {
-		log.Warning("can't find app route, msg cmd:", 
-			Command(emsg.msg.cmd))
-		return false
-	}
-	clients := route.FindClientSet(uid)
-	if clients != nil || clients.Count() > 0 {
-		for c, _ := range(clients) {
-			c.ewt <- emsg
-		}
-		return true
-	}
-	return false
-}
-
 func (client *Client) SendMessage(uid int64, msg *Message) bool {
-	channel := client.GetChannel(uid)
-	amsg := &AppMessage{appid:client.appid, receiver:uid, msgid:0, msg:msg}
-	channel.Publish(amsg)
-
-	route := app_route.FindRoute(client.appid)
-	if route == nil {
-		log.Warning("can't find app route, msg cmd:", Command(msg.cmd))
-		return false
-	}
-	clients := route.FindClientSet(uid)
-	if clients != nil {
-		for c, _ := range(clients) {
-			c.wt <- msg
-		}
-		return true
-	}
-	return false
+	return Send0Message(client.appid, uid, msg)
 }
 
 func (client *Client) SendLoginPoint() {
@@ -224,15 +181,10 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.SendLoginPoint()
 	client.SendOfflineMessage()
 	client.AddClient()
-	channel := client.GetChannel(client.uid)
+	channel := GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
-}
-
-func (client *Client) GetChannel(uid int64) *Channel{
-	index := uid%int64(len(channels))
-	return channels[index]
 }
 
 func (client *Client) HandleAuth(login *Authentication, version int) {
@@ -249,7 +201,7 @@ func (client *Client) HandleAuth(login *Authentication, version int) {
 
 	client.SendOfflineMessage()
 	client.AddClient()
-	channel := client.GetChannel(client.uid)
+	channel := GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
@@ -295,27 +247,14 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
-	storage_pool := client.GetStorageConnPool(msg.receiver)
-	storage, err := storage_pool.Get()
+	msgid, err := SaveMessage(client.appid, msg.receiver, m)
 	if err != nil {
-		log.Error("connect storage err:", err)
-		return
-	}
-	defer storage_pool.Release(storage)
-
-	sae := &SAEMessage{}
-	sae.msg = m
-	sae.receivers = make([]*AppUserID, 1)
-	sae.receivers[0] = &AppUserID{appid:client.appid, uid:msg.receiver}
-
-	msgid, err := storage.SaveAndEnqueueMessage(sae)
-	if err != nil {
-		log.Error("saveandequeue message err:", err)
 		return
 	}
 
 	emsg := &EMessage{msgid:msgid, msg:m}
-	client.SendEMessage(msg.receiver, emsg)
+
+	SendEMessage(client.appid, msg.receiver, emsg)
 
 	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 
@@ -338,28 +277,13 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		if member == client.uid {
 			continue
 		}
-
-		storage_pool := client.GetStorageConnPool(member)
-		storage, err := storage_pool.Get()
+		msgid, err := SaveMessage(client.appid, member, m)
 		if err != nil {
-			log.Error("connect storage err:", err)
-			return
-		}
-		defer storage_pool.Release(storage)
-
-		sae := &SAEMessage{}
-		sae.msg = m
-		sae.receivers = make([]*AppUserID, 0, 1)
-		id := &AppUserID{appid:client.appid, uid:member}
-		sae.receivers = append(sae.receivers, id)
-		msgid, err := storage.SaveAndEnqueueMessage(sae)
-		if err != nil {
-			log.Error("saveandequeue message err:", err)
 			return
 		}
 
 		emsg := &EMessage{msgid:msgid, msg:m}
-		client.SendEMessage(member, emsg)
+		SendEMessage(client.appid, member, emsg)
 	}
 
 	
@@ -395,27 +319,13 @@ func (client *Client) HandleACK(ack *MessageACK) {
 		ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
 		m := &Message{cmd: MSG_PEER_ACK, body: ack}
 
-		storage_pool := client.GetStorageConnPool(im.sender)
-		storage, err := storage_pool.Get()
+		msgid, err := SaveMessage(client.appid, im.sender, m)
 		if err != nil {
-			log.Error("connect storage err:", err)
-			return
-		}
-		defer storage_pool.Release(storage)
-		
-		sae := &SAEMessage{}
-		sae.msg = m
-		sae.receivers = make([]*AppUserID, 1)
-		sae.receivers[0] = &AppUserID{appid:client.appid, uid:im.sender}
-
-		msgid, err := storage.SaveAndEnqueueMessage(sae)
-		if err != nil {
-			log.Error("saveandequeue message err:", err)
 			return
 		}
 
 		emsg := &EMessage{msgid:msgid, msg:m}
-		client.SendEMessage(im.sender, emsg)
+		SendEMessage(client.appid, im.sender, emsg)
 	}
 }
 
@@ -429,7 +339,7 @@ func (client *Client) HandlePing() {
 }
 
 func (client *Client) DequeueMessage(msgid int64) {
-	storage_pool := client.GetStorageConnPool(client.uid)
+	storage_pool := GetStorageConnPool(client.uid)
 	storage, err := storage_pool.Get()
 	if err != nil {
 		log.Error("connect storage err:", err)

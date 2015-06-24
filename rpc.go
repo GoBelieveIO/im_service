@@ -10,17 +10,6 @@ import "io/ioutil"
 import "github.com/bitly/go-simplejson"
 
 
-func GetStorageConnPool(uid int64) *StorageConnPool {
-	index := uid%int64(len(storage_pools))
-	return storage_pools[index]
-}
-
-func GetChannel(uid int64) *Channel{
-	index := uid%int64(len(channels))
-	return channels[index]
-}
-
-
 func SendGroupNotification(appid int64, gid int64, 
 	notification string, members IntSet) {
 
@@ -136,47 +125,11 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 }
 
-func  SendEMessage(appid int64, uid int64, emsg *EMessage) bool {
-	channel := GetChannel(uid)
-	amsg := &AppMessage{appid:appid, receiver:uid, 
-		msgid:emsg.msgid, msg:emsg.msg}
-	channel.Publish(amsg)
-
-	route := app_route.FindRoute(appid)
-	if route == nil {
-		log.Warning("can't find app route, msg cmd:", 
-			Command(emsg.msg.cmd))
-		return false
-	}
-	clients := route.FindClientSet(uid)
-	if clients != nil || clients.Count() > 0 {
-		for c, _ := range(clients) {
-			c.ewt <- emsg
-		}
-		return true
-	}
-	return false
-}
 
 func SendIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
-
-	storage_pool := GetStorageConnPool(im.receiver)
-	storage, err := storage_pool.Get()
+	msgid, err := SaveMessage(appid, im.receiver, m)
 	if err != nil {
-		log.Error("connect storage err:", err)
-		return
-	}
-	defer storage_pool.Release(storage)
-
-	sae := &SAEMessage{}
-	sae.msg = m
-	sae.receivers = make([]*AppUserID, 1)
-	sae.receivers[0] = &AppUserID{appid:appid, uid:im.receiver}
-
-	msgid, err := storage.SaveAndEnqueueMessage(sae)
-	if err != nil {
-		log.Error("saveandequeue message err:", err)
 		return
 	}
 

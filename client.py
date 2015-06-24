@@ -6,6 +6,7 @@ import requests
 import json
 import uuid
 import base64
+import md5
 
 MSG_HEARTBEAT = 1
 #MSG_AUTH = 2
@@ -130,7 +131,8 @@ URL = "http://127.0.0.1:23002"
 def login(uid):
     url = URL + "/auth/grant"
     obj = {"uid":uid, "user_name":str(uid)}
-    basic = base64.b64encode(str(APP_ID) + ":" + APP_SECRET)
+    secret = md5.new(APP_SECRET).digest().encode("hex")
+    basic = base64.b64encode(str(APP_ID) + ":" + secret)
     headers = {'Content-Type': 'application/json; charset=UTF-8',
                'Authorization': 'Basic ' + basic}
      

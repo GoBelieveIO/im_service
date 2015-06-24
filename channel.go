@@ -42,14 +42,12 @@ type Channel struct {
 	subscribers     map[int64]*Subscriber
 
 	dispatch        func(*AppMessage)
-	dispatch_group  func(*AppMessage)
 }
 
-func NewChannel(addr string, f func(*AppMessage), g func(*AppMessage)) *Channel {
+func NewChannel(addr string, f func(*AppMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
-	channel.dispatch_group = g
 	channel.addr = addr
 	channel.wt = make(chan *Message, 10)
 	return channel

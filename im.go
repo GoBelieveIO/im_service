@@ -74,13 +74,86 @@ func NewRedisPool(server, password string) *redis.Pool {
 	}
 }
 
-func SendAppMessage(amsg *AppMessage, uid int64) {
+func GetStorageConnPool(uid int64) *StorageConnPool {
+	index := uid%int64(len(storage_pools))
+	return storage_pools[index]
+}
+
+func GetChannel(uid int64) *Channel{
+	index := uid%int64(len(channels))
+	return channels[index]
+}
+
+
+func SaveMessage(appid int64, uid int64, m *Message) (int64, error) {
+	storage_pool := GetStorageConnPool(uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return 0, err
+	}
+	defer storage_pool.Release(storage)
+
+	sae := &SAEMessage{}
+	sae.msg = m
+	sae.receivers = make([]*AppUserID, 1)
+	sae.receivers[0] = &AppUserID{appid:appid, uid:uid}
+
+	msgid, err := storage.SaveAndEnqueueMessage(sae)
+	if err != nil {
+		log.Error("saveandequeue message err:", err)
+		return 0, err
+	}
+	return msgid, nil
+}
+
+func SendEMessage(appid int64, uid int64, emsg *EMessage) bool {
+	amsg := &AppMessage{appid:appid, receiver:uid, 
+		msgid:emsg.msgid, msg:emsg.msg}
+	return SendAppMessage(amsg, uid)
+}
+
+func Send0Message(appid int64, uid int64, msg *Message) bool {
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:msg}
+	SendAppMessage(amsg, uid)
+	return true
+}
+
+func SendAppMessage(amsg *AppMessage, uid int64) bool {
+	channel := GetChannel(uid)
+	channel.Publish(amsg)
+
+	route := app_route.FindRoute(amsg.appid)
+	if route == nil {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		return false
+	}
+	clients := route.FindClientSet(uid)
+	if len(clients) == 0 {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		return false
+	}
+	if clients != nil {
+		for c, _ := range(clients) {
+			if amsg.msgid > 0 {
+				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+			} else {
+				c.wt <- amsg.msg
+			}
+		}
+	}
+	return true
+}
+
+func DispatchAppMessage(amsg *AppMessage) {
+	log.Info("dispatch app message:", Command(amsg.msg.cmd))
+
 	route := app_route.FindRoute(amsg.appid)
 	if route == nil {
 		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
 		return
 	}
-	clients := route.FindClientSet(uid)
+	clients := route.FindClientSet(amsg.receiver)
 	if len(clients) == 0 {
 		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
 		return
@@ -94,11 +167,6 @@ func SendAppMessage(amsg *AppMessage, uid int64) {
 			}
 		}
 	}	
-}
-
-func DispatchAppMessage(amsg *AppMessage) {
-	log.Info("dispatch app message:", Command(amsg.msg.cmd))
-	SendAppMessage(amsg, amsg.receiver)
 }
 
 func DialStorageFun(addr string) func()(*StorageConn, error) {
@@ -131,8 +199,6 @@ func main() {
 	
 	redis_pool = NewRedisPool(config.redis_address, "")
 
-
-
 	storage_pools = make([]*StorageConnPool, 0)
 	for _, addr := range(config.storage_addrs) {
 		f := DialStorageFun(addr)
@@ -142,7 +208,7 @@ func main() {
 
 	channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, nil)
+		channel := NewChannel(addr, DispatchAppMessage)
 		channel.Start()
 		channels = append(channels, channel)
 	}
