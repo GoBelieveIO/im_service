@@ -120,7 +120,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_LEAVE_ROOM:
 		client.HandleLeaveRoom(msg.body.(*Room))
 	case MSG_ROOM_IM:
-		client.HandleRoomIM(msg.body.(*RoomMessage))
+		client.HandleRoomIM(msg.body.(*RoomMessage), msg.seq)
 	default:
 		log.Info("unknown msg:", msg.cmd)
 	}
@@ -398,7 +398,7 @@ func (client *Client) HandleLeaveRoom(room *Room) {
 	client.room_id = 0
 }
 
-func (client *Client) HandleRoomIM(room_im *RoomMessage) {
+func (client *Client) HandleRoomIM(room_im *RoomMessage, seq int) {
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -422,6 +422,8 @@ func (client *Client) HandleRoomIM(room_im *RoomMessage) {
 	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:m}
 	channel := GetRoomChannel(client.room_id)
 	channel.PublishRoom(amsg)
+
+	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 }
 
 func (client *Client) HandlePing() {
