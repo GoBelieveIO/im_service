@@ -44,6 +44,10 @@ const MSG_PONG = 14
 const MSG_AUTH_TOKEN = 15
 const MSG_LOGIN_POINT = 16
 const MSG_RT = 17
+const MSG_ENTER_ROOM = 18
+const MSG_LEAVE_ROOM = 19
+const MSG_ROOM_IM = 20
+
 
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
@@ -74,6 +78,9 @@ func init() {
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
 	message_creators[MSG_LOGIN_POINT] = func()IMessage{return new(LoginPoint)}
 	message_creators[MSG_RT] = func()IMessage{return new(RTMessage)}
+	message_creators[MSG_ENTER_ROOM] = func()IMessage{return new(Room)}
+	message_creators[MSG_LEAVE_ROOM] = func()IMessage{return new(Room)}
+	message_creators[MSG_ROOM_IM] = func()IMessage{return &RoomMessage{new(RTMessage)}}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
 	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -93,6 +100,9 @@ func init() {
 	message_descriptions[MSG_AUTH_TOKEN] = "MSG_AUTH_TOKEN"
 	message_descriptions[MSG_LOGIN_POINT] = "MSG_LOGIN_POINT"
 	message_descriptions[MSG_RT] = "MSG_RT"
+	message_descriptions[MSG_ENTER_ROOM] = "MSG_ENTER_ROOM"
+	message_descriptions[MSG_LEAVE_ROOM] = "MSG_LEAVE_ROOM"
+	message_descriptions[MSG_ROOM_IM] = "MSG_ROOM_IM"
 }
 
 type Command int
@@ -700,6 +710,31 @@ func (notification *GroupNotification) FromData(buff []byte) bool {
 	return true
 }
 
+type Room int64
+func (room *Room) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, int64(*room))
+	buf := buffer.Bytes()
+	return buf	
+}
+
+func (room *Room) FromData(buff []byte) bool {
+	if len(buff) < 8 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, (*int64)(room))
+	return true
+}
+
+func (room *Room) RoomID() int64 {
+	return int64(*room)
+}
+
+type RoomMessage struct {
+	*RTMessage
+}
+
 type MessageOnlineState struct {
 	sender int64
 	online int32
@@ -767,6 +802,31 @@ func (id *AppUserID) FromData(buff []byte) bool {
 	buffer := bytes.NewBuffer(buff)	
 	binary.Read(buffer, binary.BigEndian, &id.appid)
 	binary.Read(buffer, binary.BigEndian, &id.uid)
+
+	return true
+}
+
+type AppRoomID struct {
+	appid    int64
+	room_id      int64
+}
+
+func (id *AppRoomID) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.appid)
+	binary.Write(buffer, binary.BigEndian, id.room_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *AppRoomID) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.appid)
+	binary.Read(buffer, binary.BigEndian, &id.room_id)
 
 	return true
 }

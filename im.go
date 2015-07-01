@@ -84,6 +84,11 @@ func GetChannel(uid int64) *Channel{
 	return channels[index]
 }
 
+func GetRoomChannel(room_id int64) *Channel {
+	index := room_id%int64(len(channels))
+	return channels[index]
+}
+
 
 func SaveMessage(appid int64, uid int64, m *Message) (int64, error) {
 	storage_pool := GetStorageConnPool(uid)
@@ -125,12 +130,12 @@ func SendAppMessage(amsg *AppMessage, uid int64) bool {
 
 	route := app_route.FindRoute(amsg.appid)
 	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return false
 	}
 	clients := route.FindClientSet(uid)
 	if len(clients) == 0 {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return false
 	}
 	if clients != nil {
@@ -150,24 +155,38 @@ func DispatchAppMessage(amsg *AppMessage) {
 
 	route := app_route.FindRoute(amsg.appid)
 	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return
 	}
 	clients := route.FindClientSet(amsg.receiver)
 	if len(clients) == 0 {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d", amsg.appid, amsg.receiver)
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return
 	}
-	if clients != nil {
-		for c, _ := range(clients) {
-			if amsg.msgid > 0 {
-				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
-			} else {
-				c.wt <- amsg.msg
-			}
+	for c, _ := range(clients) {
+		if amsg.msgid > 0 {
+			c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+		} else {
+			c.wt <- amsg.msg
 		}
+	}
+}
+
+func DispatchRoomMessage(amsg *AppMessage) {
+	log.Info("dispatch room message", Command(amsg.msg.cmd))
+	room_id := amsg.receiver
+	route := app_route.FindOrAddRoute(amsg.appid)
+	clients := route.FindRoomClientSet(room_id)
+
+	if len(clients) == 0 {
+		log.Warningf("can't dispatch room message, appid:%d room id:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+		return
+	}
+	for c, _ := range(clients) {
+		c.wt <- amsg.msg
 	}	
 }
+
 
 func DialStorageFun(addr string) func()(*StorageConn, error) {
 	f := func() (*StorageConn, error){
@@ -208,7 +227,7 @@ func main() {
 
 	channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage)
+		channel := NewChannel(addr, DispatchAppMessage, DispatchRoomMessage)
 		channel.Start()
 		channels = append(channels, channel)
 	}

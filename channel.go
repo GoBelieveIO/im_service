@@ -26,11 +26,13 @@ import log "github.com/golang/glog"
 
 type Subscriber struct {
 	uids map[int64]int
+	room_ids map[int64]int
 }
 
 func NewSubscriber() *Subscriber {
 	s := new(Subscriber)
 	s.uids = make(map[int64]int)
+	s.room_ids = make(map[int64]int)
 	return s
 }
 
@@ -42,12 +44,15 @@ type Channel struct {
 	subscribers     map[int64]*Subscriber
 
 	dispatch        func(*AppMessage)
+	dispatch_room   func(*AppMessage)
+
 }
 
-func NewChannel(addr string, f func(*AppMessage)) *Channel {
+func NewChannel(addr string, f func(*AppMessage), f2 func(*AppMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
+	channel.dispatch_room = f2
 	channel.addr = addr
 	channel.wt = make(chan *Message, 10)
 	return channel
@@ -127,10 +132,95 @@ func (channel *Channel) Publish(amsg *AppMessage) {
 	channel.wt <- msg
 }
 
+//返回添加前的计数
+func (channel *Channel) AddSubscribeRoom(appid, room_id int64) int {
+	channel.mutex.Lock()
+	defer channel.mutex.Unlock()
+	subscriber, ok := channel.subscribers[appid]
+	if !ok {
+		subscriber = NewSubscriber()
+		channel.subscribers[appid] = subscriber
+	}
+	//不存在count==0
+	count := subscriber.room_ids[room_id]
+	subscriber.room_ids[room_id] = count + 1
+	return count
+}
+
+//返回删除前的计数
+func (channel *Channel) RemoveSubscribeRoom(appid, room_id int64) int {
+	channel.mutex.Lock()
+	defer channel.mutex.Unlock()
+	subscriber, ok := channel.subscribers[appid]
+	if !ok {
+		return 0
+	}
+
+	count, ok := subscriber.room_ids[room_id]
+	if ok {
+		if count > 1 {
+			subscriber.room_ids[room_id] = count - 1
+		} else {
+			delete(subscriber.room_ids, room_id)
+		}
+	}
+	return count
+}
+
+func (channel *Channel) GetAllRoomSubscriber() []*AppRoomID {
+	channel.mutex.Lock()
+	defer channel.mutex.Unlock()
+
+	subs := make([]*AppRoomID, 0, 100)
+	for appid, s := range channel.subscribers {
+		for room_id, _ := range s.room_ids {
+			id := &AppRoomID{appid: appid, room_id: room_id}
+			subs = append(subs, id)
+		}
+	}
+	return subs
+}
+
+func (channel *Channel) SubscribeRoom(appid int64, room_id int64) {
+	count := channel.AddSubscribeRoom(appid, room_id)
+	log.Info("sub room count:", count)
+	if count == 0 {
+		id := &AppRoomID{appid: appid, room_id: room_id}
+		msg := &Message{cmd: MSG_SUBSCRIBE_ROOM, body: id}
+		channel.wt <- msg
+	}
+}
+
+func (channel *Channel) UnsubscribeRoom(appid int64, room_id int64) {
+	count := channel.RemoveSubscribeRoom(appid, room_id)
+	log.Info("unsub room count:", count)
+	if count == 1 {
+		id := &AppRoomID{appid: appid, room_id: room_id}
+		msg := &Message{cmd: MSG_UNSUBSCRIBE_ROOM, body: id}
+		channel.wt <- msg
+	}
+}
+
+func (channel *Channel) PublishRoom(amsg *AppMessage) {
+	msg := &Message{cmd: MSG_PUBLISH_ROOM, body: amsg}
+	channel.wt <- msg
+}
+
 func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 	subs := channel.GetAllSubscriber()
 	for _, id := range(subs) {
 		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+		seq = seq + 1
+		msg.seq = seq
+		SendMessage(conn, msg)
+	}
+	return seq
+}
+
+func (channel *Channel) ReSubscribeRoom(conn *net.TCPConn, seq int) int {
+	subs := channel.GetAllRoomSubscriber()
+	for _, id := range(subs) {
+		msg := &Message{cmd: MSG_SUBSCRIBE_ROOM, body: id}
 		seq = seq + 1
 		msg.seq = seq
 		SendMessage(conn, msg)
@@ -144,6 +234,7 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 	closed_ch := make(chan bool)
 	seq := 0
 	seq = channel.ReSubscribe(conn, seq)
+	seq = channel.ReSubscribeRoom(conn, seq)
 
 	go func() {
 		for {
@@ -157,6 +248,11 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 				amsg := msg.body.(*AppMessage)
 				if channel.dispatch != nil {
 					channel.dispatch(amsg)
+				}
+			} else if msg.cmd == MSG_PUBLISH_ROOM {
+				amsg := msg.body.(*AppMessage)
+				if channel.dispatch_room != nil {
+					channel.dispatch_room(amsg)
 				}
 			} else {
 				log.Error("unknown message cmd:", msg.cmd)

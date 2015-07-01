@@ -65,16 +65,33 @@ func FindClientSet(id *AppUserID) ClientSet {
 	return s
 }
 
+
+func FindRoomClientSet(id *AppRoomID) ClientSet {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	s := NewClientSet()
+
+	for c := range(clients) {
+		if c.ContainAppRoomID(id) {
+			s.Add(c)
+		}
+	}
+	return s
+}
+
 type Route struct {
 	appid     int64
 	mutex     sync.Mutex
 	uids      IntSet
+	room_ids  IntSet
 }
 
 func NewRoute(appid int64) *Route {
 	r := new(Route)
 	r.appid = appid
 	r.uids = NewIntSet()
+	r.room_ids = NewIntSet()
 	return r
 }
 
@@ -112,6 +129,27 @@ func (route *Route) RemoveUserID(uid int64) {
 	route.uids.Remove(uid)
 }
 
+func (route *Route) ContainRoomID(room_id int64) bool {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+	
+	return route.room_ids.IsMember(room_id)
+}
+
+func (route *Route) AddRoomID(room_id int64) {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+
+	route.room_ids.Add(room_id)
+}
+
+func (route *Route) RemoveRoomID(room_id int64) {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+
+	route.room_ids.Remove(room_id)
+}
+
 
 type Client struct {
 	wt     chan *Message
@@ -138,6 +176,15 @@ func (client *Client) ContainAppUserID(id *AppUserID) bool {
 }
 
 
+func (client *Client) ContainAppRoomID(id *AppRoomID) bool {
+	route := client.app_route.FindRoute(id.appid)
+	if route == nil {
+		return false
+	}
+
+	return route.ContainRoomID(id.room_id)
+}
+
 func (client *Client) Read() {
 	AddClient(client)
 	for {
@@ -160,6 +207,12 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	case MSG_PUBLISH:
 		client.HandlePublish(msg.body.(*AppMessage))
+	case MSG_SUBSCRIBE_ROOM:
+		client.HandleSubscribeRoom(msg.body.(*AppRoomID))
+	case MSG_UNSUBSCRIBE_ROOM:
+		client.HandleUnsubscribeRoom(msg.body.(*AppRoomID))
+	case MSG_PUBLISH_ROOM:
+		client.HandlePublishRoom(msg.body.(*AppMessage))
 	default:
 		log.Warning("unknown message cmd:", msg.cmd)
 	}
@@ -253,6 +306,36 @@ func (client *Client) HandlePublish(amsg *AppMessage) {
 		c.wt <- msg
 	}
 }
+
+func (client *Client) HandleSubscribeRoom(id *AppRoomID) {
+	log.Infof("subscribe appid:%d room id:%d", id.appid, id.room_id)
+	route := client.app_route.FindOrAddRoute(id.appid)
+	route.AddRoomID(id.room_id)
+}
+
+func (client *Client) HandleUnsubscribeRoom(id *AppRoomID) {
+	log.Infof("unsubscribe appid:%d room id:%d", id.appid, id.room_id)
+	route := client.app_route.FindOrAddRoute(id.appid)
+	route.RemoveRoomID(id.room_id)
+}
+
+func (client *Client) HandlePublishRoom(amsg *AppMessage) {
+	log.Infof("publish room message appid:%d room id:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+	receiver := &AppRoomID{appid:amsg.appid, room_id:amsg.receiver}
+	s := FindRoomClientSet(receiver)
+
+	msg := &Message{cmd:MSG_PUBLISH_ROOM, body:amsg}
+	for c := range(s) {
+		//不发送给自身
+		if client == c {
+			continue
+		}
+		log.Info("publish room message")
+		c.wt <- msg
+	}
+}
+
+
 
 func (client *Client) Write() {
 	seq := 0

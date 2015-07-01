@@ -37,6 +37,8 @@ type Client struct {
 	wt     chan *Message
 	ewt    chan *EMessage
 
+	room_id int64
+
 	appid  int64
 	uid    int64
 	device_id string
@@ -79,6 +81,11 @@ func (client *Client) HandleRemoveClient() {
 		return
 	}
 	route.RemoveClient(client)
+	if client.room_id > 0 {
+		route.RemoveRoomClient(client.room_id, client)
+		channel := GetRoomChannel(client.room_id)
+		channel.UnsubscribeRoom(client.appid, client.room_id)
+	}
 	if client.uid > 0 {
 		channel := GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid)
@@ -108,6 +115,12 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleSubsribe(msg.body.(*MessageSubsribeState))
 	case MSG_RT:
 		client.HandleRTMessage(msg)
+	case MSG_ENTER_ROOM:
+		client.HandleEnterRoom(msg.body.(*Room))
+	case MSG_LEAVE_ROOM:
+		client.HandleLeaveRoom(msg.body.(*Room))
+	case MSG_ROOM_IM:
+		client.HandleRoomIM(msg.body.(*RoomMessage))
 	default:
 		log.Info("unknown msg:", msg.cmd)
 	}
@@ -240,6 +253,11 @@ func (client *Client) HandleRTMessage(msg *Message) {
 }
 
 func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
+	if client.uid == 0 {
+		log.Warning("client has't been authenticated")
+		return
+	}
+
 	if msg.sender != client.uid {
 		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
 		return
@@ -263,6 +281,11 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 }
 
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
+	if client.uid == 0 {
+		log.Warning("client has't been authenticated")
+		return
+	}
+
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_GROUP_IM, body: msg}
 
@@ -327,6 +350,78 @@ func (client *Client) HandleACK(ack *MessageACK) {
 		emsg := &EMessage{msgid:msgid, msg:m}
 		SendEMessage(client.appid, im.sender, emsg)
 	}
+}
+
+func (client *Client) HandleEnterRoom(room *Room){
+	if client.uid == 0 {
+		log.Warning("client has't been authenticated")
+		return
+	}
+
+	room_id := room.RoomID()
+	log.Info("enter room id:", room_id)
+	if room_id == 0 || client.room_id == room_id {
+		return
+	}
+	route := app_route.FindOrAddRoute(client.appid)
+	if client.room_id > 0 {
+		channel := GetRoomChannel(client.room_id)
+		channel.UnsubscribeRoom(client.appid, client.room_id)
+		route.RemoveRoomClient(client.room_id, client)
+	}
+
+	client.room_id = room_id
+	route.AddRoomClient(client.room_id, client)
+	channel := GetRoomChannel(client.room_id)
+	channel.SubscribeRoom(client.appid, client.room_id)
+}
+
+func (client *Client) HandleLeaveRoom(room *Room) {
+	if client.uid == 0 {
+		log.Warning("client has't been authenticated")
+		return
+	}
+
+	room_id := room.RoomID()
+	log.Info("leave room id:", room_id)
+	if room_id == 0 {
+		return
+	}
+	if client.room_id != room_id {
+		return
+	}
+
+	route := app_route.FindOrAddRoute(client.appid)
+	route.RemoveRoomClient(client.room_id, client)
+	channel := GetRoomChannel(client.room_id)
+	channel.UnsubscribeRoom(client.appid, client.room_id)
+	client.room_id = 0
+}
+
+func (client *Client) HandleRoomIM(room_im *RoomMessage) {
+	if client.uid == 0 {
+		log.Warning("client has't been authenticated")
+		return
+	}
+	room_id := room_im.receiver
+	if room_id != client.room_id {
+		log.Warningf("room id:%d is't client's room id:%d\n", room_id, client.room_id)
+		return
+	}
+
+	m := &Message{cmd:MSG_ROOM_IM, body:room_im}
+	route := app_route.FindOrAddRoute(client.appid)
+	clients := route.FindRoomClientSet(room_id)
+	for c, _ := range(clients) {
+		if c == client {
+			continue
+		}
+		c.wt <- m
+	}
+
+	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:m}
+	channel := GetRoomChannel(client.room_id)
+	channel.PublishRoom(amsg)
 }
 
 func (client *Client) HandlePing() {

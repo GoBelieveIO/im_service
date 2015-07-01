@@ -25,6 +25,9 @@ MSG_PONG = 14
 MSG_AUTH_TOKEN = 15
 MSG_LOGIN_POINT = 16
 MSG_RT = 17
+MSG_ENTER_ROOM = 18
+MSG_LEAVE_ROOM = 19
+MSG_ROOM_IM = 20
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -44,12 +47,14 @@ class IMMessage:
         self.timestamp = 0
         self.msgid = 0
         self.content = ""
+
+#RoomMessage
 class RTMessage:
     def __init__(self):
         self.sender = 0
         self.receiver = 0
         self.content = ""
-    
+
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
         b = struct.pack("!BB", msg.platform_id, len(msg.token)) + msg.token + struct.pack("!B", len(msg.device_id)) + msg.device_id
@@ -61,7 +66,7 @@ def send_message(cmd, seq, msg, sock):
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
         sock.sendall(h+b+msg.content)
-    elif cmd == MSG_RT:
+    elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         length = 16 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qq", msg.sender, msg.receiver)
@@ -78,6 +83,10 @@ def send_message(cmd, seq, msg, sock):
     elif cmd == MSG_PING:
         h = struct.pack("!iibbbb", 0, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h)
+    elif cmd == MSG_ENTER_ROOM or cmd == MSG_LEAVE_ROOM:
+        h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!q", msg)
+        sock.sendall(h+b)
     else:
         print "eeeeee"
 
@@ -106,7 +115,7 @@ def recv_message(sock):
         im.sender, im.receiver, _, _ = struct.unpack("!qqii", content[:24])
         im.content = content[24:]
         return cmd, seq, im
-    elif cmd == MSG_RT:
+    elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         rt = RTMessage()
         rt.sender, rt.receiver, = struct.unpack("!qq", content[:16])
         rt.content = content[16:]
@@ -249,7 +258,6 @@ def recv_group_message_client(uid, port=23000):
     recv_client(uid, port, handle_message)
     print "recv group message success"
 
-
 def notification_recv_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_GROUP_NOTIFICATION:
@@ -263,6 +271,51 @@ def notification_recv_client(uid, port=23000):
             return False
     recv_client(uid, port, handle_message)
     print "recv notification success"
+
+def recv_room_client(uid, port, room_id, handler):
+    global task
+    sock, seq =  connect_server(uid, port)
+
+    seq += 1
+    send_message(MSG_ENTER_ROOM, seq, room_id, sock)
+
+    while True:
+        cmd, s, msg = recv_message(sock)
+        seq += 1
+        send_message(MSG_ACK, seq, s, sock)
+        if handler(cmd, s, msg):
+            break
+    task += 1
+
+def recv_room_message_client(uid, room_id, port=23000):
+    def handle_message(cmd, s, msg):
+        if cmd == MSG_ROOM_IM:
+            print "cmd:", cmd, msg.content, msg.sender, msg.receiver
+            return True
+        else:
+            print "cmd:", cmd, msg
+            return False
+
+    recv_room_client(uid, port, room_id, handle_message)
+    print "recv room message success"
+
+
+def send_room_message_client(uid, room_id):
+    global task
+    sock, seq =  connect_server(uid, 23000)
+
+    seq += 1
+    send_message(MSG_ENTER_ROOM, seq, room_id, sock)
+    
+    im = RTMessage()
+    im.sender = uid
+    im.receiver = room_id
+    im.content = "test room im"
+    seq += 1
+    send_message(MSG_ROOM_IM, seq, im, sock)
+    task += 1
+    print "send success"
+
 
 def send_rt_client(uid, receiver):
     global task
@@ -593,9 +646,34 @@ def TestGroupNotification():
 
     print "test group notification completed"  
 
+def _TestRoomMessage(port):
+    global task
+    task = 0
+ 
+    room_id = 1
+    t3 = threading.Thread(target=recv_room_message_client, args=(13635273143, room_id, port))
+    t3.setDaemon(True)
+    t3.start()
+
+    time.sleep(1)
     
+    t2 = threading.Thread(target=send_room_message_client, args=(13635273142, room_id))
+    t2.setDaemon(True)
+    t2.start()
+    
+    while task < 2:
+        time.sleep(1)
+
+    print "test room message completed"
+
+def TestRoomMessage():
+    _TestRoomMessage(23000)
+
+def TestClusterRoomMessage():
+    _TestRoomMessage(24000)
+
 def main():
-    cluster = False
+    cluster = True
      
     TestBindToken()
     time.sleep(1)
@@ -618,7 +696,13 @@ def main():
      
     TestRTSendAndRecv()
     time.sleep(1)
-     
+    
+    TestRoomMessage()
+    time.sleep(1)
+
+    if cluster:
+        TestClusterRoomMessage()
+
     TestSendAndRecv()
     time.sleep(1)
     TestOffline()
