@@ -33,8 +33,9 @@ func Test_SetAndEnqueue() {
 	m := &Message{cmd:MSG_IM, body:im}
 	sae := &SAEMessage{}
 	sae.msg = m
-	sae.receivers = make([]*AppUserID, 1)
-	sae.receivers[0] = &AppUserID{appid:appid, uid:1000}
+	sae.appid = appid
+	sae.receivers = make([]int64, 1)
+	sae.receivers[0] = 1000
 
 	msgid, err := storage.SaveAndEnqueueMessage(sae)
 	if err != nil {
@@ -77,8 +78,9 @@ func benchmark() {
 		m := &Message{cmd:MSG_IM, body:im}
 		sae := &SAEMessage{}
 		sae.msg = m
-		sae.receivers = make([]*AppUserID, 1)
-		sae.receivers[0] = &AppUserID{appid:appid, uid:1000}
+		sae.appid = appid
+		sae.receivers = make([]int64, 1)
+		sae.receivers[0] = 1000
 
 		_, err := storage.SaveAndEnqueueMessage(sae)
 		if err != nil {

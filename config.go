@@ -38,6 +38,8 @@ type Config struct {
 type StorageConfig struct {
 	listen              string
 	storage_root        string
+	mysqldb_datasource  string
+	redis_address       string
 	sync_listen         string
 	master_address      string
 }
@@ -126,6 +128,8 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 
 	config.listen = get_string(app_cfg, "listen")
 	config.storage_root = get_string(app_cfg, "storage_root")
+	config.redis_address = get_string(app_cfg, "redis_address")
+	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.sync_listen = get_string(app_cfg, "sync_listen")
 	config.master_address = get_opt_string(app_cfg, "master_address")
 	return config

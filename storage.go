@@ -34,76 +34,13 @@ const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
 
-type OfflineComparer struct{}
-
-//appid, uid, msgid
-func (oc OfflineComparer) Split(a []byte) ([]byte, []byte, []byte) {
-	index1 := bytes.IndexByte(a, '_')
-	if index1 == -1 || index1 + 1 >= len(a) {
-		return nil, nil, nil
-	}
-	index2 := bytes.IndexByte(a[index1+1:], '_')
-	if index2 == -1 || index2 + 1 >= len(a) {
-		return nil, nil, nil
-	}
-	
-	return a[:index1], a[index1+1:index1+1+index2], a[index1+1+index2+1:]
-}
-
-func (oc OfflineComparer) Compare(a, b []byte) int {
-	p1, p2, p3 := oc.Split(a)
-	p4, p5, p6 := oc.Split(b)
-
-	if p1 == nil || p4 == nil {
-		log.Infof("can't find seperate, a:%s b:%s compare bytes...\n", string(a), string(b))
-		return bytes.Compare(a, b)
-	}
-
-	r1 := bytes.Compare(p1, p4)
-	if r1 != 0 {
-		return r1
-	}
-
-	r2 := bytes.Compare(p2, p5)
-	if r2 != 0 {
-		return r2
-	}
-
-	v1, err1 := strconv.ParseInt(string(p3), 10, 64)
-	v2, err2 := strconv.ParseInt(string(p6), 10, 64)
-	if err1 != nil || err2 != nil {
-		log.Infof("parse int err, a:%s b:%s compare bytes...\n", string(a), string(b))
-		return bytes.Compare(p3, p6)
-	}
-
-	if v1 < v2 {
-		return -1
-	} else if v1 == v2 {
-		return 0
-	} else {
-		return 1
-	}
-}
-
-func (OfflineComparer) Name() string {
-	return "im.OfflineComparator"
-}
-
-func (OfflineComparer) Separator(dst, a, b []byte) []byte {
-	return nil
-}
-
-func (OfflineComparer) Successor(dst, b []byte) []byte {
-
-	return nil
-}
-
 
 type Storage struct {
-	root  string
-	db    *leveldb.DB
-	mutex sync.Mutex
-	file  *os.File
+	root      string
+	db        *leveldb.DB
+	group_db  *leveldb.DB
+	mutex     sync.Mutex
+	file      *os.File
 }
 
 func NewStorage(root string) *Storage {
@@ -134,13 +71,23 @@ func NewStorage(root string) *Storage {
 	storage.file = file
 
 	path = fmt.Sprintf("%s/%s", storage.root, "offline")
-	opt := &opt.Options{Comparer:OfflineComparer{}}
-	db, err := leveldb.OpenFile(path, opt)
+	option := &opt.Options{Comparer:OfflineComparer{}}
+	db, err := leveldb.OpenFile(path, option)
 	if err != nil {
 		log.Fatal("open leveldb:", err)
 	}
 
 	storage.db = db
+
+	path = fmt.Sprintf("%s/%s", storage.root, "group_offline")
+	option = &opt.Options{Comparer:GroupOfflineComparer{}}
+	db, err = leveldb.OpenFile(path, option)
+	if err != nil {
+		log.Fatal("open leveldb:", err)
+	}
+
+	storage.group_db = db
+
 	
 	return storage
 }
@@ -257,8 +204,13 @@ func (storage *Storage) SaveMessage(msg *Message) int64 {
 	return msgid
 }
 
-func (storage *Storage) AddOffline(msg_id int64, appid int64, receiver int64) {
+func (storage *Storage) OfflineKey(msg_id int64, appid int64, receiver int64) string {
 	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
+	return key
+}
+
+func (storage *Storage) AddOffline(msg_id int64, appid int64, receiver int64) {
+	key := storage.OfflineKey(msg_id, appid, receiver)
 	value := fmt.Sprintf("%d", msg_id)
 	err := storage.db.Put([]byte(key), []byte(value), nil)
 	if err != nil {
@@ -268,7 +220,7 @@ func (storage *Storage) AddOffline(msg_id int64, appid int64, receiver int64) {
 }
 
 func (storage *Storage) RemoveOffline(msg_id int64, appid int64, receiver int64) {
-	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
+	key := storage.OfflineKey(msg_id, appid, receiver)
 	err := storage.db.Delete([]byte(key), nil)
 	if err != nil {
 		//can't get ErrNotFound
@@ -277,7 +229,7 @@ func (storage *Storage) RemoveOffline(msg_id int64, appid int64, receiver int64)
 }
 
 func (storage *Storage) HasOffline(msg_id int64, appid int64, receiver int64) bool {
-	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
+	key := storage.OfflineKey(msg_id, appid, receiver)
 	has, err := storage.db.Has([]byte(key), nil)
 	if err != nil {
 		log.Error("check key err:", err)
@@ -320,7 +272,6 @@ func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64
 
 	last_id, _ := storage.GetLastMessageID(appid, receiver)
 
-
 	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, prev_msgid:last_id}
 
 	msg := &Message{cmd:MSG_OFFLINE, body:off}
@@ -339,6 +290,65 @@ func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64
 	storage.RemoveOffline(msg_id, appid, receiver)
 	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
 	msg := &Message{cmd:MSG_ACK_IN, body:off}
+	storage.SaveMessage(msg)
+}
+
+
+func (storage *Storage) GroupOfflineKey(msg_id int64, appid int64, gid int64, receiver int64) string {
+	key := fmt.Sprintf("%d_%d_%d_%d", appid, gid, receiver, msg_id)
+	return key
+}
+
+func (storage *Storage) AddGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
+	key := storage.GroupOfflineKey(msg_id, appid, gid, receiver)
+	value := fmt.Sprintf("%d", msg_id)
+	err := storage.group_db.Put([]byte(key), []byte(value), nil)
+	if err != nil {
+		log.Error("put err:", err)
+		return
+	}
+}
+
+func (storage *Storage) RemoveGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
+	key := storage.GroupOfflineKey(msg_id, appid, gid, receiver)
+	err := storage.group_db.Delete([]byte(key), nil)
+	if err != nil {
+		//can't get ErrNotFound
+		log.Error("delete err:", err)
+	}
+}
+
+func (storage *Storage) HasGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) bool {
+	key := storage.GroupOfflineKey(msg_id, appid, gid, receiver)
+	has, err := storage.group_db.Has([]byte(key), nil)
+	if err != nil {
+		log.Error("check key err:", err)
+		return false
+	}
+	return has
+}
+
+func (storage *Storage) EnqueueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
+	log.Infof("enqueue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
+	storage.AddGroupOffline(msg_id, appid, gid, receiver)
+
+	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
+
+	msg := &Message{cmd:MSG_GROUP_OFFLINE, body:off}
+	storage.SaveMessage(msg)
+}
+
+func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
+	log.Infof("dequeue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
+	has := storage.HasGroupOffline(msg_id, appid, gid, receiver)
+	if !has {
+		log.Info("no offline msg:", appid, receiver, msg_id)
+		return
+	}
+
+	storage.RemoveGroupOffline(msg_id, appid, gid, receiver)
+	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
+	msg := &Message{cmd:MSG_GROUP_ACK_IN, body:off}
 	storage.SaveMessage(msg)
 }
 
@@ -371,6 +381,54 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
 		log.Warning("iterator err:", err)
 	}
 	log.Info("offline count:", len(c))
+	return c
+}
+
+func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, limit int) []*EMessage {
+	log.Infof("load group offline message appid:%d gid:%d uid:%d\n", appid, gid, uid)
+	c := make([]*EMessage, 0, 10)
+	
+	start := fmt.Sprintf("%d_%d_%d_1", appid, gid, uid)
+	end := fmt.Sprintf("%d_%d_%d_9223372036854775807", appid, gid, uid)
+	
+	msgids := make([]int64, 0, 10)
+	r := &util.Range{Start:[]byte(start), Limit:[]byte(end)}
+	iter := storage.group_db.NewIterator(r, nil)
+	for iter.Next() {
+		value := iter.Value()
+		msgid, err := strconv.ParseInt(string(value), 10, 64)
+		if err != nil {
+			log.Error("parseint err:", err)
+			continue
+		}
+		log.Info("offline msgid:", msgid)
+		msgids = append(msgids, msgid)
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		log.Warning("iterator err:", err)
+	}
+	
+	if len(msgids) > limit {
+		l := len(msgids) - limit
+		r := msgids[:l]
+		msgids = msgids[l:]
+		for _, msgid := range r {
+			storage.DequeueGroupOffline(msgid, appid, gid, uid)
+		}
+	}
+	
+	for _, msgid := range msgids {
+		msg := storage.LoadMessage(msgid)
+		if msg == nil {
+			log.Error("can't load offline message:", msgid)
+			continue
+		}
+		c = append(c, &EMessage{msgid:msgid, msg:msg})
+	}
+
+	log.Info("group offline count:", len(c))
 	return c
 }
 

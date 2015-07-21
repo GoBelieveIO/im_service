@@ -28,6 +28,11 @@ import "github.com/garyburd/redigo/redis"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 
+type GroupObserver interface {
+	OnGroupMemberAdd(g *Group, uid int64)
+	OnGroupMemberRemove(g *Group, uid int64)
+}
+
 type GroupManager struct {
 	mutex  sync.Mutex
 	groups map[int64]*Group
@@ -57,6 +62,19 @@ func (group_manager *GroupManager) FindGroup(gid int64) *Group {
 		return group
 	}
 	return nil
+}
+
+func (group_manager *GroupManager) FindUserGroups(appid int64, uid int64) []*Group {
+	group_manager.mutex.Lock()
+	defer group_manager.mutex.Unlock()
+
+	groups := make([]*Group, 0, 4)
+	for _, group := range group_manager.groups {
+		if group.appid == appid && group.IsMember(uid) {
+			groups = append(groups, group)
+		}
+	}
+	return groups
 }
 
 func (group_manager *GroupManager) HandleCreate(data string) {

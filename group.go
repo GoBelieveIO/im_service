@@ -27,6 +27,7 @@ import log "github.com/golang/glog"
 type Group struct {
 	gid     int64
 	appid   int64
+	super   bool //超大群
 	mutex   sync.Mutex
 	members IntSet
 }
@@ -35,6 +36,7 @@ func NewGroup(gid int64, appid int64, members []int64) *Group {
 	group := new(Group)
 	group.appid = appid
 	group.gid = gid
+	group.super = true
 	group.members = NewIntSet()
 	for _, m := range members {
 		group.members.Add(m)
@@ -58,6 +60,13 @@ func (group *Group) RemoveMember(uid int64) {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
 	group.members.Remove(uid)
+}
+
+func (group *Group) IsMember(uid int64) bool {
+	group.mutex.Lock()
+	defer group.mutex.Unlock()
+	_, ok := group.members[uid]
+	return ok
 }
 
 func CreateGroup(db *sql.DB, appid int64, master int64, name string) int64 {

@@ -347,7 +347,7 @@ def send_client(uid, receiver, msg_type):
         cmd, s, msg = recv_message(sock)
         if cmd == MSG_ACK and msg == msg_seq:
             break
-        elif cmd == MSG_PEER_ACK:
+        elif cmd == MSG_PEER_ACK or cmd == MSG_GROUP_NOTIFICATION:
             print "send ack..."
             seq += 1
             send_message(MSG_ACK, seq, s, sock)
@@ -571,7 +571,42 @@ def TestGroup():
     print "test group completed"
 
 
+def TestGroupOffline():
+    access_token = login(13635273142)
 
+    url = URL + "/groups"
+
+    group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
+    headers = {}
+    headers["Authorization"] = "Bearer " + access_token
+    headers["Content-Type"] = "application/json; charset=UTF-8"
+    r = requests.post(url, data=json.dumps(group), headers = headers)
+    assert(r.status_code == 200)
+    obj = json.loads(r.content)
+    group_id = obj["data"]["group_id"]
+    
+    global task
+    task = 0
+
+    t2 = threading.Thread(target=send_client, args=(13635273142, group_id, MSG_GROUP_IM))
+    t2.setDaemon(True)
+    t2.start()
+    
+    time.sleep(1)
+
+    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,23000))
+    t3.setDaemon(True)
+    t3.start()
+
+    while task < 2:
+        time.sleep(1)
+
+    url = URL + "/groups/%s"%str(group_id)
+    r = requests.delete(url, headers=headers)
+    assert(r.status_code == 200)
+
+    print "test group offline message completed"
+    
 def _TestGroupMessage(port):
     access_token = login(13635273142)
 
@@ -588,7 +623,8 @@ def _TestGroupMessage(port):
     
     global task
     task = 0
- 
+
+
     t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,port))
     t3.setDaemon(True)
     t3.start()
@@ -598,7 +634,8 @@ def _TestGroupMessage(port):
     t2 = threading.Thread(target=send_client, args=(13635273142, group_id, MSG_GROUP_IM))
     t2.setDaemon(True)
     t2.start()
-    
+
+
     while task < 2:
         time.sleep(1)
 
@@ -673,7 +710,7 @@ def TestClusterRoomMessage():
     _TestRoomMessage(24000)
 
 def main():
-    cluster = True
+    cluster = False
      
     TestBindToken()
     time.sleep(1)
@@ -684,7 +721,9 @@ def main():
     time.sleep(1)
     TestGroupMessage()
     time.sleep(1)
-     
+    TestGroupOffline()
+    time.sleep(1)
+
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)

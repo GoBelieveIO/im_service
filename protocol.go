@@ -73,7 +73,7 @@ func init() {
 
 	message_creators[MSG_PEER_ACK] = func()IMessage{return new(MessagePeerACK)}
 	message_creators[MSG_INPUTING] = func()IMessage{return new(MessageInputing)}
-	message_creators[MSG_SUBSCRIBE_ONLINE_STATE] = func()IMessage{return new(MessageSubsribeState)}
+	message_creators[MSG_SUBSCRIBE_ONLINE_STATE] = func()IMessage{return new(MessageSubscribeState)}
 	message_creators[MSG_ONLINE_STATE] = func()IMessage{return new(MessageOnlineState)}
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
 	message_creators[MSG_LOGIN_POINT] = func()IMessage{return new(LoginPoint)}
@@ -373,7 +373,7 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 			return false
 		}
 
-		data := &MessageSubsribeState{}
+		data := &MessageSubscribeState{}
 		uids := make([]int64, len(tmp))
 		for i := range tmp {
 			log.Info(tmp[i])
@@ -760,16 +760,16 @@ func (state *MessageOnlineState) FromData(buff []byte) bool {
 
 
 
-type MessageSubsribeState struct {
+type MessageSubscribeState struct {
 	uids []int64
 }
 
 
-func (sub *MessageSubsribeState) ToData() []byte {
+func (sub *MessageSubscribeState) ToData() []byte {
 	return nil
 }
 
-func (sub *MessageSubsribeState) FromData(buff []byte) bool {
+func (sub *MessageSubscribeState) FromData(buff []byte) bool {
 	buffer := bytes.NewBuffer(buff)
 	var count int32
 	binary.Read(buffer, binary.BigEndian, &count)

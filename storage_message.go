@@ -31,12 +31,17 @@ const MSG_LOAD_OFFLINE = 202
 const MSG_RESULT = 203
 const MSG_LOAD_HISTORY = 204
 
+const MSG_SAVE_AND_ENQUEUE_GROUP = 205
+const MSG_DEQUEUE_GROUP = 206
+const MSG_LOAD_OFFLINE_GROUP = 207
 
 //主从同步消息
 const MSG_SYNC_BEGIN = 210
 const MSG_SYNC_MESSAGE = 211
 
 //内部文件存储使用
+const MSG_GROUP_OFFLINE = 252
+const MSG_GROUP_ACK_IN = 253
 const MSG_OFFLINE = 254
 const MSG_ACK_IN = 255
 
@@ -47,6 +52,14 @@ func init() {
 	message_creators[MSG_LOAD_OFFLINE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_RESULT] = func()IMessage{return new(MessageResult)}
 	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
+	
+	message_creators[MSG_SAVE_AND_ENQUEUE_GROUP] = func()IMessage{return new(SAEMessage)}
+	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(OfflineMessage)}
+	message_creators[MSG_LOAD_OFFLINE_GROUP] = func()IMessage{return new(LoadGroupOffline)}
+	
+	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new(OfflineMessage)}
+	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(OfflineMessage)}
+
 	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage)}
 	message_creators[MSG_ACK_IN] = func()IMessage{return new(OfflineMessage)}
 
@@ -58,6 +71,11 @@ func init() {
 	message_descriptions[MSG_LOAD_OFFLINE] = "MSG_LOAD_OFFLINE"
 	message_descriptions[MSG_RESULT] = "MSG_RESULT"
 	message_descriptions[MSG_LOAD_HISTORY] = "MSG_LOAD_HISTORY"
+
+	message_descriptions[MSG_SAVE_AND_ENQUEUE_GROUP] = "MSG_SAVE_AND_ENQUEUE_GROUP"
+	message_descriptions[MSG_DEQUEUE_GROUP] = "MSG_DEQUEUE_GROUP"
+	message_descriptions[MSG_LOAD_OFFLINE_GROUP] = "MSG_LOAD_OFFLINE_GROUP"
+
 	message_descriptions[MSG_SYNC_BEGIN] = "MSG_SYNC_BEGIN"
 	message_descriptions[MSG_SYNC_MESSAGE] = "MSG_SYNC_MESSAGE"
 
@@ -136,7 +154,7 @@ type OfflineMessage struct {
 	msgid    int64
 	prev_msgid  int64
 }
-type DQMessage OfflineMessage 
+
 
 func (off *OfflineMessage) ToData() []byte {
 	buffer := new(bytes.Buffer)
@@ -160,10 +178,16 @@ func (off *OfflineMessage) FromData(buff []byte) bool {
 	return true
 }
 
+type DQMessage OfflineMessage
+
+func (dq *DQMessage) GroupID() int64 {
+	return dq.prev_msgid
+}
 
 type SAEMessage struct {
 	msg       *Message
-	receivers []*AppUserID
+	appid     int64
+	receivers []int64
 }
 
 func (sae *SAEMessage) ToData() []byte {
@@ -183,11 +207,13 @@ func (sae *SAEMessage) ToData() []byte {
 	var l int16 = int16(len(msg_buf))
 	binary.Write(buffer, binary.BigEndian, l)
 	buffer.Write(msg_buf)
+
+	binary.Write(buffer, binary.BigEndian, sae.appid)
+
 	var count int16 = int16(len(sae.receivers))
 	binary.Write(buffer, binary.BigEndian, count)
 	for _, r := range(sae.receivers) {
-		binary.Write(buffer, binary.BigEndian, r.appid)
-		binary.Write(buffer, binary.BigEndian, r.uid)
+		binary.Write(buffer, binary.BigEndian, r)
 	}
 	buf := buffer.Bytes()
 	return buf
@@ -215,19 +241,21 @@ func (sae *SAEMessage) FromData(buff []byte) bool {
 	}
 	sae.msg = msg
 
-	if buffer.Len() < 2 {
+	
+	if buffer.Len() < 10 {
 		return false
 	}
+	binary.Read(buffer, binary.BigEndian, &sae.appid)
+
 	var count int16
 	binary.Read(buffer, binary.BigEndian, &count)
-	if buffer.Len() < int(count)*16 {
+	if buffer.Len() < int(count)*8 {
 		return false
 	}
-	sae.receivers = make([]*AppUserID, count)
+	sae.receivers = make([]int64, count)
 	for i := int16(0); i < count; i++ {
-		r := &AppUserID{}
-		binary.Read(buffer, binary.BigEndian, &r.appid)
-		binary.Read(buffer, binary.BigEndian, &r.uid)
+		var r int64
+		binary.Read(buffer, binary.BigEndian, &r)
 		sae.receivers[i] = r
 	}
 	return true
@@ -282,3 +310,31 @@ func (lh *LoadHistory) FromData(buff []byte) bool {
 	return true
 }
 
+type LoadGroupOffline struct {
+	appid  int64
+	gid    int64
+	uid    int64
+	limit  int32
+}
+
+func (lo *LoadGroupOffline) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, lo.appid)
+	binary.Write(buffer, binary.BigEndian, lo.gid)
+	binary.Write(buffer, binary.BigEndian, lo.uid)
+	binary.Write(buffer, binary.BigEndian, lo.limit)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (lo *LoadGroupOffline) FromData(buff []byte) bool {
+	if len(buff) < 28 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &lo.appid)
+	binary.Read(buffer, binary.BigEndian, &lo.gid)
+	binary.Read(buffer, binary.BigEndian, &lo.uid)
+	binary.Read(buffer, binary.BigEndian, &lo.limit)
+	return true
+}

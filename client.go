@@ -27,7 +27,7 @@ import log "github.com/golang/glog"
 import "github.com/googollee/go-engine.io"
 
 const CLIENT_TIMEOUT = (60 * 6)
-
+const GROUP_OFFLINE_LIMIT = 200
 
 
 type Client struct {
@@ -112,7 +112,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_INPUTING:
 		client.HandleInputing(msg.body.(*MessageInputing))
 	case MSG_SUBSCRIBE_ONLINE_STATE:
-		client.HandleSubsribe(msg.body.(*MessageSubsribeState))
+		client.HandleSubsribe(msg.body.(*MessageSubscribeState))
 	case MSG_RT:
 		client.HandleRTMessage(msg)
 	case MSG_ENTER_ROOM:
@@ -123,6 +123,38 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleRoomIM(msg.body.(*RoomMessage), msg.seq)
 	default:
 		log.Info("unknown msg:", msg.cmd)
+	}
+}
+
+func (client *Client) SendGroupOfflineMessage(gid int64) {
+	storage_pool := GetGroupStorageConnPool(gid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return
+	}
+	defer storage_pool.Release(storage)
+
+	limit := int32(GROUP_OFFLINE_LIMIT)
+	offline_messages, err := storage.LoadGroupOfflineMessage(client.appid, gid, client.uid, limit)
+	if err != nil {
+		log.Error("load group offline message err:", err)
+	}
+
+	log.Infof("load group:%d offline message count:%d", gid, len(offline_messages))
+	for _, emsg := range offline_messages {
+		log.Info("send group offline message:", emsg.msgid)
+		client.ewt <- emsg
+	}
+}
+
+func (client *Client) SendUserGroupOfflineMessage() {
+	groups := group_manager.FindUserGroups(client.appid, client.uid)
+	for _, group := range groups {
+		if !group.super {
+			continue
+		}
+		client.SendGroupOfflineMessage(group.gid)
 	}
 }
 
@@ -193,6 +225,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 
 	client.SendLoginPoint()
 	client.SendOfflineMessage()
+	client.SendUserGroupOfflineMessage()
 	client.AddClient()
 	channel := GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
@@ -225,7 +258,7 @@ func (client *Client) AddClient() {
 	route.AddClient(client)
 }
 
-func (client *Client) HandleSubsribe(msg *MessageSubsribeState) {
+func (client *Client) HandleSubsribe(msg *MessageSubscribeState) {
 	if client.uid == 0 {
 		return
 	}
@@ -294,21 +327,36 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		log.Warning("can't find group:", msg.receiver)
 		return
 	}
-	members := group.Members()
-	for member := range members {
-		//群消息不再发送给自己
-		if member == client.uid {
-			continue
-		}
-		msgid, err := SaveMessage(client.appid, member, m)
+	if group.super {
+		msgid, err := SaveGroupMessage(client.appid, msg.receiver, m)
 		if err != nil {
 			return
 		}
-
-		emsg := &EMessage{msgid:msgid, msg:m}
-		SendEMessage(client.appid, member, emsg)
+	
+		members := group.Members()
+		for member := range members {
+			//群消息不再发送给自己
+			if member == client.uid {
+				continue
+			}
+			emsg := &EMessage{msgid:msgid, msg:m}
+			SendEMessage(client.appid, member, emsg)
+		}
+	} else {
+		members := group.Members()
+		for member := range members {
+			//群消息不再发送给自己
+			if member == client.uid {
+				continue
+			}
+			msgid, err := SaveMessage(client.appid, member, m)
+			if err != nil {
+				continue
+			}
+			emsg := &EMessage{msgid:msgid, msg:m}
+			SendEMessage(client.appid, member, emsg)
+		}
 	}
-
 	
 	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
@@ -324,15 +372,23 @@ func (client *Client) HandleInputing(inputing *MessageInputing) {
 func (client *Client) HandleACK(ack *MessageACK) {
 	log.Info("ack:", ack)
 	emsg := client.RemoveUnAckMessage(ack)
-	if emsg == nil {
+	if emsg == nil || emsg.msgid == 0 {
 		return
 	}
 
-	if (emsg.msgid > 0) {
+	msg := emsg.msg
+	if msg != nil && msg.cmd == MSG_GROUP_IM {
+		im := emsg.msg.body.(*IMMessage)
+		group := group_manager.FindGroup(im.receiver)
+		if group != nil && group.super {
+			client.DequeueGroupMessage(emsg.msgid, im.receiver)
+		} else {
+			client.DequeueMessage(emsg.msgid)
+		}
+	} else {
 		client.DequeueMessage(emsg.msgid)
 	}
 
-	msg := emsg.msg
 	if msg == nil {
 		return
 	}
@@ -435,6 +491,23 @@ func (client *Client) HandlePing() {
 	}
 }
 
+func (client *Client) DequeueGroupMessage(msgid int64, gid int64) {
+	storage_pool := GetGroupStorageConnPool(gid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return
+	}
+	defer storage_pool.Release(storage)
+
+	//prev_msgid alias GroupID
+	dq := &DQMessage{msgid:msgid, appid:client.appid, receiver:client.uid, prev_msgid:gid}
+	err = storage.DequeueMessage(dq)
+	if err != nil {
+		log.Error("dequeue message err:", err)
+	}
+}
+
 func (client *Client) DequeueMessage(msgid int64) {
 	storage_pool := GetStorageConnPool(client.uid)
 	storage, err := storage_pool.Get()
@@ -478,7 +551,7 @@ func (client *Client) AddUnAckMessage(emsg *EMessage) {
 	defer client.mutex.Unlock()
 	seq := emsg.msg.seq
 	client.unacks[seq] = emsg.msgid
-	if emsg.msg.cmd == MSG_IM {
+	if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
 		client.unackMessages[seq] = emsg
 	}
 }

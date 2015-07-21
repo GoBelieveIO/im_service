@@ -30,6 +30,7 @@ import log "github.com/golang/glog"
 var storage *Storage
 var config *StorageConfig
 var master *Master
+var group_manager *GroupManager
 
 type Client struct {
 	conn   *net.TCPConn
@@ -51,6 +52,48 @@ func (client *Client) Read() {
 	}
 }
 
+func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
+	if sae.msg == nil {
+		log.Error("sae msg is nil")
+		return
+	}
+	msgid := storage.SaveMessage(sae.msg)
+	if sae.msg.cmd != MSG_GROUP_IM {
+		log.Error("sae msg cmd:", sae.msg.cmd)
+		return
+	}
+	appid := sae.appid
+	im := sae.msg.body.(*IMMessage)
+	gid := im.receiver
+
+	group := group_manager.FindGroup(gid)
+	if group == nil {
+		log.Warning("can't find group:", gid)
+	}
+	members := group.Members()
+	for member := range members {
+		if im.sender == member {
+			continue
+		}
+		storage.EnqueueGroupOffline(msgid, appid, gid, member)		
+	}
+
+	result := &MessageResult{}
+	result.status = 0
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, msgid)
+	result.content = buffer.Bytes()
+	msg := &Message{cmd:MSG_RESULT, body:result}
+	SendMessage(client.conn, msg)
+}
+
+func (client *Client) HandleDQGroupMessage(dq *DQMessage) {
+	storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.GroupID(), dq.receiver)
+	result := &MessageResult{status:0}
+	msg := &Message{cmd:MSG_RESULT, body:result}
+	SendMessage(client.conn, msg)
+}
+
 func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 	if sae.msg == nil {
 		log.Error("sae msg is nil")
@@ -58,7 +101,7 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 	}
 	msgid := storage.SaveMessage(sae.msg)
 	for _, r := range(sae.receivers) {
-		storage.EnqueueOffline(msgid, r.appid, r.uid)
+		storage.EnqueueOffline(msgid, sae.appid, r)
 	}
 	result := &MessageResult{}
 	result.status = 0
@@ -119,6 +162,24 @@ func (client *Client) HandleLoadHistory(lh *LoadHistory) {
 	SendMessage(client.conn, msg)	
 }
 
+func (client *Client) HandleLoadGroupOffline(lo *LoadGroupOffline) {
+	messages := storage.LoadGroupOfflineMessage(lo.appid, lo.gid, lo.uid, int(lo.limit))
+	result := &MessageResult{status:0}
+	buffer := new(bytes.Buffer)
+	var count int16
+	count = int16(len(messages))
+	binary.Write(buffer, binary.BigEndian, count)
+	for _, emsg := range(messages) {
+		ebuf := client.WriteEMessage(emsg)
+		var size int16 = int16(len(ebuf))
+		binary.Write(buffer, binary.BigEndian, size)
+		buffer.Write(ebuf)
+	}
+	result.content = buffer.Bytes()
+	msg := &Message{cmd:MSG_RESULT, body:result}
+	SendMessage(client.conn, msg)	
+}
+
 func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", msg.cmd)
 	switch msg.cmd {
@@ -130,6 +191,12 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleDQMessage((*DQMessage)(msg.body.(*OfflineMessage)))
 	case MSG_LOAD_HISTORY:
 		client.HandleLoadHistory((*LoadHistory)(msg.body.(*LoadHistory)))
+	case MSG_SAVE_AND_ENQUEUE_GROUP:
+		client.HandleSaveAndEnqueueGroup(msg.body.(*SAEMessage))
+	case MSG_DEQUEUE_GROUP:
+		client.HandleDQGroupMessage((*DQMessage)(msg.body.(*OfflineMessage)))
+	case MSG_LOAD_OFFLINE_GROUP:
+		client.HandleLoadGroupOffline(msg.body.(*LoadGroupOffline))
 	default:
 		log.Warning("unknown msg:", msg.cmd)
 	}
@@ -213,6 +280,9 @@ func main() {
 		slaver := NewSlaver(config.master_address)
 		slaver.Start()
 	}
+
+	group_manager = NewGroupManager()
+	group_manager.Start()
 
 	go ListenSyncClient()
 	ListenClient()

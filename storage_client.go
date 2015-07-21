@@ -55,7 +55,13 @@ func (client *StorageConn) Close() {
 }
 
 func (client *StorageConn) SaveAndEnqueueMessage(sae *SAEMessage) (int64, error) {
-	msg := &Message{cmd:MSG_SAVE_AND_ENQUEUE, body:sae}
+	var msg *Message
+	if len(sae.receivers) == 0 {
+		msg = &Message{cmd:MSG_SAVE_AND_ENQUEUE_GROUP, body:sae}
+	} else {
+		msg = &Message{cmd:MSG_SAVE_AND_ENQUEUE, body:sae}
+	}
+
 	SendMessage(client.conn, msg)
 	r := ReceiveMessage(client.conn)
 	if r == nil {
@@ -80,7 +86,13 @@ func (client *StorageConn) SaveAndEnqueueMessage(sae *SAEMessage) (int64, error)
 }
 
 func (client *StorageConn) DequeueMessage(dq *DQMessage) error {
-	msg := &Message{cmd:MSG_DEQUEUE, body:(*OfflineMessage)(dq)}
+	var msg *Message
+	if dq.GroupID() > 0 {
+		msg = &Message{cmd:MSG_DEQUEUE_GROUP, body:(*OfflineMessage)(dq)}
+	} else {
+		msg = &Message{cmd:MSG_DEQUEUE, body:(*OfflineMessage)(dq)}
+	}
+
 	SendMessage(client.conn, msg)
 	r := ReceiveMessage(client.conn)
 	if r == nil {
@@ -149,6 +161,13 @@ func (client *StorageConn) ReceiveMessages() ([]*EMessage, error) {
 		messages[i] = emsg
 	}
 	return messages, nil
+}
+
+func (client *StorageConn) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, limit int32) ([]*EMessage, error) {
+	lo := &LoadGroupOffline{appid:appid, gid:gid, uid:uid, limit:limit}
+	msg := &Message{cmd:MSG_LOAD_OFFLINE_GROUP, body:lo}
+	SendMessage(client.conn, msg)
+	return client.ReceiveMessages()
 }
 
 func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64) ([]*EMessage, error) {

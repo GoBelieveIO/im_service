@@ -79,6 +79,11 @@ func GetStorageConnPool(uid int64) *StorageConnPool {
 	return storage_pools[index]
 }
 
+func GetGroupStorageConnPool(gid int64) *StorageConnPool {
+	index := gid%int64(len(storage_pools))
+	return storage_pools[index]
+}
+
 func GetChannel(uid int64) *Channel{
 	index := uid%int64(len(channels))
 	return channels[index]
@@ -89,6 +94,27 @@ func GetRoomChannel(room_id int64) *Channel {
 	return channels[index]
 }
 
+func SaveGroupMessage(appid int64, gid int64, m *Message) (int64, error) {
+	log.Infof("save group message:%d %d\n", appid, gid)
+	storage_pool := GetGroupStorageConnPool(gid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return 0, err
+	}
+	defer storage_pool.Release(storage)
+
+	sae := &SAEMessage{}
+	sae.msg = m
+	sae.appid = appid
+
+	msgid, err := storage.SaveAndEnqueueMessage(sae)
+	if err != nil {
+		log.Error("saveandequeue message err:", err)
+		return 0, err
+	}
+	return msgid, nil
+}
 
 func SaveMessage(appid int64, uid int64, m *Message) (int64, error) {
 	storage_pool := GetStorageConnPool(uid)
@@ -101,8 +127,9 @@ func SaveMessage(appid int64, uid int64, m *Message) (int64, error) {
 
 	sae := &SAEMessage{}
 	sae.msg = m
-	sae.receivers = make([]*AppUserID, 1)
-	sae.receivers[0] = &AppUserID{appid:appid, uid:uid}
+	sae.appid = appid
+	sae.receivers = make([]int64, 1)
+	sae.receivers[0] = uid
 
 	msgid, err := storage.SaveAndEnqueueMessage(sae)
 	if err != nil {

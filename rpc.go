@@ -18,9 +18,9 @@ func SendGroupNotification(appid int64, gid int64,
 	for member := range(members) {
 		sae := &SAEMessage{}
 		sae.msg = msg
-		sae.receivers = make([]*AppUserID, 1)
-		id := &AppUserID{appid:appid, uid:member}
-		sae.receivers[0] = id
+		sae.appid = appid
+		sae.receivers = make([]int64, 1)
+		sae.receivers[0] = member
 
 		storage_pool := GetStorageConnPool(member)
 
