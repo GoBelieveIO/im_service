@@ -227,6 +227,7 @@ def recv_message_client(uid, port=23000):
             print "cmd:", cmd, msg.content, msg.sender, msg.receiver
             return True
         else:
+            print "cmd:", cmd
             return False
 
     recv_client(uid, port, handle_message)
@@ -429,7 +430,8 @@ def TestSendAndRecv():
     t3 = threading.Thread(target=recv_message_client, args=(13635273142,))
     t3.setDaemon(True)
     t3.start()
-
+    
+    time.sleep(1)
     
     t2 = threading.Thread(target=send_client, args=(13635273143,13635273142, MSG_IM))
     t2.setDaemon(True)
@@ -701,16 +703,17 @@ def _TestRoomMessage(port):
     while task < 2:
         time.sleep(1)
 
-    print "test room message completed"
-
 def TestRoomMessage():
     _TestRoomMessage(23000)
+    print "test room message completed"
 
 def TestClusterRoomMessage():
     _TestRoomMessage(24000)
+    print "test cluster room message completed"
+
 
 def main():
-    cluster = False
+    cluster = True
      
     TestBindToken()
     time.sleep(1)
@@ -723,7 +726,7 @@ def main():
     time.sleep(1)
     TestGroupOffline()
     time.sleep(1)
-
+     
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)
@@ -735,15 +738,16 @@ def main():
      
     TestRTSendAndRecv()
     time.sleep(1)
-    
+     
     TestRoomMessage()
     time.sleep(1)
-
+     
     if cluster:
         TestClusterRoomMessage()
 
     TestSendAndRecv()
     time.sleep(1)
+
     TestOffline()
     time.sleep(1)
      

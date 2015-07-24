@@ -501,7 +501,7 @@ func (client *Client) DequeueGroupMessage(msgid int64, gid int64) {
 	defer storage_pool.Release(storage)
 
 	//prev_msgid alias GroupID
-	dq := &DQMessage{msgid:msgid, appid:client.appid, receiver:client.uid, prev_msgid:gid}
+	dq := &DQMessage{msgid:msgid, appid:client.appid, receiver:client.uid, gid:gid}
 	err = storage.DequeueMessage(dq)
 	if err != nil {
 		log.Error("dequeue message err:", err)

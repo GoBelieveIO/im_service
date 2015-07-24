@@ -87,10 +87,10 @@ func (client *StorageConn) SaveAndEnqueueMessage(sae *SAEMessage) (int64, error)
 
 func (client *StorageConn) DequeueMessage(dq *DQMessage) error {
 	var msg *Message
-	if dq.GroupID() > 0 {
-		msg = &Message{cmd:MSG_DEQUEUE_GROUP, body:(*OfflineMessage)(dq)}
+	if dq.gid > 0 {
+		msg = &Message{cmd:MSG_DEQUEUE_GROUP, body:dq}
 	} else {
-		msg = &Message{cmd:MSG_DEQUEUE, body:(*OfflineMessage)(dq)}
+		msg = &Message{cmd:MSG_DEQUEUE, body:dq}
 	}
 
 	SendMessage(client.conn, msg)

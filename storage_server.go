@@ -88,7 +88,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 }
 
 func (client *Client) HandleDQGroupMessage(dq *DQMessage) {
-	storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.GroupID(), dq.receiver)
+	storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.gid, dq.receiver)
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
@@ -188,13 +188,13 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_SAVE_AND_ENQUEUE:
 		client.HandleSaveAndEnqueue(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE:
-		client.HandleDQMessage((*DQMessage)(msg.body.(*OfflineMessage)))
+		client.HandleDQMessage(msg.body.(*DQMessage))
 	case MSG_LOAD_HISTORY:
 		client.HandleLoadHistory((*LoadHistory)(msg.body.(*LoadHistory)))
 	case MSG_SAVE_AND_ENQUEUE_GROUP:
 		client.HandleSaveAndEnqueueGroup(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE_GROUP:
-		client.HandleDQGroupMessage((*DQMessage)(msg.body.(*OfflineMessage)))
+		client.HandleDQGroupMessage(msg.body.(*DQMessage))
 	case MSG_LOAD_OFFLINE_GROUP:
 		client.HandleLoadGroupOffline(msg.body.(*LoadGroupOffline))
 	default:

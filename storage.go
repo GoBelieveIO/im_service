@@ -332,7 +332,7 @@ func (storage *Storage) EnqueueGroupOffline(msg_id int64, appid int64, gid int64
 	log.Infof("enqueue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
 	storage.AddGroupOffline(msg_id, appid, gid, receiver)
 
-	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
+	off := &GroupOfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, gid:gid}
 
 	msg := &Message{cmd:MSG_GROUP_OFFLINE, body:off}
 	storage.SaveMessage(msg)
@@ -347,7 +347,7 @@ func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64
 	}
 
 	storage.RemoveGroupOffline(msg_id, appid, gid, receiver)
-	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
+	off := &GroupOfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, gid:gid}
 	msg := &Message{cmd:MSG_GROUP_ACK_IN, body:off}
 	storage.SaveMessage(msg)
 }
@@ -473,6 +473,12 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 	} else if emsg.msg.cmd == MSG_ACK_IN {
 		off := emsg.msg.body.(*OfflineMessage)
 		storage.RemoveOffline(off.msgid, off.appid, off.receiver)
+	} else if emsg.msg.cmd == MSG_GROUP_OFFLINE {
+		off := emsg.msg.body.(*GroupOfflineMessage)
+		storage.AddGroupOffline(off.msgid, off.appid, off.gid, off.receiver)
+	} else if emsg.msg.cmd == MSG_GROUP_ACK_IN {
+		off := emsg.msg.body.(*GroupOfflineMessage)
+		storage.RemoveGroupOffline(off.msgid, off.appid, off.gid, off.receiver)
 	}
 	log.Info("save sync message:", emsg.msgid)
 	return nil

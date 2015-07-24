@@ -48,17 +48,17 @@ const MSG_ACK_IN = 255
 
 func init() {
 	message_creators[MSG_SAVE_AND_ENQUEUE] = func()IMessage{return new(SAEMessage)}
-	message_creators[MSG_DEQUEUE] = func()IMessage{return new(OfflineMessage)}
+	message_creators[MSG_DEQUEUE] = func()IMessage{return new(DQMessage)}
 	message_creators[MSG_LOAD_OFFLINE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_RESULT] = func()IMessage{return new(MessageResult)}
 	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
 	
 	message_creators[MSG_SAVE_AND_ENQUEUE_GROUP] = func()IMessage{return new(SAEMessage)}
-	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(OfflineMessage)}
+	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(DQMessage)}
 	message_creators[MSG_LOAD_OFFLINE_GROUP] = func()IMessage{return new(LoadGroupOffline)}
 	
-	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new(OfflineMessage)}
-	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(OfflineMessage)}
+	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new(GroupOfflineMessage)}
+	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
 
 	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage)}
 	message_creators[MSG_ACK_IN] = func()IMessage{return new(OfflineMessage)}
@@ -178,11 +178,68 @@ func (off *OfflineMessage) FromData(buff []byte) bool {
 	return true
 }
 
-type DQMessage OfflineMessage
-
-func (dq *DQMessage) GroupID() int64 {
-	return dq.prev_msgid
+type DQMessage struct {
+	appid    int64
+	receiver int64
+	msgid    int64
+	gid      int64
 }
+
+func (dq *DQMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, dq.appid)
+	binary.Write(buffer, binary.BigEndian, dq.receiver)
+	binary.Write(buffer, binary.BigEndian, dq.msgid)
+	binary.Write(buffer, binary.BigEndian, dq.gid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (dq *DQMessage) FromData(buff []byte) bool {
+	if len(buff) < 32 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &dq.appid)
+	binary.Read(buffer, binary.BigEndian, &dq.receiver)
+	binary.Read(buffer, binary.BigEndian, &dq.msgid)
+	binary.Read(buffer, binary.BigEndian, &dq.gid)
+	return true
+}
+
+
+type GroupOfflineMessage struct {
+	appid    int64
+	receiver int64
+	msgid    int64
+	gid      int64
+	prev_msgid  int64
+}
+
+func (off *GroupOfflineMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, off.appid)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
+	binary.Write(buffer, binary.BigEndian, off.msgid)
+	binary.Write(buffer, binary.BigEndian, off.gid)
+	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (off *GroupOfflineMessage) FromData(buff []byte) bool {
+	if len(buff) < 40 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &off.appid)
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
+	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	binary.Read(buffer, binary.BigEndian, &off.gid)
+	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
+	return true
+}
+
 
 type SAEMessage struct {
 	msg       *Message
