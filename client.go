@@ -89,6 +89,7 @@ func (client *Client) HandleRemoveClient() {
 	if client.uid > 0 {
 		channel := GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid)
+		client.UnsubscribeGroup()
 	}
 }
 
@@ -126,35 +127,26 @@ func (client *Client) HandleMessage(msg *Message) {
 	}
 }
 
-func (client *Client) SendGroupOfflineMessage(gid int64) {
-	storage_pool := GetGroupStorageConnPool(gid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		return
-	}
-	defer storage_pool.Release(storage)
-
+func (client *Client) SubscribeGroup() {
 	limit := int32(GROUP_OFFLINE_LIMIT)
-	offline_messages, err := storage.LoadGroupOfflineMessage(client.appid, gid, client.uid, limit)
-	if err != nil {
-		log.Error("load group offline message err:", err)
-	}
-
-	log.Infof("load group:%d offline message count:%d", gid, len(offline_messages))
-	for _, emsg := range offline_messages {
-		log.Info("send group offline message:", emsg.msgid)
-		client.ewt <- emsg
-	}
-}
-
-func (client *Client) SendUserGroupOfflineMessage() {
 	groups := group_manager.FindUserGroups(client.appid, client.uid)
 	for _, group := range groups {
 		if !group.super {
 			continue
 		}
-		client.SendGroupOfflineMessage(group.gid)
+		sc := GetGroupStorageChannel(group.gid)
+		sc.SubscribeGroup(client.appid, group.gid, client.uid, limit)
+	}
+}
+
+func (client *Client) UnsubscribeGroup() {
+	groups := group_manager.FindUserGroups(client.appid, client.uid)
+	for _, group := range groups {
+		if !group.super {
+			continue
+		}
+		sc := GetGroupStorageChannel(group.gid)
+		sc.UnSubscribeGroup(client.appid, group.gid, client.uid)
 	}
 }
 
@@ -225,7 +217,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 
 	client.SendLoginPoint()
 	client.SendOfflineMessage()
-	client.SendUserGroupOfflineMessage()
+	client.SubscribeGroup()
 	client.AddClient()
 	channel := GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
@@ -328,19 +320,9 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		return
 	}
 	if group.super {
-		msgid, err := SaveGroupMessage(client.appid, msg.receiver, m)
+		_, err := SaveGroupMessage(client.appid, msg.receiver, m)
 		if err != nil {
 			return
-		}
-	
-		members := group.Members()
-		for member := range members {
-			//群消息不再发送给自己
-			if member == client.uid {
-				continue
-			}
-			emsg := &EMessage{msgid:msgid, msg:m}
-			SendEMessage(client.appid, member, emsg)
 		}
 	} else {
 		members := group.Members()

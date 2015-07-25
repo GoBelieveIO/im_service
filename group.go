@@ -69,6 +69,12 @@ func (group *Group) IsMember(uid int64) bool {
 	return ok
 }
 
+func (group *Group) IsEmpty() bool {
+	group.mutex.Lock()
+	defer group.mutex.Unlock()
+	return len(group.members) == 0
+}
+
 func CreateGroup(db *sql.DB, appid int64, master int64, name string) int64 {
 	stmtIns, err := db.Prepare("INSERT INTO `group`(appid, master, name) VALUES( ?, ?, ? )")
 	if err != nil {

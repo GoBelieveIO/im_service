@@ -25,15 +25,25 @@ import "encoding/binary"
 const MSG_SUBSCRIBE = 130
 const MSG_UNSUBSCRIBE = 131
 const MSG_PUBLISH = 132
-const MSG_SUBSCRIBE_ROOM = 134
-const MSG_UNSUBSCRIBE_ROOM = 135
-const MSG_PUBLISH_ROOM = 136
+
+const MSG_SUBSCRIBE_GROUP = 133
+const MSG_UNSUBSCRIBE_GROUP = 134
+const MSG_PUBLISH_GROUP = 135
+
+const MSG_SUBSCRIBE_ROOM = 136
+const MSG_UNSUBSCRIBE_ROOM = 137
+const MSG_PUBLISH_ROOM = 138
 
 
 func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
+
+	message_creators[MSG_SUBSCRIBE_GROUP] = func()IMessage{return new(AppGroupMemberID)}
+	message_creators[MSG_UNSUBSCRIBE_GROUP] = func()IMessage{return new(AppGroupMemberID)}
+	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(AppMessage)}
+	
 	message_creators[MSG_SUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
 	message_creators[MSG_UNSUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
 	message_creators[MSG_PUBLISH_ROOM] = func()IMessage{return new(AppMessage)}
@@ -41,6 +51,11 @@ func init() {
 	message_descriptions[MSG_SUBSCRIBE] = "MSG_SUBSCRIBE"
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
 	message_descriptions[MSG_PUBLISH] = "MSG_PUBLISH"
+
+	message_descriptions[MSG_SUBSCRIBE_GROUP] = "MSG_SUBSCRIBE_GROUP"
+	message_descriptions[MSG_UNSUBSCRIBE_GROUP] = "MSG_UNSUBSCRIBE_GROUP"
+	message_descriptions[MSG_PUBLISH_GROUP] = "MSG_PUBLISH_GROUP"
+
 	message_descriptions[MSG_SUBSCRIBE_ROOM] = "MSG_SUBSCRIBE_ROOM"
 	message_descriptions[MSG_UNSUBSCRIBE_ROOM] = "MSG_UNSUBSCRIBE_ROOM"
 	message_descriptions[MSG_PUBLISH_ROOM] = "MSG_PUBLISH_ROOM"

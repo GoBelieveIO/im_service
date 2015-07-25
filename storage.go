@@ -353,7 +353,7 @@ func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64
 }
 
 func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
-	log.Infof("load offline message appid:%d uid:%d\n", appid, uid)
+
 	c := make([]*EMessage, 0, 10)
 	start := fmt.Sprintf("%d_%d_1", appid, uid)
 	end := fmt.Sprintf("%d_%d_9223372036854775807", appid, uid)
@@ -380,12 +380,13 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
 	if err != nil {
 		log.Warning("iterator err:", err)
 	}
-	log.Info("offline count:", len(c))
+
+	log.Infof("load offline message appid:%d uid:%d count:%d\n", appid, uid, len(c))
 	return c
 }
 
 func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, limit int) []*EMessage {
-	log.Infof("load group offline message appid:%d gid:%d uid:%d\n", appid, gid, uid)
+
 	c := make([]*EMessage, 0, 10)
 	
 	start := fmt.Sprintf("%d_%d_%d_1", appid, gid, uid)
@@ -427,8 +428,7 @@ func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int6
 		}
 		c = append(c, &EMessage{msgid:msgid, msg:msg})
 	}
-
-	log.Info("group offline count:", len(c))
+	log.Infof("load group offline message appid:%d gid:%d uid:%d count:%d\n", appid, gid, uid, len(c))
 	return c
 }
 

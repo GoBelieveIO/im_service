@@ -26,6 +26,7 @@ import "runtime"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
 
+var storage_channels []*StorageChannel
 var channels []*Channel
 var app_route *AppRoute
 var group_manager *GroupManager
@@ -82,6 +83,11 @@ func GetStorageConnPool(uid int64) *StorageConnPool {
 func GetGroupStorageConnPool(gid int64) *StorageConnPool {
 	index := gid%int64(len(storage_pools))
 	return storage_pools[index]
+}
+
+func GetGroupStorageChannel(gid int64) *StorageChannel {
+	index := gid%int64(len(storage_channels))
+	return storage_channels[index]
 }
 
 func GetChannel(uid int64) *Channel{
@@ -214,6 +220,30 @@ func DispatchRoomMessage(amsg *AppMessage) {
 	}	
 }
 
+func DispatchGroupMessage(amsg *AppMessage) {
+	log.Info("dispatch group message:")
+	group := group_manager.FindGroup(amsg.receiver)
+	if group == nil {
+		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
+		return
+	}
+	if amsg.msg.cmd != MSG_GROUP_IM {
+		log.Warning("invalid group message cmd:", Command(amsg.msg.cmd))
+		return
+	}
+
+	im := amsg.msg.body.(*IMMessage)
+	emsg := &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+
+	members := group.Members()
+	for member := range members {
+		//群消息不再发送给自己
+		if member == im.sender {
+			continue
+		}
+		SendEMessage(amsg.appid, member, emsg)
+	}
+}
 
 func DialStorageFun(addr string) func()(*StorageConn, error) {
 	f := func() (*StorageConn, error){
@@ -226,6 +256,26 @@ func DialStorageFun(addr string) func()(*StorageConn, error) {
 		return storage, nil
 	}
 	return f
+}
+
+type IMGroupObserver int
+func (ob IMGroupObserver) OnGroupMemberAdd(group *Group, uid int64) {
+	limit := int32(GROUP_OFFLINE_LIMIT)
+
+	route := app_route.FindRoute(group.appid)
+	if route == nil {
+		return
+	}
+
+	if route.IsOnline(uid) {
+		sc := GetGroupStorageChannel(group.gid)
+		sc.SubscribeGroup(group.appid, group.gid, uid, limit)
+	}
+}
+
+func (ob IMGroupObserver) OnGroupMemberRemove(group *Group, uid int64) {
+	sc := GetGroupStorageChannel(group.gid)
+	sc.UnSubscribeGroup(group.appid, group.gid, uid)
 }
 
 func main() {
@@ -252,6 +302,14 @@ func main() {
 		storage_pools = append(storage_pools, pool)
 	}
 
+	storage_channels = make([]*StorageChannel, 0)
+
+	for _, addr := range(config.storage_addrs) {
+		sc := NewStorageChannel(addr, DispatchGroupMessage)
+		sc.Start()
+		storage_channels = append(storage_channels, sc)
+	}
+
 	channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
 		channel := NewChannel(addr, DispatchAppMessage, DispatchRoomMessage)
@@ -260,6 +318,7 @@ func main() {
 	}
 	
 	group_manager = NewGroupManager()
+	group_manager.observer = IMGroupObserver(0)
 	group_manager.Start()
 
 	StartHttpServer(config.http_listen_address)

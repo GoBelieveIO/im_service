@@ -587,6 +587,8 @@ def TestGroupOffline():
     obj = json.loads(r.content)
     group_id = obj["data"]["group_id"]
     
+    print "group id:", group_id
+
     global task
     task = 0
 
@@ -726,7 +728,7 @@ def main():
     time.sleep(1)
     TestGroupOffline()
     time.sleep(1)
-     
+
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)

@@ -94,3 +94,14 @@ func (route *Route) FindClientSet(uid int64) ClientSet {
 	}
 }
 
+func (route *Route) IsOnline(uid int64) bool {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+
+	set, ok := route.clients[uid]
+	if ok {
+		return len(set) > 0
+	}
+	return false
+}
+

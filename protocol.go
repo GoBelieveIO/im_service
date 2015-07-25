@@ -831,6 +831,38 @@ func (id *AppRoomID) FromData(buff []byte) bool {
 	return true
 }
 
+type AppGroupMemberID struct {
+	appid  int64
+	gid    int64
+	uid    int64
+	limit  int32
+}
+
+func (id *AppGroupMemberID) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.appid)
+	binary.Write(buffer, binary.BigEndian, id.gid)
+	binary.Write(buffer, binary.BigEndian, id.uid)
+	binary.Write(buffer, binary.BigEndian, id.limit)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *AppGroupMemberID) FromData(buff []byte) bool {
+	if len(buff) < 28 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.appid)
+	binary.Read(buffer, binary.BigEndian, &id.gid)
+	binary.Read(buffer, binary.BigEndian, &id.uid)
+	binary.Read(buffer, binary.BigEndian, &id.limit)
+
+	return true
+}
+
+
 func SendMessage(conn io.Writer, msg *Message) error {
 	body := msg.ToData()
 	buffer := new(bytes.Buffer)
