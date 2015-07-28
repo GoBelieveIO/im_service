@@ -890,7 +890,7 @@ func ReceiveMessage(conn io.Reader) *Message {
 	}
 
 	length, seq, cmd, version := ReadHeader(buff)
-	if length < 0 || length > 64*1024 {
+	if length < 0 || length >= 4*1024*1024 {
 		log.Info("invalid len:", length)
 		return nil
 	}

@@ -25,6 +25,7 @@ import "bytes"
 import "sync"
 import "encoding/binary"
 import "strconv"
+import "io"
 import log "github.com/golang/glog"
 import "github.com/syndtr/goleveldb/leveldb"
 import "github.com/syndtr/goleveldb/leveldb/util"
@@ -80,7 +81,7 @@ func NewStorage(root string) *Storage {
 	storage.db = db
 
 	path = fmt.Sprintf("%s/%s", storage.root, "group_offline")
-	option = &opt.Options{Comparer:GroupOfflineComparer{}}
+	option = &opt.Options{}
 	db, err = leveldb.OpenFile(path, option)
 	if err != nil {
 		log.Fatal("open leveldb:", err)
@@ -174,7 +175,7 @@ func (storage *Storage) WriteHeader(file *os.File) {
 	}
 }
 
-func (storage *Storage) WriteMessage(file *os.File, msg *Message) {
+func (storage *Storage) WriteMessage(file io.Writer, msg *Message) {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
 	SendMessage(buffer, msg)
@@ -189,20 +190,25 @@ func (storage *Storage) WriteMessage(file *os.File, msg *Message) {
 	}
 }
 
-func (storage *Storage) SaveMessage(msg *Message) int64 {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
+//save without lock
+func (storage *Storage) saveMessage(msg *Message) int64 {
 	msgid, err := storage.file.Seek(0, os.SEEK_END)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	
 	storage.WriteMessage(storage.file, msg)
-
 	master.ewt <- &EMessage{msgid:msgid, msg:msg}
 	log.Info("save message:", msgid)
 	return msgid
+	
 }
+
+func (storage *Storage) SaveMessage(msg *Message) int64 {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	return storage.saveMessage(msg)
+}
+
 
 func (storage *Storage) OfflineKey(msg_id int64, appid int64, receiver int64) string {
 	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
@@ -293,15 +299,24 @@ func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64
 	storage.SaveMessage(msg)
 }
 
+func (storage *Storage) SaveGroupMessage(appid int64, gid int64, msg *Message) int64 {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
 
-func (storage *Storage) GroupOfflineKey(msg_id int64, appid int64, gid int64, receiver int64) string {
-	key := fmt.Sprintf("%d_%d_%d_%d", appid, gid, receiver, msg_id)
-	return key
+	msgid := storage.saveMessage(msg)
+
+	last_id, _ := storage.GetLastGroupMessageID(appid, gid)
+	lt := &GroupOfflineMessage{appid:appid, gid:gid, msgid:msgid, prev_msgid:last_id}
+	m := &Message{cmd:MSG_GROUP_IM_LIST, body:lt}
+	
+	last_id = storage.saveMessage(m)
+	storage.SetLastGroupMessageID(appid, gid, last_id)
+	return msgid
 }
 
-func (storage *Storage) AddGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
-	key := storage.GroupOfflineKey(msg_id, appid, gid, receiver)
-	value := fmt.Sprintf("%d", msg_id)
+func (storage *Storage) SetLastGroupMessageID(appid int64, gid int64, msgid int64) {
+	key := fmt.Sprintf("%d_%d", appid, gid)
+	value := fmt.Sprintf("%d", msgid)	
 	err := storage.group_db.Put([]byte(key), []byte(value), nil)
 	if err != nil {
 		log.Error("put err:", err)
@@ -309,51 +324,58 @@ func (storage *Storage) AddGroupOffline(msg_id int64, appid int64, gid int64, re
 	}
 }
 
-func (storage *Storage) RemoveGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
-	key := storage.GroupOfflineKey(msg_id, appid, gid, receiver)
-	err := storage.group_db.Delete([]byte(key), nil)
+func (storage *Storage) GetLastGroupMessageID(appid int64, gid int64) (int64, error) {
+	key := fmt.Sprintf("%d_%d", appid, gid)
+	value, err := storage.group_db.Get([]byte(key), nil)
 	if err != nil {
-		//can't get ErrNotFound
-		log.Error("delete err:", err)
+		log.Error("put err:", err)
+		return 0, err
 	}
-}
 
-func (storage *Storage) HasGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) bool {
-	key := storage.GroupOfflineKey(msg_id, appid, gid, receiver)
-	has, err := storage.group_db.Has([]byte(key), nil)
+	msgid, err := strconv.ParseInt(string(value), 10, 64)
 	if err != nil {
-		log.Error("check key err:", err)
-		return false
+		log.Error("parseint err:", err)
+		return 0, err
 	}
-	return has
+	return msgid, nil
 }
 
-func (storage *Storage) EnqueueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
-	log.Infof("enqueue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
-	storage.AddGroupOffline(msg_id, appid, gid, receiver)
-
-	off := &GroupOfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, gid:gid}
-
-	msg := &Message{cmd:MSG_GROUP_OFFLINE, body:off}
-	storage.SaveMessage(msg)
-}
-
-func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
-	log.Infof("dequeue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
-	has := storage.HasGroupOffline(msg_id, appid, gid, receiver)
-	if !has {
-		log.Info("no offline msg:", appid, receiver, msg_id)
+func (storage *Storage) SetLastGroupReceivedID(appid int64, gid int64, uid int64, msgid int64) {
+	key := fmt.Sprintf("%d_%d_%d", appid, gid, uid)
+	value := fmt.Sprintf("%d", msgid)	
+	err := storage.group_db.Put([]byte(key), []byte(value), nil)
+	if err != nil {
+		log.Error("put err:", err)
 		return
 	}
+}
 
-	storage.RemoveGroupOffline(msg_id, appid, gid, receiver)
+func (storage *Storage) GetLastGroupReceivedID(appid int64, gid int64, uid int64) (int64, error) {
+	key := fmt.Sprintf("%d_%d_%d", appid, gid, uid)
+	value, err := storage.group_db.Get([]byte(key), nil)
+	if err != nil {
+		log.Error("get err:", err)
+		return 0, err
+	}
+
+	msgid, err := strconv.ParseInt(string(value), 10, 64)
+	if err != nil {
+		log.Error("parseint err:", err)
+		return 0, err
+	}
+	return msgid, nil
+}
+
+//todo optimize
+func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
+	log.Infof("dequeue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
+	storage.SetLastGroupReceivedID(appid, gid, receiver, msg_id)
 	off := &GroupOfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, gid:gid}
 	msg := &Message{cmd:MSG_GROUP_ACK_IN, body:off}
 	storage.SaveMessage(msg)
 }
 
 func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
-
 	c := make([]*EMessage, 0, 10)
 	start := fmt.Sprintf("%d_%d_1", appid, uid)
 	end := fmt.Sprintf("%d_%d_9223372036854775807", appid, uid)
@@ -386,48 +408,43 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
 }
 
 func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, limit int) []*EMessage {
+	last_id, err := storage.GetLastGroupMessageID(appid, gid)
+	if err != nil {
+		log.Info("get last group message id err:", err)
+		return nil
+	}
+
+	last_received_id, _ := storage.GetLastGroupReceivedID(appid, gid, uid)
 
 	c := make([]*EMessage, 0, 10)
-	
-	start := fmt.Sprintf("%d_%d_%d_1", appid, gid, uid)
-	end := fmt.Sprintf("%d_%d_%d_9223372036854775807", appid, gid, uid)
-	
-	msgids := make([]int64, 0, 10)
-	r := &util.Range{Start:[]byte(start), Limit:[]byte(end)}
-	iter := storage.group_db.NewIterator(r, nil)
-	for iter.Next() {
-		value := iter.Value()
-		msgid, err := strconv.ParseInt(string(value), 10, 64)
-		if err != nil {
-			log.Error("parseint err:", err)
-			continue
-		}
-		log.Info("offline msgid:", msgid)
-		msgids = append(msgids, msgid)
-	}
-	iter.Release()
-	err := iter.Error()
-	if err != nil {
-		log.Warning("iterator err:", err)
-	}
-	
-	if len(msgids) > limit {
-		l := len(msgids) - limit
-		r := msgids[:l]
-		msgids = msgids[l:]
-		for _, msgid := range r {
-			storage.DequeueGroupOffline(msgid, appid, gid, uid)
-		}
-	}
-	
-	for _, msgid := range msgids {
+
+	msgid := last_id
+	for ; msgid > 0; {
 		msg := storage.LoadMessage(msgid)
 		if msg == nil {
-			log.Error("can't load offline message:", msgid)
-			continue
+			log.Warningf("load message:%d error\n", msgid)
+			break
 		}
-		c = append(c, &EMessage{msgid:msgid, msg:msg})
+		if msg.cmd != MSG_GROUP_IM_LIST {
+			log.Warning("invalid message cmd:", Command(msg.cmd))
+			break
+		}
+		off := msg.body.(*GroupOfflineMessage)
+
+		if off.msgid == 0 || off.msgid <= last_received_id {
+			break
+		}
+
+		m := storage.LoadMessage(off.msgid)
+		c = append(c, &EMessage{msgid:off.msgid, msg:m})
+
+		msgid = off.prev_msgid
+
+		if len(c) >= limit {
+			break
+		}
 	}
+
 	log.Infof("load group offline message appid:%d gid:%d uid:%d count:%d\n", appid, gid, uid, len(c))
 	return c
 }
@@ -440,6 +457,62 @@ func (storage *Storage) NextMessageID() int64 {
 		log.Fatalln(err)
 	}
 	return msgid
+}
+
+func (storage *Storage) ExecMessage(msg *Message, msgid int64) {
+	if msg.cmd == MSG_OFFLINE {
+		off := msg.body.(*OfflineMessage)
+		storage.AddOffline(off.msgid, off.appid, off.receiver)
+		storage.SetLastMessageID(off.appid, off.receiver, msgid)
+	} else if msg.cmd == MSG_ACK_IN {
+		off := msg.body.(*OfflineMessage)
+		storage.RemoveOffline(off.msgid, off.appid, off.receiver)
+	} else if msg.cmd == MSG_GROUP_IM_LIST {
+		off := msg.body.(*GroupOfflineMessage)
+		storage.SetLastGroupMessageID(off.appid, off.gid, msgid)
+	} else if msg.cmd == MSG_GROUP_ACK_IN {
+		off := msg.body.(*GroupOfflineMessage)
+		storage.SetLastGroupReceivedID(off.appid, off.gid, off.receiver, msgid)
+	}
+}
+
+func (storage *Storage) SaveSyncMessageBatch(mb *MessageBatch) error {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	
+	filesize, err := storage.file.Seek(0, os.SEEK_END)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if mb.first_id != filesize {
+		log.Warningf("file size:%d, msgid:%d is't equal", filesize, mb.first_id)
+		if mb.first_id < filesize {
+			log.Warning("skip msg:", mb.first_id)
+		} else {
+			log.Warning("write padding:", mb.first_id-filesize)
+			padding := make([]byte, mb.first_id - filesize)
+			_, err = storage.file.Write(padding)
+			if err != nil {
+				log.Fatal("file write:", err)
+			}
+		}
+	}
+	
+	id := mb.first_id
+	buffer := new(bytes.Buffer)
+	for _, m := range mb.msgs {
+		storage.ExecMessage(m, id)
+		storage.WriteMessage(buffer, m)
+		id += int64(buffer.Len())
+	}
+
+	buf := buffer.Bytes()
+	_, err = storage.file.Write(buf)
+	if err != nil {
+		log.Fatal("file write:", err)
+	}
+
+	return nil
 }
 
 func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
@@ -465,22 +538,8 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 	}
 	
 	storage.WriteMessage(storage.file, emsg.msg)
-
-	if emsg.msg.cmd == MSG_OFFLINE {
-		off := emsg.msg.body.(*OfflineMessage)
-		storage.AddOffline(off.msgid, off.appid, off.receiver)
-		storage.SetLastMessageID(off.appid, off.receiver, emsg.msgid)
-	} else if emsg.msg.cmd == MSG_ACK_IN {
-		off := emsg.msg.body.(*OfflineMessage)
-		storage.RemoveOffline(off.msgid, off.appid, off.receiver)
-	} else if emsg.msg.cmd == MSG_GROUP_OFFLINE {
-		off := emsg.msg.body.(*GroupOfflineMessage)
-		storage.AddGroupOffline(off.msgid, off.appid, off.gid, off.receiver)
-	} else if emsg.msg.cmd == MSG_GROUP_ACK_IN {
-		off := emsg.msg.body.(*GroupOfflineMessage)
-		storage.RemoveGroupOffline(off.msgid, off.appid, off.gid, off.receiver)
-	}
-	log.Info("save sync message:", emsg.msgid)
+	storage.ExecMessage(emsg.msg, emsg.msgid)
+	//log.Info("save sync message:", emsg.msgid)
 	return nil
 }
 
@@ -524,8 +583,8 @@ func (storage *Storage) LoadLatestMessages(appid int64, receiver int64, limit in
 }
 
 
-func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *EMessage {
-	c := make(chan *EMessage, 10)
+func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *MessageBatch {
+	c := make(chan *MessageBatch, 10)
 	go func() {
 		defer close(c)
 		path := fmt.Sprintf("%s/%s", storage.root, "messages")
@@ -553,6 +612,8 @@ func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *EMessage
 			return
 		}
 		
+		const BATCH_COUNT = 5000
+		batch := &MessageBatch{msgs:make([]*Message, 0, BATCH_COUNT)}
 		for {
 			msgid, err = file.Seek(0, os.SEEK_CUR)
 			if err != nil {
@@ -563,8 +624,21 @@ func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *EMessage
 			if msg == nil {
 				break
 			}
-			emsg := &EMessage{msgid:msgid, msg:msg}
-			c <- emsg
+
+			if batch.first_id == 0 {
+				batch.first_id = msgid
+			}
+
+			batch.last_id = msgid
+			batch.msgs = append(batch.msgs, msg)
+
+			if len(batch.msgs) >= BATCH_COUNT {
+				c <- batch
+				batch = &MessageBatch{msgs:make([]*Message, 0, BATCH_COUNT)}
+			}
+		}
+		if len(batch.msgs) > 0 {
+			c <- batch
 		}
 	}()
 	return c

@@ -35,6 +35,7 @@ var storage_pools []*StorageConnPool
 var config *Config
 var server_summary *ServerSummary
 
+
 func init() {
 	app_route = NewAppRoute()
 	server_summary = NewServerSummary()
@@ -221,7 +222,7 @@ func DispatchRoomMessage(amsg *AppMessage) {
 }
 
 func DispatchGroupMessage(amsg *AppMessage) {
-	log.Info("dispatch group message:")
+	//log.Info("dispatch group message:")
 	group := group_manager.FindGroup(amsg.receiver)
 	if group == nil {
 		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
@@ -232,8 +233,13 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		return
 	}
 
+	route := app_route.FindRoute(amsg.appid)
+	if route == nil {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+		return
+	}
+
 	im := amsg.msg.body.(*IMMessage)
-	emsg := &EMessage{msgid:amsg.msgid, msg:amsg.msg}
 
 	members := group.Members()
 	for member := range members {
@@ -241,10 +247,46 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		if member == im.sender {
 			continue
 		}
-		SendEMessage(amsg.appid, member, emsg)
+
+	    clients := route.FindClientSet(member)
+		if len(clients) == 0 {
+			continue
+		}
+		 
+		if clients != nil {
+			for c, _ := range(clients) {
+				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+			}
+		}
 	}
 }
 
+func DispatchFun(c chan *AppMessage) {
+	for {
+		amsg := <- c
+		uid := amsg.receiver
+
+		route := app_route.FindRoute(amsg.appid)
+		if route == nil {
+			log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+			continue
+		}
+	    clients := route.FindClientSet(uid)
+	    if len(clients) == 0 {
+	     	log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+			continue
+	    }
+
+		continue
+	    if clients != nil && false {
+	     	for c, _ := range(clients) {
+				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+	     	}
+	    }
+
+	}
+	
+}
 func DialStorageFun(addr string) func()(*StorageConn, error) {
 	f := func() (*StorageConn, error){
 		storage := NewStorageConn()

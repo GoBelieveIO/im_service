@@ -1,3 +1,22 @@
+/**
+ * Copyright (c) 2014-2015, GoBelieve     
+ * All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
 package main
 
 import "net"
@@ -8,13 +27,13 @@ import log "github.com/golang/glog"
 
 type SyncClient struct {
 	conn      *net.TCPConn
-	ewt       chan *EMessage
+	ewt       chan *Message
 }
 
 func NewSyncClient(conn *net.TCPConn) *SyncClient {
 	c := new(SyncClient)
 	c.conn = conn
-	c.ewt = make(chan *EMessage, 10)
+	c.ewt = make(chan *Message, 10)
 	return c
 }
 
@@ -32,8 +51,8 @@ func (client *SyncClient) RunLoop() {
 	log.Info("cursor msgid:", cursor.msgid)
 	c := storage.LoadSyncMessagesInBackground(cursor.msgid)
 	
-	for emsg := range(c) {
-		msg := &Message{cmd:MSG_SYNC_MESSAGE, body:emsg}
+	for batch := range(c) {
+		msg := &Message{cmd:MSG_SYNC_MESSAGE_BATCH, body:batch}
 		seq = seq + 1
 		msg.seq = seq
 		SendMessage(client.conn, msg)
@@ -43,13 +62,12 @@ func (client *SyncClient) RunLoop() {
 	defer master.RemoveClient(client)
 
 	for {
-		emsg := <- client.ewt
-		if emsg == nil {
+		msg := <- client.ewt
+		if msg == nil {
 			log.Warning("chan closed")
 			break
 		}
 
-		msg := &Message{cmd:MSG_SYNC_MESSAGE, body:emsg}
 		seq = seq + 1
 		msg.seq = seq
 		err := SendMessage(client.conn, msg)
@@ -99,12 +117,55 @@ func (master *Master) CloneClientSet() map[*SyncClient]struct{} {
 	return clone
 }
 
+func (master *Master) SendBatch(cache []*EMessage) {
+	if len(cache) == 0 {
+		return
+	}
+
+	batch := &MessageBatch{msgs:make([]*Message, 0, 1000)}
+	batch.first_id = cache[0].msgid
+	for _, em := range cache {
+		batch.last_id = em.msgid
+		batch.msgs = append(batch.msgs, em.msg)
+	}
+	m := &Message{cmd:MSG_SYNC_MESSAGE_BATCH, body:batch}
+	clients := master.CloneClientSet()
+	for c := range(clients) {
+		c.ewt <- m
+	}
+}
+
 func (master *Master) Run() {
+	cache := make([]*EMessage, 0, 1000)
+	var first_ts time.Time
 	for {
-		emsg := <- master.ewt
-		clients := master.CloneClientSet()
-		for c := range(clients) {
-			c.ewt <- emsg
+		t := 60*time.Second
+		if len(cache) > 0 {
+			ts := first_ts.Add(time.Second*1)
+			now := time.Now()
+
+			if ts.After(now) {
+				t = ts.Sub(now)
+			} else {
+				master.SendBatch(cache)
+				cache = cache[0:0]
+			}
+		}
+		select {
+		case emsg := <- master.ewt:
+			cache = append(cache, emsg)
+			if len(cache) == 1 {
+				first_ts = time.Now()
+			}
+			if len(cache) >= 1000 {
+				master.SendBatch(cache)
+				cache = cache[0:0]
+			}
+		case <-time.After(t):
+			if len(cache) > 0 {
+				master.SendBatch(cache)
+				cache = cache[0:0]
+			}
 		}
 	}
 }
@@ -142,9 +203,13 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 		if msg == nil {
 			return
 		}
+
 		if msg.cmd == MSG_SYNC_MESSAGE {
 			emsg := msg.body.(*EMessage)
 			storage.SaveSyncMessage(emsg)
+		} else if msg.cmd == MSG_SYNC_MESSAGE_BATCH {
+			mb := msg.body.(*MessageBatch)
+			storage.SaveSyncMessageBatch(mb)
 		} else {
 			log.Error("unknown message cmd:", Command(msg.cmd))
 		}

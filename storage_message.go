@@ -33,14 +33,15 @@ const MSG_LOAD_HISTORY = 204
 
 const MSG_SAVE_AND_ENQUEUE_GROUP = 205
 const MSG_DEQUEUE_GROUP = 206
-const MSG_LOAD_OFFLINE_GROUP = 207
+
 
 //主从同步消息
 const MSG_SYNC_BEGIN = 210
 const MSG_SYNC_MESSAGE = 211
+const MSG_SYNC_MESSAGE_BATCH = 212
 
 //内部文件存储使用
-const MSG_GROUP_OFFLINE = 252
+const MSG_GROUP_IM_LIST = 252
 const MSG_GROUP_ACK_IN = 253
 const MSG_OFFLINE = 254
 const MSG_ACK_IN = 255
@@ -55,9 +56,8 @@ func init() {
 	
 	message_creators[MSG_SAVE_AND_ENQUEUE_GROUP] = func()IMessage{return new(SAEMessage)}
 	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(DQMessage)}
-	message_creators[MSG_LOAD_OFFLINE_GROUP] = func()IMessage{return new(LoadGroupOffline)}
-	
-	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new(GroupOfflineMessage)}
+
+	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
 
 	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage)}
@@ -65,7 +65,8 @@ func init() {
 
 	message_creators[MSG_SYNC_BEGIN] = func()IMessage{return new(SyncCursor)}
 	message_creators[MSG_SYNC_MESSAGE] = func()IMessage{return new(EMessage)}
-	
+	message_creators[MSG_SYNC_MESSAGE_BATCH] = func()IMessage{return new(MessageBatch)}
+
 	message_descriptions[MSG_SAVE_AND_ENQUEUE] = "MSG_SAVE_AND_ENQUEUE"
 	message_descriptions[MSG_DEQUEUE] = "MSG_DEQUEUE"
 	message_descriptions[MSG_LOAD_OFFLINE] = "MSG_LOAD_OFFLINE"
@@ -74,10 +75,10 @@ func init() {
 
 	message_descriptions[MSG_SAVE_AND_ENQUEUE_GROUP] = "MSG_SAVE_AND_ENQUEUE_GROUP"
 	message_descriptions[MSG_DEQUEUE_GROUP] = "MSG_DEQUEUE_GROUP"
-	message_descriptions[MSG_LOAD_OFFLINE_GROUP] = "MSG_LOAD_OFFLINE_GROUP"
 
 	message_descriptions[MSG_SYNC_BEGIN] = "MSG_SYNC_BEGIN"
 	message_descriptions[MSG_SYNC_MESSAGE] = "MSG_SYNC_MESSAGE"
+	message_descriptions[MSG_SYNC_MESSAGE_BATCH] = "MSG_SYNC_MESSAGE_BATCH"
 
 }
 type SyncCursor struct {
@@ -144,6 +145,51 @@ func (emsg *EMessage) FromData(buff []byte) bool {
 		return false
 	}
 	emsg.msg = msg
+
+	return true
+}
+
+type MessageBatch struct {
+	first_id int64
+	last_id  int64
+	msgs     []*Message
+}
+
+func (batch *MessageBatch) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, batch.first_id)
+	binary.Write(buffer, binary.BigEndian, batch.last_id)
+	count := int32(len(batch.msgs))
+	binary.Write(buffer, binary.BigEndian, count)
+
+	for _, m := range batch.msgs {
+		SendMessage(buffer, m)
+	}
+
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (batch *MessageBatch) FromData(buff []byte) bool {
+	if len(buff) < 18 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &batch.first_id)
+	binary.Read(buffer, binary.BigEndian, &batch.last_id)
+
+	var count int32
+	binary.Read(buffer, binary.BigEndian, &count)
+
+	batch.msgs = make([]*Message, 0, count)
+	for i := 0; i < int(count); i++ {
+		msg := ReceiveMessage(buffer)
+		if msg == nil {
+			return false
+		}
+		batch.msgs = append(batch.msgs, msg)
+	}
 
 	return true
 }

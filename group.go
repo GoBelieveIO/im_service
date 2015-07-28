@@ -44,34 +44,34 @@ func NewGroup(gid int64, appid int64, members []int64) *Group {
 	return group
 }
 
+
 func (group *Group) Members() IntSet {
-	group.mutex.Lock()
-	defer group.mutex.Unlock()
-	return group.members.Clone()
+	return group.members
 }
 
+//修改成员，在副本修改，避免读取时的lock
 func (group *Group) AddMember(uid int64) {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
-	group.members.Add(uid)
+	members := group.members.Clone()
+	members.Add(uid)
+	group.members = members
 }
 
 func (group *Group) RemoveMember(uid int64) {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
-	group.members.Remove(uid)
+	members := group.members.Clone()
+	members.Remove(uid)
+	group.members = members
 }
 
 func (group *Group) IsMember(uid int64) bool {
-	group.mutex.Lock()
-	defer group.mutex.Unlock()
 	_, ok := group.members[uid]
 	return ok
 }
 
 func (group *Group) IsEmpty() bool {
-	group.mutex.Lock()
-	defer group.mutex.Unlock()
 	return len(group.members) == 0
 }
 

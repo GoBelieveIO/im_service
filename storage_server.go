@@ -27,6 +27,9 @@ import "runtime"
 import "flag"
 import "encoding/binary"
 import log "github.com/golang/glog"
+import "os"
+import "os/signal"
+import "syscall"
 
 var storage *Storage
 var config *StorageConfig
@@ -35,28 +38,50 @@ var group_manager *GroupManager
 var clients ClientSet
 var mutex   sync.Mutex
 
+const GROUP_C_COUNT = 10
+var group_c []chan func()
+
+
 func init() {
 	clients = NewClientSet()
+	group_c = make([]chan func(), GROUP_C_COUNT)
+	for i := 0; i < GROUP_C_COUNT; i++ {
+		group_c[i] = make(chan func())
+	}
 }
 
+
+func GetGroupChan(gid int64) chan func() {
+	index := gid%GROUP_C_COUNT
+	return group_c[index]
+}
+
+//clone when write, lockless when read
 func AddClient(client *Client) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	
-	clients.Add(client)
+	if clients.IsMember(client) {
+		return
+	}
+	c := clients.Clone()
+	c.Add(client)
+	clients = c
 }
 
 func RemoveClient(client *Client) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	clients.Remove(client)
+	if !clients.IsMember(client) {
+		return
+	}
+	c := clients.Clone()
+	c.Remove(client)
+	clients = c
 }
 
 func FindClientSet(appid int64, gid int64) ClientSet {
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	s := NewClientSet()
 
 	for c := range(clients) {
@@ -68,9 +93,6 @@ func FindClientSet(appid int64, gid int64) ClientSet {
 }
 
 func IsUserOnline(appid int64, gid int64, uid int64) bool {
-	mutex.Lock()
-	defer mutex.Unlock()
-	
 	for c := range(clients) {
 		if c.ContainAppUserID(appid, gid, uid) {
 			return true
@@ -196,27 +218,32 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 		log.Error("sae msg is nil")
 		return
 	}
-	msgid := storage.SaveMessage(sae.msg)
 	if sae.msg.cmd != MSG_GROUP_IM {
 		log.Error("sae msg cmd:", sae.msg.cmd)
 		return
 	}
+
 	appid := sae.appid
 	im := sae.msg.body.(*IMMessage)
 	gid := im.receiver
 
-	group := group_manager.FindGroup(gid)
-	if group == nil {
-		log.Warning("can't find group:", gid)
-	} else {
-		members := group.Members()
-		for member := range members {
-			if im.sender == member {
-				continue
-			}
-			storage.EnqueueGroupOffline(msgid, appid, gid, member)		
+	//保证群组消息以id递增的顺序发出去
+	t := make(chan int64)
+	f := func () {
+		msgid := storage.SaveGroupMessage(appid, gid, sae.msg)
+
+		s := FindClientSet(appid, gid)
+		for c := range s {
+			am := &AppMessage{appid:appid, receiver:gid, msgid:msgid, msg:sae.msg}
+			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
+			c.wt <- m
 		}
+		t <- msgid
 	}
+
+	c := GetGroupChan(gid)
+	c <- f
+	msgid := <- t
 
 	result := &MessageResult{}
 	result.status = 0
@@ -226,13 +253,8 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
 
-	s := FindClientSet(appid, gid)
-	for c := range s {
-		am := &AppMessage{appid:appid, receiver:gid, msgid:msgid, msg:sae.msg}
-		m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
-		c.wt <- m
-	}
-
+	group := group_manager.FindGroup(gid)
+	 
 	if group != nil {
 		members := group.Members()
 		for uid, _ := range members {
@@ -324,12 +346,16 @@ func (client *Client) HandleSubscribeGroup(lo *AppGroupMemberID) {
 	route := client.app_route.FindOrAddRoute(lo.appid)
 	route.AddGroupMember(lo.gid, lo.uid)
 
-	messages := storage.LoadGroupOfflineMessage(lo.appid, lo.gid, lo.uid, int(lo.limit))
-	for _, emsg := range(messages) {
-		am := &AppMessage{appid:lo.appid, receiver:lo.gid, msgid:emsg.msgid, msg:emsg.msg}
-		m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
-		client.wt <- m
+	f := func () {
+		messages := storage.LoadGroupOfflineMessage(lo.appid, lo.gid, lo.uid, int(lo.limit))
+		for _, emsg := range(messages) {
+			am := &AppMessage{appid:lo.appid, receiver:lo.gid, msgid:emsg.msgid, msg:emsg.msg}
+			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
+			client.wt <- m
+		}
 	}
+	c := GetGroupChan(lo.gid)
+	c <- f
 }
 
 func (client *Client) HandleUnSubscribeGroup(id *AppGroupMemberID) {
@@ -421,6 +447,33 @@ func ListenSyncClient() {
 	Listen(handle_sync_client, config.sync_listen)
 }
 
+func GroupLoop(c chan func()) {
+	for {
+		f := <- c
+		f()
+	}
+}
+
+
+// Signal handler
+func waitSignal() error {
+    ch := make(chan os.Signal, 1)
+    signal.Notify(
+    ch,
+    syscall.SIGINT,
+    syscall.SIGTERM,
+    )
+    for {
+        sig := <-ch
+        fmt.Println("singal:", sig.String())
+        switch sig {
+            case syscall.SIGTERM, syscall.SIGINT:
+			os.Exit(0)
+        }
+    }
+    return nil // It'll never get here.
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -443,6 +496,10 @@ func main() {
 
 	group_manager = NewGroupManager()
 	group_manager.Start()
+
+	for i := 0; i < GROUP_C_COUNT; i++ {
+		go GroupLoop(group_c[i])
+	}
 
 	go ListenSyncClient()
 	ListenClient()

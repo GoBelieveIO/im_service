@@ -1,3 +1,4 @@
+.DS_Store
 *~
 .idea
 bin
@@ -7,6 +8,7 @@ ims
 imr
 im_api
 benchmark
+benchmark_group
 benchmark_connection
 benchmark_sender
 main.test
