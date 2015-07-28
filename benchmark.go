@@ -131,11 +131,12 @@ func receive(uid int64) {
 			break
 		}
 		if msg.cmd != MSG_IM {
-			log.Println("mmmmmm")
+			//log.Println("mmmmmm:", Command(msg.cmd))
+			i--
+		} else {
+			//m := msg.body.(*IMMessage)
+			//log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 		}
-		m := msg.body.(*IMMessage)
-
-		log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 		seq++
 		ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, &MessageACK{int32(msg.seq)}}
 		SendMessage(conn, ack)

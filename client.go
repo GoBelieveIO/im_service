@@ -89,6 +89,8 @@ func (client *Client) HandleRemoveClient() {
 	if client.uid > 0 {
 		channel := GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid)
+		channel = GetUserStorageChannel(client.uid)
+		channel.Unsubscribe(client.appid, client.uid)
 		client.UnsubscribeGroup()
 	}
 }
@@ -96,8 +98,6 @@ func (client *Client) HandleRemoveClient() {
 func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", Command(msg.cmd))
 	switch msg.cmd {
-	case MSG_AUTH:
-		client.HandleAuth(msg.body.(*Authentication), msg.version)
 	case MSG_AUTH_TOKEN:
 		client.HandleAuthToken(msg.body.(*AuthenticationToken), msg.version)
 	case MSG_IM:
@@ -150,27 +150,6 @@ func (client *Client) UnsubscribeGroup() {
 	}
 }
 
-func (client *Client) SendOfflineMessage() {
-	storage_pool := GetStorageConnPool(client.uid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		return
-	}
-	defer storage_pool.Release(storage)
-
-	offline_messages, err := storage.LoadOfflineMessage(client.appid, client.uid)
-	if err != nil {
-		log.Error("load offline message err:", err)
-	}
-
-	log.Info("load offline message count:", len(offline_messages))
-	for _, emsg := range offline_messages {
-		log.Info("send offline message:", emsg.msgid)
-		client.ewt <- emsg
-	}
-}
-
 func (client *Client) SendMessage(uid int64, msg *Message) bool {
 	return Send0Message(client.appid, uid, msg)
 }
@@ -216,31 +195,14 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.wt <- msg
 
 	client.SendLoginPoint()
-	client.SendOfflineMessage()
+	client.AddClient()
+
 	client.SubscribeGroup()
-	client.AddClient()
-	channel := GetChannel(client.uid)
+	channel := GetUserStorageChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
-	CountDAU(client.appid, client.uid)
-	atomic.AddInt64(&server_summary.nclients, 1)
-}
-
-func (client *Client) HandleAuth(login *Authentication, version int) {
-	client.version = version
-	client.appid = 0
-	client.uid = login.uid
-	client.device_id = "00000000"
-	client.platform_id = PLATFORM_IOS
-	client.tm = time.Now()
-	log.Info("auth:", login.uid)
-
-	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
-	client.wt <- msg
-
-	client.SendOfflineMessage()
-	client.AddClient()
-	channel := GetChannel(client.uid)
+	channel = GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
+
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
 }
@@ -295,14 +257,10 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 		return
 	}
 
-	emsg := &EMessage{msgid:msgid, msg:m}
-
-	SendEMessage(client.appid, msg.receiver, emsg)
-
 	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
-	log.Infof("peer message sender:%d receiver:%d", msg.sender, msg.receiver)
+	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
 func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
@@ -331,12 +289,10 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 			if member == client.uid {
 				continue
 			}
-			msgid, err := SaveMessage(client.appid, member, m)
+			_, err := SaveMessage(client.appid, member, m)
 			if err != nil {
 				continue
 			}
-			emsg := &EMessage{msgid:msgid, msg:m}
-			SendEMessage(client.appid, member, emsg)
 		}
 	}
 	
@@ -380,13 +336,10 @@ func (client *Client) HandleACK(ack *MessageACK) {
 		ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
 		m := &Message{cmd: MSG_PEER_ACK, body: ack}
 
-		msgid, err := SaveMessage(client.appid, im.sender, m)
+		_, err := SaveMessage(client.appid, im.sender, m)
 		if err != nil {
 			return
 		}
-
-		emsg := &EMessage{msgid:msgid, msg:m}
-		SendEMessage(client.appid, im.sender, emsg)
 	}
 }
 
@@ -596,7 +549,10 @@ func (client *Client) read() *Message {
 // 根据连接类型发送消息
 func (client *Client) send(msg *Message) {
 	if conn, ok := client.conn.(net.Conn); ok {
-		SendMessage(conn, msg)
+		err := SendMessage(conn, msg)
+		if err != nil {
+			log.Info("tcp err:", err)
+		}
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		SendEngineIOMessage(conn, msg)
 	}

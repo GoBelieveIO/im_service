@@ -50,9 +50,13 @@ func init() {
 	}
 }
 
-
 func GetGroupChan(gid int64) chan func() {
 	index := gid%GROUP_C_COUNT
+	return group_c[index]
+}
+
+func GetUserChan(uid int64) chan func() {
+	index := uid%GROUP_C_COUNT
 	return group_c[index]
 }
 
@@ -81,7 +85,8 @@ func RemoveClient(client *Client) {
 	clients = c
 }
 
-func FindClientSet(appid int64, gid int64) ClientSet {
+//group im
+func FindGroupClientSet(appid int64, gid int64) ClientSet {
 	s := NewClientSet()
 
 	for c := range(clients) {
@@ -92,9 +97,31 @@ func FindClientSet(appid int64, gid int64) ClientSet {
 	return s
 }
 
-func IsUserOnline(appid int64, gid int64, uid int64) bool {
+func IsGroupUserOnline(appid int64, gid int64, uid int64) bool {
 	for c := range(clients) {
-		if c.ContainAppUserID(appid, gid, uid) {
+		if c.ContainGroupUserID(appid, gid, uid) {
+			return true
+		}
+	}
+	return false
+}
+
+//peer im
+func FindClientSet(id *AppUserID) ClientSet {
+	s := NewClientSet()
+
+	for c := range(clients) {
+		if c.ContainAppUserID(id) {
+			s.Add(c)
+		}
+	}
+	return s
+}
+
+func IsUserOnline(appid int64, uid int64) bool {
+	id := &AppUserID{appid:appid, uid:uid}
+	for c := range(clients) {
+		if c.ContainAppUserID(id) {
 			return true
 		}
 	}
@@ -105,13 +132,36 @@ type Route struct {
 	appid     int64
 	mutex     sync.Mutex
 	groups    map[int64]*Group
+	uids      IntSet
 }
 
 func NewRoute(appid int64) *Route {
 	r := new(Route)
 	r.appid = appid
 	r.groups = make(map[int64]*Group)
+	r.uids = NewIntSet()
 	return r
+}
+
+func (route *Route) ContainUserID(uid int64) bool {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+	
+	return route.uids.IsMember(uid)
+}
+
+func (route *Route) AddUserID(uid int64) {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+
+	route.uids.Add(uid)
+}
+
+func (route *Route) RemoveUserID(uid int64) {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+
+	route.uids.Remove(uid)
 }
 
 func (route *Route) AddGroupMember(gid int64, member int64) {
@@ -182,13 +232,22 @@ func (client *Client) ContainAppGroupID(appid int64, gid int64) bool {
 	return route.ContainGroupID(gid)
 }
 
-func (client *Client) ContainAppUserID(appid int64, gid int64, uid int64) bool {
+func (client *Client) ContainGroupUserID(appid int64, gid int64, uid int64) bool {
 	route := client.app_route.FindRoute(appid)
 	if route == nil {
 		return false
 	}
 
 	return route.ContainGroupMember(gid, uid)
+}
+
+func (client *Client) ContainAppUserID(id *AppUserID) bool {
+	route := client.app_route.FindRoute(id.appid)
+	if route == nil {
+		return false
+	}
+
+	return route.ContainUserID(id.uid)
 }
 
 func (client *Client) Read() {
@@ -232,7 +291,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	f := func () {
 		msgid := storage.SaveGroupMessage(appid, gid, sae.msg)
 
-		s := FindClientSet(appid, gid)
+		s := FindGroupClientSet(appid, gid)
 		for c := range s {
 			am := &AppMessage{appid:appid, receiver:gid, msgid:msgid, msg:sae.msg}
 			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
@@ -258,7 +317,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	if group != nil {
 		members := group.Members()
 		for uid, _ := range members {
-			if !IsUserOnline(appid, gid, uid) {
+			if !IsGroupUserOnline(appid, gid, uid) {
 				//todo push offline message
 			}
 		}
@@ -273,14 +332,35 @@ func (client *Client) HandleDQGroupMessage(dq *DQMessage) {
 }
 
 func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
-	if sae.msg == nil {
+	if sae.msg == nil || len(sae.receivers) != 1 {
 		log.Error("sae msg is nil")
 		return
 	}
-	msgid := storage.SaveMessage(sae.msg)
-	for _, r := range(sae.receivers) {
-		storage.EnqueueOffline(msgid, sae.appid, r)
+
+	uid := sae.receivers[0]
+	//保证消息以id递增的顺序发出
+	t := make(chan int64)	
+	f := func() {
+		msgid := storage.SavePeerMessage(sae.appid, uid, sae.msg)
+		
+		id := &AppUserID{appid:sae.appid, uid:uid}
+		s := FindClientSet(id)
+		for c := range s {
+			am := &AppMessage{appid:sae.appid, receiver:uid, msgid:msgid, msg:sae.msg}
+			m := &Message{cmd:MSG_PUBLISH, body:am}
+			c.wt <- m
+		}
+
+		if len(s) == 0 {
+			//todo push offline message
+		}
+		t <- msgid
 	}
+
+	c := GetUserChan(uid)
+	c <- f
+	msgid := <- t
+
 	result := &MessageResult{}
 	result.status = 0
 	buffer := new(bytes.Buffer)
@@ -341,10 +421,8 @@ func (client *Client) HandleLoadHistory(lh *LoadHistory) {
 }
 
 func (client *Client) HandleSubscribeGroup(lo *AppGroupMemberID) {
+	log.Infof("subscribe group appid:%d gid:%d uid:%d\n", lo.appid, lo.gid, lo.uid)
 	AddClient(client)
-
-	route := client.app_route.FindOrAddRoute(lo.appid)
-	route.AddGroupMember(lo.gid, lo.uid)
 
 	f := func () {
 		messages := storage.LoadGroupOfflineMessage(lo.appid, lo.gid, lo.uid, int(lo.limit))
@@ -353,6 +431,9 @@ func (client *Client) HandleSubscribeGroup(lo *AppGroupMemberID) {
 			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
 			client.wt <- m
 		}
+
+		route := client.app_route.FindOrAddRoute(lo.appid)
+		route.AddGroupMember(lo.gid, lo.uid)
 	}
 	c := GetGroupChan(lo.gid)
 	c <- f
@@ -361,6 +442,32 @@ func (client *Client) HandleSubscribeGroup(lo *AppGroupMemberID) {
 func (client *Client) HandleUnSubscribeGroup(id *AppGroupMemberID) {
 	route := client.app_route.FindOrAddRoute(id.appid)
 	route.RemoveGroupMember(id.gid, id.uid)
+}
+
+func (client *Client) HandleSubscribe(id *AppUserID) {
+	log.Infof("subscribe appid:%d uid:%d", id.appid, id.uid)
+	AddClient(client)
+
+	f := func() {
+		messages := storage.LoadOfflineMessage(id.appid, id.uid)
+		for _, emsg := range(messages) {
+			am := &AppMessage{appid:id.appid, receiver:id.uid, msgid:emsg.msgid, msg:emsg.msg}
+			m := &Message{cmd:MSG_PUBLISH, body:am}
+			client.wt <- m
+		}
+
+		route := client.app_route.FindOrAddRoute(id.appid)
+		route.AddUserID(id.uid)
+	}
+
+	c := GetUserChan(id.uid)
+	c <- f
+}
+
+func (client *Client) HandleUnsubscribe(id *AppUserID) {
+	log.Infof("unsubscribe appid:%d uid:%d", id.appid, id.uid)
+	route := client.app_route.FindOrAddRoute(id.appid)
+	route.RemoveUserID(id.uid)
 }
 
 func (client *Client) HandleMessage(msg *Message) {
@@ -382,6 +489,10 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleSubscribeGroup(msg.body.(*AppGroupMemberID))
 	case MSG_UNSUBSCRIBE_GROUP:
 		client.HandleUnSubscribeGroup(msg.body.(*AppGroupMemberID))
+	case MSG_SUBSCRIBE:
+		client.HandleSubscribe(msg.body.(*AppUserID))
+	case MSG_UNSUBSCRIBE:
+		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	default:
 		log.Warning("unknown msg:", msg.cmd)
 	}

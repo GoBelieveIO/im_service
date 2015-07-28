@@ -28,7 +28,6 @@ import "strconv"
 import "io"
 import log "github.com/golang/glog"
 import "github.com/syndtr/goleveldb/leveldb"
-import "github.com/syndtr/goleveldb/leveldb/util"
 import "github.com/syndtr/goleveldb/leveldb/opt"
 
 const HEADER_SIZE = 32
@@ -72,7 +71,7 @@ func NewStorage(root string) *Storage {
 	storage.file = file
 
 	path = fmt.Sprintf("%s/%s", storage.root, "offline")
-	option := &opt.Options{Comparer:OfflineComparer{}}
+	option := &opt.Options{}
 	db, err := leveldb.OpenFile(path, option)
 	if err != nil {
 		log.Fatal("open leveldb:", err)
@@ -209,47 +208,28 @@ func (storage *Storage) SaveMessage(msg *Message) int64 {
 	return storage.saveMessage(msg)
 }
 
+func (storage *Storage) SavePeerMessage(appid int64, uid int64, msg *Message) int64 {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	msgid := storage.saveMessage(msg)
 
-func (storage *Storage) OfflineKey(msg_id int64, appid int64, receiver int64) string {
-	key := fmt.Sprintf("%d_%d_%d", appid, receiver, msg_id)
-	return key
+	last_id, _ := storage.GetLastMessageID(appid, uid)
+	off := &OfflineMessage{appid:appid, receiver:uid, msgid:msgid, prev_msgid:last_id}
+	m := &Message{cmd:MSG_OFFLINE, body:off}
+	last_id = storage.saveMessage(m)
+
+	//storage.AddOffline(msgid, appid, uid)
+	storage.SetLastMessageID(appid, uid, last_id)
+	return msgid
 }
 
-func (storage *Storage) AddOffline(msg_id int64, appid int64, receiver int64) {
-	key := storage.OfflineKey(msg_id, appid, receiver)
-	value := fmt.Sprintf("%d", msg_id)
-	err := storage.db.Put([]byte(key), []byte(value), nil)
-	if err != nil {
-		log.Error("put err:", err)
-		return
-	}
-}
-
-func (storage *Storage) RemoveOffline(msg_id int64, appid int64, receiver int64) {
-	key := storage.OfflineKey(msg_id, appid, receiver)
-	err := storage.db.Delete([]byte(key), nil)
-	if err != nil {
-		//can't get ErrNotFound
-		log.Error("delete err:", err)
-	}
-}
-
-func (storage *Storage) HasOffline(msg_id int64, appid int64, receiver int64) bool {
-	key := storage.OfflineKey(msg_id, appid, receiver)
-	has, err := storage.db.Has([]byte(key), nil)
-	if err != nil {
-		log.Error("check key err:", err)
-		return false
-	}
-	return has
-}
 
 //获取最近离线消息ID
 func (storage *Storage) GetLastMessageID(appid int64, receiver int64) (int64, error) {
 	key := fmt.Sprintf("%d_%d_0", appid, receiver)
 	value, err := storage.db.Get([]byte(key), nil)
 	if err != nil {
-		log.Error("put err:", err)
+		log.Error("get err:", err)
 		return 0, err
 	}
 
@@ -272,31 +252,47 @@ func (storage *Storage) SetLastMessageID(appid int64, receiver int64, msg_id int
 	}
 }
 
-func (storage *Storage) EnqueueOffline(msg_id int64, appid int64, receiver int64) {
-	log.Infof("enqueue offline:%d %d %d\n", appid, receiver, msg_id)
-	storage.AddOffline(msg_id, appid, receiver)
-
-	last_id, _ := storage.GetLastMessageID(appid, receiver)
-
-	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, prev_msgid:last_id}
-
-	msg := &Message{cmd:MSG_OFFLINE, body:off}
-	last_id = storage.SaveMessage(msg)
-	storage.SetLastMessageID(appid, receiver, last_id)
+func (storage *Storage) SetLastReceivedID(appid int64, uid int64, msgid int64) {
+	key := fmt.Sprintf("%d_%d_1", appid, uid)
+	value := fmt.Sprintf("%d", msgid)
+	err := storage.db.Put([]byte(key), []byte(value), nil)
+	if err != nil {
+		log.Error("put err:", err)
+		return
+	}
 }
+
+func (storage *Storage) GetLastReceivedID(appid int64, uid int64) (int64, error) {
+	key := fmt.Sprintf("%d_%d_1", appid, uid)
+	value, err := storage.db.Get([]byte(key), nil)
+	if err != nil {
+		log.Error("put err:", err)
+		return 0, err
+	}
+
+	msgid, err := strconv.ParseInt(string(value), 10, 64)
+	if err != nil {
+		log.Error("parseint err:", err)
+		return 0, err
+	}
+	return msgid, nil
+}
+
 
 func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64) {
 	log.Infof("dequeue offline:%d %d %d\n", appid, receiver, msg_id)
-	has := storage.HasOffline(msg_id, appid, receiver)
-	if !has {
-		log.Info("no offline msg:", appid, receiver, msg_id)
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+
+	last, _ := storage.GetLastReceivedID(appid, receiver)
+	if msg_id <= last {
+		log.Infof("ack msgid:%d last:%d\n", msg_id, last)
 		return
 	}
-
-	storage.RemoveOffline(msg_id, appid, receiver)
+	storage.SetLastReceivedID(appid, receiver, msg_id)
 	off := &OfflineMessage{appid:appid, receiver:receiver, msgid:msg_id}
 	msg := &Message{cmd:MSG_ACK_IN, body:off}
-	storage.SaveMessage(msg)
+	storage.saveMessage(msg)
 }
 
 func (storage *Storage) SaveGroupMessage(appid int64, gid int64, msg *Message) int64 {
@@ -328,7 +324,7 @@ func (storage *Storage) GetLastGroupMessageID(appid int64, gid int64) (int64, er
 	key := fmt.Sprintf("%d_%d", appid, gid)
 	value, err := storage.group_db.Get([]byte(key), nil)
 	if err != nil {
-		log.Error("put err:", err)
+		log.Error("get err:", err)
 		return 0, err
 	}
 
@@ -369,38 +365,59 @@ func (storage *Storage) GetLastGroupReceivedID(appid int64, gid int64, uid int64
 //todo optimize
 func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
 	log.Infof("dequeue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+
+	last, _ := storage.GetLastGroupReceivedID(appid, gid, receiver)
+	if msg_id <= last {
+		log.Infof("group ack msgid:%d last:%d\n", msg_id, last)
+		return
+	}
 	storage.SetLastGroupReceivedID(appid, gid, receiver, msg_id)
 	off := &GroupOfflineMessage{appid:appid, receiver:receiver, msgid:msg_id, gid:gid}
 	msg := &Message{cmd:MSG_GROUP_ACK_IN, body:off}
-	storage.SaveMessage(msg)
+	storage.saveMessage(msg)
 }
 
 func (storage *Storage) LoadOfflineMessage(appid int64, uid int64) []*EMessage {
+	last_id, err := storage.GetLastMessageID(appid, uid)
+	if err != nil {
+		return nil
+	}
+	
+	last_received_id, _ := storage.GetLastReceivedID(appid, uid)
 	c := make([]*EMessage, 0, 10)
-	start := fmt.Sprintf("%d_%d_1", appid, uid)
-	end := fmt.Sprintf("%d_%d_9223372036854775807", appid, uid)
-
-	r := &util.Range{Start:[]byte(start), Limit:[]byte(end)}
-	iter := storage.db.NewIterator(r, nil)
-	for iter.Next() {
-		value := iter.Value()
-		msgid, err := strconv.ParseInt(string(value), 10, 64)
-		if err != nil {
-			log.Error("parseint err:", err)
-			continue
-		}
-		log.Info("offline msgid:", msgid)
+	msgid := last_id
+	for ; msgid > 0; {
 		msg := storage.LoadMessage(msgid)
 		if msg == nil {
-			log.Error("can't load offline message:", msgid)
-			continue
+			log.Warningf("load message:%d error\n", msgid)
+			break
 		}
-		c = append(c, &EMessage{msgid:msgid, msg:msg})
+		if msg.cmd != MSG_OFFLINE {
+			log.Warning("invalid message cmd:", Command(msg.cmd))
+			break
+		}
+		off := msg.body.(*OfflineMessage)
+
+		if off.msgid == 0 || off.msgid <= last_received_id {
+			break
+		}
+
+		m := storage.LoadMessage(off.msgid)
+		c = append(c, &EMessage{msgid:off.msgid, msg:m})
+
+		msgid = off.prev_msgid
 	}
-	iter.Release()
-	err := iter.Error()
-	if err != nil {
-		log.Warning("iterator err:", err)
+
+	if len(c) > 0 {
+		//reverse
+		size := len(c)
+		for i := 0; i < size/2; i++ {
+			t := c[i]
+			c[i] = c[size-i-1]
+			c[size-i-1] = t
+		}
 	}
 
 	log.Infof("load offline message appid:%d uid:%d count:%d\n", appid, uid, len(c))
@@ -445,7 +462,17 @@ func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int6
 		}
 	}
 
-	log.Infof("load group offline message appid:%d gid:%d uid:%d count:%d\n", appid, gid, uid, len(c))
+	if len(c) > 0 {
+		//reverse
+		size := len(c)
+		for i := 0; i < size/2; i++ {
+			t := c[i]
+			c[i] = c[size-i-1]
+			c[size-i-1] = t
+		}
+	}
+
+	log.Infof("load group offline message appid:%d gid:%d uid:%d count:%d last id:%d last received id:%d\n", appid, gid, uid, len(c), last_id, last_received_id)
 	return c
 }
 
@@ -462,11 +489,10 @@ func (storage *Storage) NextMessageID() int64 {
 func (storage *Storage) ExecMessage(msg *Message, msgid int64) {
 	if msg.cmd == MSG_OFFLINE {
 		off := msg.body.(*OfflineMessage)
-		storage.AddOffline(off.msgid, off.appid, off.receiver)
 		storage.SetLastMessageID(off.appid, off.receiver, msgid)
 	} else if msg.cmd == MSG_ACK_IN {
 		off := msg.body.(*OfflineMessage)
-		storage.RemoveOffline(off.msgid, off.appid, off.receiver)
+		storage.SetLastReceivedID(off.appid, off.receiver, off.msgid)
 	} else if msg.cmd == MSG_GROUP_IM_LIST {
 		off := msg.body.(*GroupOfflineMessage)
 		storage.SetLastGroupMessageID(off.appid, off.gid, msgid)

@@ -254,7 +254,7 @@ def recv_group_message_client(uid, port=23000):
             print "cmd:", cmd, msg.content, msg.sender, msg.receiver
             return False
         else:
-            print "cmd:", cmd, msg
+            print "cmd:", cmd, "body:", msg
             return False
     recv_client(uid, port, handle_message)
     print "recv group message success"
@@ -605,6 +605,7 @@ def TestGroupOffline():
     while task < 2:
         time.sleep(1)
 
+
     url = URL + "/groups/%s"%str(group_id)
     r = requests.delete(url, headers=headers)
     assert(r.status_code == 200)
@@ -647,13 +648,15 @@ def _TestGroupMessage(port):
     r = requests.delete(url, headers=headers)
     assert(r.status_code == 200)
 
-    print "test group message completed"
+
 
 def TestGroupMessage():
     _TestGroupMessage(23000)
+    print "test group message completed"    
 
 def TestClusterGroupMessage():
     _TestGroupMessage(24000)
+    print "test cluster group message completed"    
 
 def TestGroupNotification():
     global task
@@ -725,11 +728,11 @@ def main():
     TestGroupNotification()
     time.sleep(1)
     TestGroupMessage()
-
     time.sleep(1)
+     
     TestGroupOffline()
     time.sleep(1)
-
+     
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)
@@ -747,13 +750,13 @@ def main():
      
     if cluster:
         TestClusterRoomMessage()
-
+     
     TestSendAndRecv()
     time.sleep(1)
 
     TestOffline()
     time.sleep(1)
-     
+
     if cluster:
         TestCluster()
         time.sleep(1)

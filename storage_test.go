@@ -28,8 +28,7 @@ func Test_Offline(t *testing.T) {
 	msg := &Message{cmd:MSG_IM, body:im}
  
 	for i := 0; i < 100; i++ {
-		msgid := storage.SaveMessage(msg)
-		storage.EnqueueOffline(msgid, appid, im.receiver)
+		msgid := storage.SavePeerMessage(appid, im.receiver, msg)
 		log.Println("enqueue msgid:", msgid)
 	}
  
@@ -46,24 +45,22 @@ func Test_Dequeue(t *testing.T) {
 	msg := &Message{cmd:MSG_IM, body:im}
 
 
-	msgid := storage.SaveMessage(msg)
-	storage.EnqueueOffline(msgid, appid, im.receiver)
+	msgid := storage.SavePeerMessage(appid, im.receiver, msg)
 	log.Println("enqueue msgid:", msgid)
 	storage.DequeueOffline(msgid, appid, im.receiver)
-	storage.DequeueOffline(msgid, appid, im.receiver)
+	log.Println("dequeue msgid:", msgid)
 }
 
 func Test_LoadLatest(t *testing.T) {
 	im := &IMMessage{sender:1, receiver:2, content:"test"}
 	msg := &Message{cmd:MSG_IM, body:im}
 
-	msgid := storage.SaveMessage(msg)
-	storage.EnqueueOffline(msgid, appid, im.receiver)
-
+	msgid := storage.SavePeerMessage(appid, im.receiver, msg)
+	storage.DequeueOffline(msgid, appid, im.receiver)
 	im = &IMMessage{sender:1, receiver:2, content:"test2"}
 	msg = &Message{cmd:MSG_IM, body:im}
-	msgid = storage.SaveMessage(msg)
-	storage.EnqueueOffline(msgid, appid, im.receiver)
+	msgid = storage.SavePeerMessage(appid, im.receiver, msg)
+	storage.DequeueOffline(msgid, appid, im.receiver)
 
 	messages := storage.LoadLatestMessages(appid, im.receiver, 2)
 	latest := messages[0]

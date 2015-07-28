@@ -133,11 +133,8 @@ func SendIMMessage(im *IMMessage, appid int64) {
 		return
 	}
 
-	emsg := &EMessage{msgid:msgid, msg:m}
-	SendEMessage(appid, im.receiver, emsg)
-
 	atomic.AddInt64(&server_summary.in_message_count, 1)
-	log.Infof("peer message sender:%d receiver:%d", im.sender, im.receiver)
+	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", im.sender, im.receiver, msgid)
 }
 
 func PostIMMessage(w http.ResponseWriter, req *http.Request) {
