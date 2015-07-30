@@ -293,9 +293,13 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 
 		s := FindGroupClientSet(appid, gid)
 		for c := range s {
+			log.Info("publish group message")
 			am := &AppMessage{appid:appid, receiver:gid, msgid:msgid, msg:sae.msg}
 			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
 			c.wt <- m
+		}
+		if len(s) == 0 {
+			log.Info("can't publish group message")
 		}
 		t <- msgid
 	}
@@ -579,10 +583,18 @@ func waitSignal() error {
         fmt.Println("singal:", sig.String())
         switch sig {
             case syscall.SIGTERM, syscall.SIGINT:
+			storage.FlushReceived()
 			os.Exit(0)
         }
     }
     return nil // It'll never get here.
+}
+
+func FlushLoop() {
+	for {
+		time.Sleep(1*time.Second)
+		storage.FlushReceived()
+	}
 }
 
 func main() {
@@ -611,6 +623,10 @@ func main() {
 	for i := 0; i < GROUP_C_COUNT; i++ {
 		go GroupLoop(group_c[i])
 	}
+
+	//刷新storage缓存的ack
+	go FlushLoop()
+	go waitSignal()
 
 	go ListenSyncClient()
 	ListenClient()

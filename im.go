@@ -35,6 +35,7 @@ var route_channels []*Channel
 //storage server
 var channels []*Channel
 
+var group_center *GroupCenter
 
 var app_route *AppRoute
 var group_manager *GroupManager
@@ -47,6 +48,7 @@ var server_summary *ServerSummary
 func init() {
 	app_route = NewAppRoute()
 	server_summary = NewServerSummary()
+	group_center = NewGroupCenter()
 }
 
 func handle_client(conn net.Conn) {
@@ -283,22 +285,11 @@ func DialStorageFun(addr string) func()(*StorageConn, error) {
 
 type IMGroupObserver int
 func (ob IMGroupObserver) OnGroupMemberAdd(group *Group, uid int64) {
-	limit := int32(GROUP_OFFLINE_LIMIT)
-
-	route := app_route.FindRoute(group.appid)
-	if route == nil {
-		return
-	}
-
-	if route.IsOnline(uid) {
-		sc := GetGroupStorageChannel(group.gid)
-		sc.SubscribeGroup(group.appid, group.gid, uid, limit)
-	}
+	group_center.SubscribeGroupMember(group.appid, group.gid, uid)
 }
 
 func (ob IMGroupObserver) OnGroupMemberRemove(group *Group, uid int64) {
-	sc := GetGroupStorageChannel(group.gid)
-	sc.UnSubscribeGroup(group.appid, group.gid, uid)
+	group_center.UnsubscribeGroupMember(group.appid, group.gid, uid)
 }
 
 func main() {

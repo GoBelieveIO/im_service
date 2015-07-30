@@ -29,9 +29,9 @@ import "encoding/base64"
 import "encoding/hex"
 import "crypto/md5"
 import "github.com/bitly/go-simplejson"
-import "database/sql"
-import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
+import "fmt"
+import "github.com/garyburd/redigo/redis"
 
 func WriteHttpError(status int, err string, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
@@ -53,26 +53,65 @@ func WriteHttpObj(data map[string]interface{}, w http.ResponseWriter) {
 	w.Write(b)
 }
 
-func GetAppKeyAndSecret(app_id int64) (string, string, error) {
-	db, err := sql.Open("mysql", config.appdb_datasource)
+func GetAppKeyAndSecretFromCache(app_id int64) (string, string, error) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("apps_%d", app_id)
+	reply, err := redis.Values(conn.Do("HMGET", key, "key", "secret"))
 	if err != nil {
+		log.Infof("hget %s err:%s\n", key, err)
 		return "", "", err
 	}
-	defer db.Close()
+
+	var app_key string
+	var app_secret string
+	_, err = redis.Scan(reply, &app_key, &app_secret)
+	if err != nil {
+		log.Warning("scan error:", err)
+		return "", "", err
+	}
+
+	log.Info("get from cache:", app_key, " ", app_secret)
+	return app_key, app_secret, err
+}
+
+func SetAppKeyAndSecretToCache(app_id int64, app_key string , app_secret string) error {
+	conn := redis_pool.Get()
+	defer conn.Close()
+	
+	key := fmt.Sprintf("apps_%d", app_id)
+	
+	_, err := conn.Do("HMSET", key, "key", app_key, "secret", app_secret)
+	if err != nil {
+		log.Info("hmset err:", err)
+		return err
+	}
+	return nil
+}
+
+func GetAppKeyAndSecret(app_id int64) (string, string, error) {
+	var key string
+	var secret string
+
 	stmtIns, err := db.Prepare("SELECT `key`, secret FROM app where id=?")
 	if err != nil {
 		return "", "", err
 	}
 
 	defer stmtIns.Close()
-	var key string
-	var secret string
 
 	rows, err := stmtIns.Query(app_id)
+	if err != nil {
+		return "", "", err
+	}
+
+	defer rows.Close()
 	for rows.Next() {
 		rows.Scan(&key, &secret)
 		break
 	}
+
 	return key, secret, nil
 }
 
@@ -160,6 +199,7 @@ func AuthGrant(w http.ResponseWriter, r *http.Request) {
 	resp["token"] = token
 	WriteHttpObj(resp, w)
 }
+
 
 func BearerAuthentication(r *http.Request) (int64, int64, error) {
 	token := r.Header.Get("Authorization");

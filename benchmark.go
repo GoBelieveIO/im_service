@@ -93,6 +93,10 @@ func send(uid int64, receiver int64) {
 			ack := ReceiveMessage(conn)
 			if ack.cmd == MSG_ACK {
 				break
+			} else if ack.cmd == MSG_PEER_ACK {
+				seq++
+				m := &Message{MSG_ACK, seq, DEFAULT_VERSION, &MessageACK{int32(ack.seq)}}
+				SendMessage(conn, m)
 			}
 		}
 	}
@@ -131,7 +135,7 @@ func receive(uid int64) {
 			break
 		}
 		if msg.cmd != MSG_IM {
-			//log.Println("mmmmmm:", Command(msg.cmd))
+			log.Println("mmmmmm:", Command(msg.cmd))
 			i--
 		} else {
 			//m := msg.body.(*IMMessage)

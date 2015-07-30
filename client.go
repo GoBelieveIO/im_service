@@ -27,7 +27,7 @@ import log "github.com/golang/glog"
 import "github.com/googollee/go-engine.io"
 
 const CLIENT_TIMEOUT = (60 * 6)
-const GROUP_OFFLINE_LIMIT = 200
+
 
 
 type Client struct {
@@ -128,26 +128,11 @@ func (client *Client) HandleMessage(msg *Message) {
 }
 
 func (client *Client) SubscribeGroup() {
-	limit := int32(GROUP_OFFLINE_LIMIT)
-	groups := group_manager.FindUserGroups(client.appid, client.uid)
-	for _, group := range groups {
-		if !group.super {
-			continue
-		}
-		sc := GetGroupStorageChannel(group.gid)
-		sc.SubscribeGroup(client.appid, group.gid, client.uid, limit)
-	}
+	group_center.SubscribeGroup(client.appid, client.uid)
 }
 
 func (client *Client) UnsubscribeGroup() {
-	groups := group_manager.FindUserGroups(client.appid, client.uid)
-	for _, group := range groups {
-		if !group.super {
-			continue
-		}
-		sc := GetGroupStorageChannel(group.gid)
-		sc.UnSubscribeGroup(client.appid, group.gid, client.uid)
-	}
+	group_center.UnsubscribeGroup(client.appid, client.uid)
 }
 
 func (client *Client) SendMessage(uid int64, msg *Message) bool {
@@ -551,7 +536,7 @@ func (client *Client) send(msg *Message) {
 	if conn, ok := client.conn.(net.Conn); ok {
 		err := SendMessage(conn, msg)
 		if err != nil {
-			log.Info("tcp err:", err)
+			log.Info("send msg:", Command(msg.cmd),  " tcp err:", err)
 		}
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		SendEngineIOMessage(conn, msg)

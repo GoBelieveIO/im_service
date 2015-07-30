@@ -34,12 +34,13 @@ import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 import "github.com/gorilla/mux"
 import "github.com/gorilla/handlers"
-
+import "database/sql"
+import _ "github.com/go-sql-driver/mysql"
 
 var config *APIConfig
 var group_server *GroupServer
 var redis_pool *redis.Pool
-
+var db *sql.DB
 
 func NewRedisPool(server, password string) *redis.Pool {
 	return &redis.Pool{
@@ -190,6 +191,16 @@ func main() {
 
 	config = read_api_cfg(flag.Args()[0])
 	log.Infof("port:%d \n",	config.port)
+
+	var err error
+	db, err = sql.Open("mysql", config.appdb_datasource)
+	if err != nil {
+		log.Info("mysql open err:", err)
+	} else {
+		//use short connection
+		db.SetMaxOpenConns(100)
+		db.SetMaxIdleConns(0)
+	}
 
 	redis_pool = NewRedisPool(config.redis_address, "")
 

@@ -24,49 +24,88 @@ import "time"
 import "sync"
 import log "github.com/golang/glog"
 
+const GROUP_OFFLINE_LIMIT = 200
 
 type StorageChannel struct {
 	addr            string
 	mutex           sync.Mutex
 	dispatch_group  func(*AppMessage)
-	subscribers     map[AppGroupMemberID]int32
+	app_subs        map[int64]*ApplicationSubscriber
 	wt              chan *Message
 }
 
 func NewStorageChannel(addr string, f func(*AppMessage)) *StorageChannel {
 	channel := new(StorageChannel)
-	channel.subscribers = make(map[AppGroupMemberID]int32)
+	channel.app_subs = make(map[int64]*ApplicationSubscriber)
 	channel.dispatch_group = f
 	channel.addr = addr
 	channel.wt = make(chan *Message, 10)
 	return channel
 }
 
-func (sc *StorageChannel) SubscribeGroup(appid int64, gid int64, uid int64, limit int32) {
+func (sc *StorageChannel) SubscribeGroup(appid int64, gid int64, uid int64) {
 	sc.mutex.Lock()
-	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid, limit:0}
-	if _, ok := sc.subscribers[id]; ok {
+	limit := int32(GROUP_OFFLINE_LIMIT)
+	if _, ok := sc.app_subs[appid]; !ok {
+		sc.app_subs[appid] = &ApplicationSubscriber{appid:appid, subs:make(map[int64]*GroupSubscriber)}
+	}
+	as := sc.app_subs[appid]
+	if _, ok := as.subs[uid]; !ok {
+		sub := &GroupSubscriber{groups:NewIntSet()}
+		as.subs[uid] = sub
+	}
+	sub := as.subs[uid]
+
+	if sub.groups.IsMember(gid) {
 		sc.mutex.Unlock()
+		log.Infof("appid:%d gid:%d uid:%d is subscriber\n", appid, gid, uid)
 		return
 	}
-	sc.subscribers[id] = limit
+
+	sub.groups.Add(gid)
 	sc.mutex.Unlock()
 
-	id.limit = limit
+	log.Infof("subscribe group appid:%d gid:%d uid:%d\n", appid, gid, uid)
+	
+	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid, limit:limit}
 	msg := &Message{cmd: MSG_SUBSCRIBE_GROUP, body: &id}
 	sc.wt <- msg
 }
 
 func (sc *StorageChannel) UnSubscribeGroup(appid int64, gid int64, uid int64) {
 	sc.mutex.Lock()
-	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid, limit:0}
-	if _, ok := sc.subscribers[id]; !ok {
+
+	if _, ok := sc.app_subs[appid]; !ok {
 		sc.mutex.Unlock()
+		log.Infof("appid:%d gid:%d uid:%d is't subscriber\n", appid, gid, uid)
 		return
 	}
-	delete(sc.subscribers, id)
+	
+	as := sc.app_subs[appid]
+	if _, ok := as.subs[uid]; !ok {
+		sc.mutex.Unlock()
+		log.Infof("appid:%d gid:%d uid:%d is't subscriber\n", appid, gid, uid)
+		return
+	}
+	
+	sub := as.subs[uid]
+
+	if !sub.groups.IsMember(gid) {
+		sc.mutex.Unlock()
+		log.Infof("appid:%d gid:%d uid:%d is't subscriber\n", appid, gid, uid)
+		return
+	}
+
+	sub.groups.Remove(gid)
+
+	if len(sub.groups) == 0 {
+		delete(as.subs, uid)
+	}
+
 	sc.mutex.Unlock()
 
+	log.Infof("unsubscribe group appid:%d gid:%d uid:%d\n", appid, gid, uid)
+	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid}
 	msg := &Message{cmd: MSG_UNSUBSCRIBE_GROUP, body: &id}
 	sc.wt <- msg
 }
@@ -75,10 +114,16 @@ func (sc *StorageChannel) GetAllSubscriber() []*AppGroupMemberID {
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
 
+	limit := int32(GROUP_OFFLINE_LIMIT)
 	subs := make([]*AppGroupMemberID, 0, 100)
-	for id, limit := range sc.subscribers {
-		s := &AppGroupMemberID{appid:id.appid, gid:id.gid, uid:id.uid, limit:limit}
-		subs = append(subs, s)
+
+	for appid, as := range sc.app_subs {
+		for uid, sub := range as.subs {
+			for gid := range sub.groups {
+				id := &AppGroupMemberID{appid:appid, gid:gid, uid:uid, limit:limit}				
+				subs = append(subs, id)
+			}
+		}
 	}
 	return subs
 }

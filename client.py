@@ -613,10 +613,18 @@ def TestGroupOffline():
     print "test group offline message completed"
     
 def _TestGroupMessage(port):
+    global task
+    task = 0
+
+    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,port))
+    t3.setDaemon(True)
+    t3.start()
+
+    time.sleep(1)
+
+    #create group
     access_token = login(13635273142)
-
     url = URL + "/groups"
-
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
     headers = {}
     headers["Authorization"] = "Bearer " + access_token
@@ -625,17 +633,9 @@ def _TestGroupMessage(port):
     assert(r.status_code == 200)
     obj = json.loads(r.content)
     group_id = obj["data"]["group_id"]
-    
-    global task
-    task = 0
-
-
-    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,port))
-    t3.setDaemon(True)
-    t3.start()
-
+    print "group id:", group_id
     time.sleep(1)
-    
+
     t2 = threading.Thread(target=send_client, args=(13635273142, group_id, MSG_GROUP_IM))
     t2.setDaemon(True)
     t2.start()
@@ -727,16 +727,17 @@ def main():
     time.sleep(1)
     TestGroupNotification()
     time.sleep(1)
+     
     TestGroupMessage()
     time.sleep(1)
-     
+
     TestGroupOffline()
     time.sleep(1)
-     
+
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)
-     
+
     TestPeerACK()
     time.sleep(1)
     TestInputing()

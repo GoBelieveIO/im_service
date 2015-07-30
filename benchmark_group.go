@@ -35,7 +35,7 @@ func init() {
 }
 
 
-func login(uid int64) string {
+func login(uid int64) (string, error) {
 	url := URL + "/auth/grant"
 	secret := fmt.Sprintf("%x", md5.Sum([]byte(APP_SECRET)))
 	s := fmt.Sprintf("%d:%s", APP_ID, secret)
@@ -53,40 +53,21 @@ func login(uid int64) string {
 
 	res, err := client.Do(req)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer res.Body.Close()
 	
 	b, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	obj, err := simplejson.NewJson(b)
 	token, _ := obj.Get("data").Get("token").String()
-	return token
+	return token, nil
 }
 
-func recv(uid int64, gid int64) {
-	ip := net.ParseIP(HOST)
-	addr := net.TCPAddr{ip, PORT, ""}
-
-	token := login(uid)
-
-	if token == "" {
-		panic("")
-	}
-
-	conn, err := net.DialTCP("tcp4", nil, &addr)
-	if err != nil {
-		log.Println("connect error")
-		return
-	}
+func recv(uid int64, gid int64, conn *net.TCPConn) {
 	seq := 1
-	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, auth})
-	ReceiveMessage(conn)
-
-	time.Sleep(time.Second*1)
 
 	n := count*(concurrent)
 	total := n
@@ -99,13 +80,9 @@ func recv(uid int64, gid int64) {
 			break
 		}
 	
-		if msg.cmd == MSG_ACK {
-			i--
-			continue
-		}
-	
 		if msg.cmd != MSG_GROUP_IM {
-			log.Println("mmmmmm")
+			log.Println("mmmmmm:", Command(msg.cmd))
+			i--
 		}
 	
 		if msg.cmd == MSG_GROUP_IM {
@@ -120,30 +97,11 @@ func recv(uid int64, gid int64) {
 	c <- true
 }
 
-func send(uid int64, gid int64) {
-	ip := net.ParseIP(HOST)
-	addr := net.TCPAddr{ip, PORT, ""}
-
+func send(uid int64, gid int64, conn *net.TCPConn) {
 	ack_c := make(chan int, 100)
 	close_c := make(chan bool)
 
-	token := login(uid)
-
-	if token == "" {
-		panic("")
-	}
-
-	conn, err := net.DialTCP("tcp4", nil, &addr)
-	if err != nil {
-		log.Println("connect error")
-		return
-	}
 	seq := 1
-	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, auth})
-	ReceiveMessage(conn)
-
-	time.Sleep(time.Second*1)
 
 	go func() {
 		c := count*(concurrent-1)
@@ -164,8 +122,8 @@ func send(uid int64, gid int64) {
 			}
 	 
 			if msg.cmd != MSG_GROUP_IM {
+				log.Println("mmmmmm:", Command(msg.cmd))
 				i--
-				continue
 			}
 	 
 			if msg.cmd == MSG_GROUP_IM {
@@ -214,47 +172,40 @@ func send(uid int64, gid int64) {
 	c <- true
 }
 
-func test_send(uid int64, gid int64) {
-	ip := net.ParseIP(HOST)
-	addr := net.TCPAddr{ip, PORT, ""}
 
-	token := login(uid)
+func ConnectServer(uid int64) *net.TCPConn {
+	var token string
+	for i := 0; i < 2; i++ {
+		var err error
+		token, err = login(uid)
+		if err != nil {
+			log.Println("login err:", err)
+			continue
+		}
+	}
 
 	if token == "" {
 		panic("")
 	}
+	log.Println("login success:", token)
 
+	ip := net.ParseIP(HOST)
+	addr := net.TCPAddr{ip, PORT, ""}
 	conn, err := net.DialTCP("tcp4", nil, &addr)
 	if err != nil {
-		log.Println("connect error")
-		return
+		log.Println("connect error:", err)
+		return nil
 	}
 	seq := 1
 	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
 	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, auth})
 	ReceiveMessage(conn)
 
-	for i := 0; i < count; i++ {
-		content := fmt.Sprintf("test....%d", i)
-		seq++
-		msg := &Message{MSG_GROUP_IM, seq, DEFAULT_VERSION, &IMMessage{uid, gid, 0, int32(i), content}}
-		SendMessage(conn, msg)
-		for {
-			ack := ReceiveMessage(conn)
-			if ack.cmd == MSG_ACK {
-				break
-			} else if ack.cmd == MSG_GROUP_IM {
-				im := ack.body.(*IMMessage)
-				fmt.Println("group im sender:", im.sender, " gid:", im.receiver)
-			}
-		}
-	}
+	log.Printf("uid:%d connected\n", uid)
+	return conn
 
-
-	conn.Close()
-	c <- true
-	log.Printf("%d send complete", uid)
 }
+
 
 func main() {
 	runtime.GOMAXPROCS(4)
@@ -273,12 +224,29 @@ func main() {
 	//test_send(u, gid)
 	//return
 
-	begin := time.Now().UnixNano() + 1000*1000*1000
+
+
+
+	conns := make([]*net.TCPConn, 0, 1000)
+
+	for i := 0; i < concurrent + recv_count; i++ {
+
+		conn := ConnectServer(u + int64(i))
+		conns = append(conns, conn)
+		if i%100 == 0 && i > 0 {
+			time.Sleep(time.Second*1)
+		}
+	}
+	time.Sleep(time.Second*1)
+
+	fmt.Println("connected")
+
+	begin := time.Now().UnixNano()
 	for i := 0; i < concurrent; i++ {
-		go send(u+int64(i), gid)
+		go send(u+int64(i), gid, conns[i])
 	}
 	for i := 0; i < recv_count; i++ {
-		go recv(u+ int64(concurrent+i) , gid)
+		go recv(u+ int64(concurrent+i) , gid, conns[i+concurrent])
 	}
 
 	for i := 0; i < concurrent + recv_count; i++ {
