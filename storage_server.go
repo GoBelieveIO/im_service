@@ -30,6 +30,8 @@ import log "github.com/golang/glog"
 import "os"
 import "os/signal"
 import "syscall"
+import "encoding/json"
+import "github.com/garyburd/redigo/redis"
 
 var storage *Storage
 var config *StorageConfig
@@ -37,10 +39,10 @@ var master *Master
 var group_manager *GroupManager
 var clients ClientSet
 var mutex   sync.Mutex
+var redis_pool *redis.Pool
 
 const GROUP_C_COUNT = 10
 var group_c []chan func()
-
 
 func init() {
 	clients = NewClientSet()
@@ -272,6 +274,59 @@ func (client *Client) Write() {
 	}
 }
 
+//定制推送脚本的app
+func (client *Client) IsROMApp(appid int64) bool {
+	return false
+}
+
+//离线消息入apns队列
+func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["sender"] = im.sender
+	v["receiver"] = im.receiver
+	v["content"] = im.content
+
+	b, _ := json.Marshal(v)
+	var queue_name string
+	if client.IsROMApp(appid) {
+		queue_name = fmt.Sprintf("push_queue_%d", appid)
+	} else {
+		queue_name = "push_queue"
+	}
+	_, err := conn.Do("RPUSH", queue_name, b)
+	if err != nil {
+		log.Info("rpush error:", err)
+	}
+}
+
+func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IMMessage) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["sender"] = im.sender
+	v["receivers"] = receivers
+	v["content"] = im.content
+	v["group_id"] = im.receiver
+
+	b, _ := json.Marshal(v)
+	var queue_name string
+	if client.IsROMApp(appid) {
+		queue_name = fmt.Sprintf("push_queue_%d", appid)
+	} else {
+		queue_name = "push_queue"
+	}
+	_, err := conn.Do("RPUSH", queue_name, b)
+	if err != nil {
+		log.Info("rpush error:", err)
+	}
+}
+
 func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	if sae.msg == nil {
 		log.Error("sae msg is nil")
@@ -319,10 +374,16 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	 
 	if group != nil {
 		members := group.Members()
+		off_members := make([]int64, 0)
+		
+		im := sae.msg.body.(*IMMessage)
 		for uid, _ := range members {
 			if !IsGroupUserOnline(appid, gid, uid) {
-				//todo push offline message
+				off_members = append(off_members, uid)
 			}
+		}
+		if len(off_members) > 0 {
+			client.PublishGroupMessage(appid, off_members, im)
 		}
 	}
 }
@@ -340,23 +401,21 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 		return
 	}
 
+	appid := sae.appid
 	uid := sae.receiver
 	//保证消息以id递增的顺序发出
 	t := make(chan int64)	
 	f := func() {
-		msgid := storage.SavePeerMessage(sae.appid, uid, sae.msg)
+		msgid := storage.SavePeerMessage(appid, uid, sae.msg)
 		
-		id := &AppUserID{appid:sae.appid, uid:uid}
+		id := &AppUserID{appid:appid, uid:uid}
 		s := FindClientSet(id)
 		for c := range s {
-			am := &AppMessage{appid:sae.appid, receiver:uid, msgid:msgid, msg:sae.msg}
+			am := &AppMessage{appid:appid, receiver:uid, msgid:msgid, msg:sae.msg}
 			m := &Message{cmd:MSG_PUBLISH, body:am}
 			c.wt <- m
 		}
 
-		if len(s) == 0 {
-			//todo push offline message
-		}
 		t <- msgid
 	}
 
@@ -371,6 +430,14 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 	result.content = buffer.Bytes()
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
+
+	if !IsUserOnline(appid, uid) {
+		if sae.msg.cmd == MSG_IM {
+			client.PublishPeerMessage(appid, sae.msg.body.(*IMMessage))
+		} else if sae.msg.cmd == MSG_GROUP_IM {
+			client.PublishGroupMessage(appid, []int64{uid}, sae.msg.body.(*IMMessage))
+		}
+	}
 }
 
 func (client *Client) HandleDQMessage(dq *DQMessage) {
@@ -596,6 +663,27 @@ func FlushLoop() {
 	}
 }
 
+func NewRedisPool(server, password string) *redis.Pool {
+	return &redis.Pool{
+		MaxIdle:     100,
+		MaxActive:   500,
+		IdleTimeout: 480 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", server)
+			if err != nil {
+				return nil, err
+			}
+			if len(password) > 0 {
+				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+			return c, err
+		},
+	}
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -607,6 +695,8 @@ func main() {
 	config = read_storage_cfg(flag.Args()[0])
 	log.Infof("listen:%s storage root:%s sync listen:%s master address:%s\n", 
 		config.listen, config.storage_root, config.sync_listen, config.master_address)
+
+	redis_pool = NewRedisPool(config.redis_address, "")
 	storage = NewStorage(config.storage_root)
 	
 	master = NewMaster()
