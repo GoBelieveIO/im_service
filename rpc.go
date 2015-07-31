@@ -30,27 +30,10 @@ func SendGroupNotification(appid int64, gid int64,
 		}
 		defer storage_pool.Release(storage)
 
-		msgid, err := storage.SaveAndEnqueueMessage(sae)
+		_, err = storage.SaveAndEnqueueMessage(sae)
 		if err != nil {
 			log.Error("saveandequeue message err:", err)
 			return
-		}
-
-		channel := GetChannel(member)
-		amsg := &AppMessage{appid:appid, receiver:member, 
-			msgid:msgid, msg:msg}
-		channel.Publish(amsg)
-
-		emsg := &EMessage{msgid:msgid, msg:msg}
-		route := app_route.FindRoute(appid)
-		if route == nil {
-			continue
-		}
-		clients := route.FindClientSet(member)
-		if clients != nil {
-			for c, _ := range(clients) {
-				c.ewt <- emsg
-			}
 		}
 	}
 }
