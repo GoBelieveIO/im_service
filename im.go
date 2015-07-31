@@ -129,8 +129,9 @@ func SaveGroupMessage(appid int64, gid int64, m *Message) (int64, error) {
 	sae := &SAEMessage{}
 	sae.msg = m
 	sae.appid = appid
+	sae.receiver = gid
 
-	msgid, err := storage.SaveAndEnqueueMessage(sae)
+	msgid, err := storage.SaveAndEnqueueGroupMessage(sae)
 	if err != nil {
 		log.Error("saveandequeue message err:", err)
 		return 0, err
@@ -150,8 +151,7 @@ func SaveMessage(appid int64, uid int64, m *Message) (int64, error) {
 	sae := &SAEMessage{}
 	sae.msg = m
 	sae.appid = appid
-	sae.receivers = make([]int64, 1)
-	sae.receivers[0] = uid
+	sae.receiver = uid
 
 	msgid, err := storage.SaveAndEnqueueMessage(sae)
 	if err != nil {

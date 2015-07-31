@@ -54,14 +54,19 @@ func (client *StorageConn) Close() {
 	}
 }
 
+func (client *StorageConn) SaveAndEnqueueGroupMessage(sae *SAEMessage) (int64, error) {
+	var msg *Message
+	msg = &Message{cmd:MSG_SAVE_AND_ENQUEUE_GROUP, body:sae}
+	return client.saveAndEnqueueMessage(msg)
+}
+
 func (client *StorageConn) SaveAndEnqueueMessage(sae *SAEMessage) (int64, error) {
 	var msg *Message
-	if len(sae.receivers) == 0 {
-		msg = &Message{cmd:MSG_SAVE_AND_ENQUEUE_GROUP, body:sae}
-	} else {
-		msg = &Message{cmd:MSG_SAVE_AND_ENQUEUE, body:sae}
-	}
+	msg = &Message{cmd:MSG_SAVE_AND_ENQUEUE, body:sae}
+	return client.saveAndEnqueueMessage(msg)
+}
 
+func (client *StorageConn) saveAndEnqueueMessage(msg *Message) (int64, error) {
 	SendMessage(client.conn, msg)
 	r := ReceiveMessage(client.conn)
 	if r == nil {

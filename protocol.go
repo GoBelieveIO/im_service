@@ -389,13 +389,11 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 	}
 }
 
-func WriteHeader(len int32, seq int32, cmd byte, version byte, buffer *bytes.Buffer) {
+func WriteHeader(len int32, seq int32, cmd byte, version byte, buffer io.Writer) {
 	binary.Write(buffer, binary.BigEndian, len)
 	binary.Write(buffer, binary.BigEndian, seq)
-	buffer.WriteByte(cmd)
-	buffer.WriteByte(byte(version))
-	buffer.WriteByte(byte(0))
-	buffer.WriteByte(byte(0))
+	t := []byte{cmd, byte(version), 0, 0}
+	buffer.Write(t)
 }
 
 func ReadHeader(buff []byte) (int, int, int, int) {
@@ -862,12 +860,15 @@ func (id *AppGroupMemberID) FromData(buff []byte) bool {
 	return true
 }
 
+func WriteMessage(w *bytes.Buffer, msg *Message) {
+	body := msg.ToData()
+	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), byte(msg.version), w)
+	w.Write(body)
+}
 
 func SendMessage(conn io.Writer, msg *Message) error {
-	body := msg.ToData()
 	buffer := new(bytes.Buffer)
-	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), byte(msg.version), buffer)
-	buffer.Write(body)
+	WriteMessage(buffer, msg)
 	buf := buffer.Bytes()
 	n, err := conn.Write(buf)
 	if err != nil {

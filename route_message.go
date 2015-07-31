@@ -80,7 +80,7 @@ func (amsg *AppMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, amsg.receiver)
 	binary.Write(buffer, binary.BigEndian, amsg.msgid)
 	mbuffer := new(bytes.Buffer)
-	SendMessage(mbuffer, amsg.msg)
+	WriteMessage(mbuffer, amsg.msg)
 	msg_buf := mbuffer.Bytes()
 	var l int16 = int16(len(msg_buf))
 	binary.Write(buffer, binary.BigEndian, l)

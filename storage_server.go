@@ -283,8 +283,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	}
 
 	appid := sae.appid
-	im := sae.msg.body.(*IMMessage)
-	gid := im.receiver
+	gid := sae.receiver
 
 	//保证群组消息以id递增的顺序发出去
 	t := make(chan int64)
@@ -336,12 +335,12 @@ func (client *Client) HandleDQGroupMessage(dq *DQMessage) {
 }
 
 func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
-	if sae.msg == nil || len(sae.receivers) != 1 {
+	if sae.msg == nil {
 		log.Error("sae msg is nil")
 		return
 	}
 
-	uid := sae.receivers[0]
+	uid := sae.receiver
 	//保证消息以id递增的顺序发出
 	t := make(chan int64)	
 	f := func() {

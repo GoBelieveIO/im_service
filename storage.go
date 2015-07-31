@@ -38,7 +38,6 @@ const VERSION = 1 << 16 //1.0
 type Storage struct {
 	root      string
 	db        *leveldb.DB
-	group_db  *leveldb.DB
 	mutex     sync.Mutex
 	file      *os.File
 
@@ -84,16 +83,6 @@ func NewStorage(root string) *Storage {
 	}
 
 	storage.db = db
-
-	path = fmt.Sprintf("%s/%s", storage.root, "group_offline")
-	option = &opt.Options{}
-	db, err = leveldb.OpenFile(path, option)
-	if err != nil {
-		log.Fatal("open leveldb:", err)
-	}
-
-	storage.group_db = db
-
 	
 	return storage
 }
@@ -183,7 +172,7 @@ func (storage *Storage) WriteHeader(file *os.File) {
 func (storage *Storage) WriteMessage(file io.Writer, msg *Message) {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
-	SendMessage(buffer, msg)
+	WriteMessage(buffer, msg)
 	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
 	buf := buffer.Bytes()
 	n, err := file.Write(buf)
@@ -224,11 +213,9 @@ func (storage *Storage) SavePeerMessage(appid int64, uid int64, msg *Message) in
 	m := &Message{cmd:MSG_OFFLINE, body:off}
 	last_id = storage.saveMessage(m)
 
-	//storage.AddOffline(msgid, appid, uid)
 	storage.SetLastMessageID(appid, uid, last_id)
 	return msgid
 }
-
 
 //获取最近离线消息ID
 func (storage *Storage) GetLastMessageID(appid int64, receiver int64) (int64, error) {
@@ -327,9 +314,9 @@ func (storage *Storage) SaveGroupMessage(appid int64, gid int64, msg *Message) i
 }
 
 func (storage *Storage) SetLastGroupMessageID(appid int64, gid int64, msgid int64) {
-	key := fmt.Sprintf("%d_%d", appid, gid)
+	key := fmt.Sprintf("g_%d_%d", appid, gid)
 	value := fmt.Sprintf("%d", msgid)	
-	err := storage.group_db.Put([]byte(key), []byte(value), nil)
+	err := storage.db.Put([]byte(key), []byte(value), nil)
 	if err != nil {
 		log.Error("put err:", err)
 		return
@@ -337,8 +324,8 @@ func (storage *Storage) SetLastGroupMessageID(appid int64, gid int64, msgid int6
 }
 
 func (storage *Storage) GetLastGroupMessageID(appid int64, gid int64) (int64, error) {
-	key := fmt.Sprintf("%d_%d", appid, gid)
-	value, err := storage.group_db.Get([]byte(key), nil)
+	key := fmt.Sprintf("g_%d_%d", appid, gid)
+	value, err := storage.db.Get([]byte(key), nil)
 	if err != nil {
 		log.Error("get err:", err)
 		return 0, err
@@ -353,9 +340,9 @@ func (storage *Storage) GetLastGroupMessageID(appid int64, gid int64) (int64, er
 }
 
 func (storage *Storage) SetLastGroupReceivedID(appid int64, gid int64, uid int64, msgid int64) {
-	key := fmt.Sprintf("%d_%d_%d", appid, gid, uid)
+	key := fmt.Sprintf("g_%d_%d_%d", appid, gid, uid)
 	value := fmt.Sprintf("%d", msgid)	
-	err := storage.group_db.Put([]byte(key), []byte(value), nil)
+	err := storage.db.Put([]byte(key), []byte(value), nil)
 	if err != nil {
 		log.Error("put err:", err)
 		return
@@ -363,13 +350,13 @@ func (storage *Storage) SetLastGroupReceivedID(appid int64, gid int64, uid int64
 }
 
 func (storage *Storage) getLastGroupReceivedID(appid int64, gid int64, uid int64) (int64, error) {
-	key := fmt.Sprintf("%d_%d_%d", appid, gid, uid)
+	key := fmt.Sprintf("g_%d_%d_%d", appid, gid, uid)
 
 	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid}
 	if msgid, ok := storage.group_received[id]; ok {
 		return msgid, nil
 	}
-	value, err := storage.group_db.Get([]byte(key), nil)
+	value, err := storage.db.Get([]byte(key), nil)
 	if err != nil {
 		log.Error("get err:", err)
 		return 0, err

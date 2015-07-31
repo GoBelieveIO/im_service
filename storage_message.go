@@ -113,7 +113,7 @@ func (emsg *EMessage) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, emsg.msgid)
 	mbuffer := new(bytes.Buffer)
-	SendMessage(mbuffer, emsg.msg)
+	WriteMessage(mbuffer, emsg.msg)
 	msg_buf := mbuffer.Bytes()
 	var l int16 = int16(len(msg_buf))
 	binary.Write(buffer, binary.BigEndian, l)
@@ -290,7 +290,7 @@ func (off *GroupOfflineMessage) FromData(buff []byte) bool {
 type SAEMessage struct {
 	msg       *Message
 	appid     int64
-	receivers []int64
+	receiver  int64
 }
 
 func (sae *SAEMessage) ToData() []byte {
@@ -305,19 +305,14 @@ func (sae *SAEMessage) ToData() []byte {
 
 	buffer := new(bytes.Buffer)
 	mbuffer := new(bytes.Buffer)
-	SendMessage(mbuffer, sae.msg)
+	WriteMessage(mbuffer, sae.msg)
 	msg_buf := mbuffer.Bytes()
 	var l int16 = int16(len(msg_buf))
 	binary.Write(buffer, binary.BigEndian, l)
 	buffer.Write(msg_buf)
 
 	binary.Write(buffer, binary.BigEndian, sae.appid)
-
-	var count int16 = int16(len(sae.receivers))
-	binary.Write(buffer, binary.BigEndian, count)
-	for _, r := range(sae.receivers) {
-		binary.Write(buffer, binary.BigEndian, r)
-	}
+	binary.Write(buffer, binary.BigEndian, sae.receiver)
 	buf := buffer.Bytes()
 	return buf
 }
@@ -343,24 +338,12 @@ func (sae *SAEMessage) FromData(buff []byte) bool {
 		return false
 	}
 	sae.msg = msg
-
 	
-	if buffer.Len() < 10 {
+	if buffer.Len() < 16 {
 		return false
 	}
 	binary.Read(buffer, binary.BigEndian, &sae.appid)
-
-	var count int16
-	binary.Read(buffer, binary.BigEndian, &count)
-	if buffer.Len() < int(count)*8 {
-		return false
-	}
-	sae.receivers = make([]int64, count)
-	for i := int16(0); i < count; i++ {
-		var r int64
-		binary.Read(buffer, binary.BigEndian, &r)
-		sae.receivers[i] = r
-	}
+	binary.Read(buffer, binary.BigEndian, &sae.receiver)
 	return true
 }
 
