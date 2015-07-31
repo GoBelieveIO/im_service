@@ -1,7 +1,14 @@
+#服务监听端口
 port=23000
-http_listen_address=:23002
-peers=127.0.0.1:22001
-storage_root=./data/storage
-mysqldb_source=ngds_user:ngds_user.mysql@tcp(172.25.1.111:3306)/im
-redis_address=192.168.59.103:6379
-socket_io_address=:5000
+#存储服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
+storage_pool=127.0.0.1:3333
+#路由服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
+route_pool=127.0.0.1:4444
+#websocket的监听地址 ip:port
+socket_io_address=:13890
+#服务器状态信息和发送群组通知消息的接口监听地址 ip:port ip一般使用内网网卡地址
+http_listen_address=:6666
+#mysql的链接地址  用户名:密码@tcp(服务器地址:服务器端口)/数据库名称
+mysqldb_source=root:123456@tcp(127.0.0.1:3306)/im
+#redis服务器地址  服务器ip：服务器端口
+redis_address=127.0.0.1:6379

@@ -1,0 +1,10 @@
+#接口监听端口
+port=23002
+#mysql的链接地址  用户名:密码@tcp(服务器地址:服务器端口)/数据库名称
+mysqldb_source=root:123456@tcp(127.0.0.1:3306)/im
+#平台的mysql链接地址
+mysqldb_source=root:123456@tcp(127.0.0.1:3306)/gobelieve
+#redis服务器地址  服务器ip：服务器端口
+redis_address=127.0.0.1:6379
+#发送群组通知消息的接口地址
+im_url=http://127.0.0.1:6666

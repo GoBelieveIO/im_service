@@ -1,0 +1,14 @@
+#监听地址 ip:port ip一般选择内网网卡的地址
+listen=:3333
+#消息存储路径，必须存在
+storage_root=/tmp/im
+#备份监听地址 ip:port, ip一般选择内网网卡的地址
+sync_listen=:3334
+
+#主机监听地址，备机需要此配置
+#master_address=:3334
+
+#mysql的链接地址  用户名:密码@tcp(服务器地址:服务器端口)/数据库名称
+mysqldb_source=root:123456@tcp(127.0.0.1:3306)/im
+#redis服务器地址  服务器ip：服务器端口
+redis_address=127.0.0.1:6379
