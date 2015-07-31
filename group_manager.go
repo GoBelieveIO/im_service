@@ -248,5 +248,6 @@ func (group_manager *GroupManager) Run() {
 }
 
 func (group_manager *GroupManager) Start() {
+	group_manager.Reload()
 	go group_manager.Run()
 }
