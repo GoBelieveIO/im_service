@@ -90,13 +90,8 @@ func (client *StorageConn) saveAndEnqueueMessage(msg *Message) (int64, error) {
 	return msgid, nil
 }
 
-func (client *StorageConn) DequeueMessage(dq *DQMessage) error {
-	var msg *Message
-	if dq.gid > 0 {
-		msg = &Message{cmd:MSG_DEQUEUE_GROUP, body:dq}
-	} else {
-		msg = &Message{cmd:MSG_DEQUEUE, body:dq}
-	}
+func (client *StorageConn) DequeueGroupMessage(dq *DQGroupMessage) error {
+	msg := &Message{cmd:MSG_DEQUEUE_GROUP, body:dq}
 
 	SendMessage(client.conn, msg)
 	r := ReceiveMessage(client.conn)
@@ -111,6 +106,27 @@ func (client *StorageConn) DequeueMessage(dq *DQMessage) error {
 	if result.status != 0 {
 		return errors.New("error status")
 	}
+
+	return nil
+}
+
+func (client *StorageConn) DequeueMessage(dq *DQMessage) error {
+	msg := &Message{cmd:MSG_DEQUEUE, body:dq}
+
+	SendMessage(client.conn, msg)
+	r := ReceiveMessage(client.conn)
+	if r == nil {
+		client.e = true
+		return errors.New("error connection")
+	}
+	if r.cmd != MSG_RESULT {
+		return errors.New("error cmd")
+	}
+	result := r.body.(*MessageResult)
+	if result.status != 0 {
+		return errors.New("error status")
+	}
+
 	return nil
 }
 

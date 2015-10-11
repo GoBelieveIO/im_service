@@ -36,7 +36,7 @@ func NewGroup(gid int64, appid int64, members []int64) *Group {
 	group := new(Group)
 	group.appid = appid
 	group.gid = gid
-	group.super = true
+	group.super = false
 	group.members = NewIntSet()
 	for _, m := range members {
 		group.members.Add(m)

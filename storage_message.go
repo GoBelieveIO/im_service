@@ -55,7 +55,7 @@ func init() {
 	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
 	
 	message_creators[MSG_SAVE_AND_ENQUEUE_GROUP] = func()IMessage{return new(SAEMessage)}
-	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(DQMessage)}
+	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(DQGroupMessage)}
 
 	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
@@ -228,10 +228,39 @@ type DQMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
-	gid      int64
+	device_id int64
 }
 
 func (dq *DQMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, dq.appid)
+	binary.Write(buffer, binary.BigEndian, dq.receiver)
+	binary.Write(buffer, binary.BigEndian, dq.msgid)
+	binary.Write(buffer, binary.BigEndian, dq.device_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (dq *DQMessage) FromData(buff []byte) bool {
+	if len(buff) < 32 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &dq.appid)
+	binary.Read(buffer, binary.BigEndian, &dq.receiver)
+	binary.Read(buffer, binary.BigEndian, &dq.msgid)
+	binary.Read(buffer, binary.BigEndian, &dq.device_id)
+	return true
+}
+
+type DQGroupMessage struct {
+	appid    int64
+	receiver int64
+	msgid    int64
+	gid      int64
+}
+
+func (dq *DQGroupMessage) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, dq.appid)
 	binary.Write(buffer, binary.BigEndian, dq.receiver)
@@ -241,7 +270,7 @@ func (dq *DQMessage) ToData() []byte {
 	return buf
 }
 
-func (dq *DQMessage) FromData(buff []byte) bool {
+func (dq *DQGroupMessage) FromData(buff []byte) bool {
 	if len(buff) < 32 {
 		return false
 	}

@@ -107,6 +107,15 @@ func (channel *Channel) GetAllSubscriber() []*AppUserID {
 	return subs
 }
 
+func (channel *Channel) SubscribeStorage(appid int64, uid int64, did int64) {
+	count := channel.AddSubscribe(appid, uid)
+	log.Info("sub count:", count)
+
+	id := &StorageSubscriber{appid: appid, uid: uid, device_id:0}
+	msg := &Message{cmd: MSG_SUBSCRIBE_STORAGE, body: id}
+	channel.wt <- msg
+}
+
 func (channel *Channel) Subscribe(appid int64, uid int64) {
 	count := channel.AddSubscribe(appid, uid)
 	log.Info("sub count:", count)

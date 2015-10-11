@@ -353,7 +353,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 			c.wt <- m
 		}
 		if len(s) == 0 {
-			log.Info("can't publish group message")
+			log.Infof("can't publish group message:%d", gid)
 		}
 		t <- msgid
 	}
@@ -388,7 +388,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	}
 }
 
-func (client *Client) HandleDQGroupMessage(dq *DQMessage) {
+func (client *Client) HandleDQGroupMessage(dq *DQGroupMessage) {
 	storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.gid, dq.receiver)
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
@@ -415,7 +415,9 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 			m := &Message{cmd:MSG_PUBLISH, body:am}
 			c.wt <- m
 		}
-
+		if len(s) == 0 {
+			log.Infof("can't publish message:%s %d", Command(sae.msg.cmd), uid)
+		}
 		t <- msgid
 	}
 
@@ -441,7 +443,9 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 }
 
 func (client *Client) HandleDQMessage(dq *DQMessage) {
-	storage.DequeueOffline(dq.msgid, dq.appid, dq.receiver)
+	if dq.device_id != 0 {
+		storage.DequeueOffline(dq.msgid, dq.appid, dq.receiver, dq.device_id)
+	}
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
@@ -455,7 +459,9 @@ func (client *Client) WriteEMessage(emsg *EMessage) []byte{
 }
 
 func (client *Client) HandleLoadOffline(app_user_id *AppUserID) {
-	messages := storage.LoadOfflineMessage(app_user_id.appid, app_user_id.uid)
+	//invalid device id
+	var did int64 = 0
+	messages := storage.LoadOfflineMessage(app_user_id.appid, app_user_id.uid, did)
 	result := &MessageResult{status:0}
 	buffer := new(bytes.Buffer)
 	var count int16
@@ -514,16 +520,18 @@ func (client *Client) HandleUnSubscribeGroup(id *AppGroupMemberID) {
 	route.RemoveGroupMember(id.gid, id.uid)
 }
 
-func (client *Client) HandleSubscribe(id *AppUserID) {
-	log.Infof("subscribe appid:%d uid:%d", id.appid, id.uid)
+func (client *Client) HandleSubscribe(id *StorageSubscriber) {
+	log.Infof("subscribe appid:%d uid:%d device id:%d", id.appid, id.uid, id.device_id)
 	AddClient(client)
 
 	f := func() {
-		messages := storage.LoadOfflineMessage(id.appid, id.uid)
-		for _, emsg := range(messages) {
-			am := &AppMessage{appid:id.appid, receiver:id.uid, msgid:emsg.msgid, msg:emsg.msg}
-			m := &Message{cmd:MSG_PUBLISH, body:am}
-			client.wt <- m
+		if id.device_id > 0 {
+			messages := storage.LoadOfflineMessage(id.appid, id.uid, id.device_id)
+			for _, emsg := range(messages) {
+				am := &AppMessage{appid:id.appid, receiver:id.uid, msgid:emsg.msgid, msg:emsg.msg}
+				m := &Message{cmd:MSG_PUBLISH, body:am}
+				client.wt <- m
+			}
 		}
 
 		route := client.app_route.FindOrAddRoute(id.appid)
@@ -554,13 +562,13 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_SAVE_AND_ENQUEUE_GROUP:
 		client.HandleSaveAndEnqueueGroup(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE_GROUP:
-		client.HandleDQGroupMessage(msg.body.(*DQMessage))
+		client.HandleDQGroupMessage(msg.body.(*DQGroupMessage))
 	case MSG_SUBSCRIBE_GROUP:
 		client.HandleSubscribeGroup(msg.body.(*AppGroupMemberID))
 	case MSG_UNSUBSCRIBE_GROUP:
 		client.HandleUnSubscribeGroup(msg.body.(*AppGroupMemberID))
-	case MSG_SUBSCRIBE:
-		client.HandleSubscribe(msg.body.(*AppUserID))
+	case MSG_SUBSCRIBE_STORAGE:
+		client.HandleSubscribe(msg.body.(*StorageSubscriber))
 	case MSG_UNSUBSCRIBE:
 		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	default:

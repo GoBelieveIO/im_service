@@ -34,11 +34,12 @@ PLATFORM_ANDROID = 2
 
 PROTOCOL_VERSION = 1
 
+device_id = "f9d2a7c2-701a-11e5-9c3e-34363bd464b2"
 class AuthenticationToken:
     def __init__(self):
         self.token = ""
         self.platform_id = PLATFORM_ANDROID
-        self.device_id = str(uuid.uuid1())
+        self.device_id = device_id
 
 class IMMessage:
     def __init__(self):
@@ -725,9 +726,10 @@ def main():
      
     TestGroup()
     time.sleep(1)
+
     TestGroupNotification()
     time.sleep(1)
-     
+
     TestGroupMessage()
     time.sleep(1)
 

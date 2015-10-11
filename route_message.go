@@ -22,6 +22,7 @@ import "bytes"
 import "encoding/binary"
 
 //路由服务器消息
+const MSG_SUBSCRIBE_STORAGE = 129
 const MSG_SUBSCRIBE = 130
 const MSG_UNSUBSCRIBE = 131
 const MSG_PUBLISH = 132
@@ -36,6 +37,7 @@ const MSG_PUBLISH_ROOM = 138
 
 
 func init() {
+	message_creators[MSG_SUBSCRIBE_STORAGE] = func()IMessage{return new(StorageSubscriber)}
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
@@ -48,6 +50,7 @@ func init() {
 	message_creators[MSG_UNSUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
 	message_creators[MSG_PUBLISH_ROOM] = func()IMessage{return new(AppMessage)}
 
+	message_descriptions[MSG_SUBSCRIBE_STORAGE] = "MSG_SUBSCRIBE_STORAGE"
 	message_descriptions[MSG_SUBSCRIBE] = "MSG_SUBSCRIBE"
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
 	message_descriptions[MSG_PUBLISH] = "MSG_PUBLISH"
@@ -59,6 +62,33 @@ func init() {
 	message_descriptions[MSG_SUBSCRIBE_ROOM] = "MSG_SUBSCRIBE_ROOM"
 	message_descriptions[MSG_UNSUBSCRIBE_ROOM] = "MSG_UNSUBSCRIBE_ROOM"
 	message_descriptions[MSG_PUBLISH_ROOM] = "MSG_PUBLISH_ROOM"
+}
+
+type StorageSubscriber struct {
+	appid    int64
+	uid      int64
+	device_id int64
+}
+
+func (id *StorageSubscriber) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.appid)
+	binary.Write(buffer, binary.BigEndian, id.uid)
+	binary.Write(buffer, binary.BigEndian, id.device_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *StorageSubscriber) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.appid)
+	binary.Read(buffer, binary.BigEndian, &id.uid)
+	binary.Read(buffer, binary.BigEndian, &id.device_id)
+	return true
 }
 
 
