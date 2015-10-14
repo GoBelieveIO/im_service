@@ -203,13 +203,13 @@ func (storage *Storage) SaveMessage(msg *Message) int64 {
 	return storage.saveMessage(msg)
 }
 
-func (storage *Storage) SavePeerMessage(appid int64, uid int64, msg *Message) int64 {
+func (storage *Storage) SavePeerMessage(appid int64, uid int64, device_id int64, msg *Message) int64 {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 	msgid := storage.saveMessage(msg)
 
 	last_id, _ := storage.GetLastMessageID(appid, uid)
-	off := &OfflineMessage{appid:appid, receiver:uid, msgid:msgid, prev_msgid:last_id}
+	off := &OfflineMessage{appid:appid, receiver:uid, msgid:msgid, device_id:device_id, prev_msgid:last_id}
 	m := &Message{cmd:MSG_OFFLINE, body:off}
 	last_id = storage.saveMessage(m)
 
@@ -401,7 +401,7 @@ func (storage *Storage) FlushReceived() {
 	if len(storage.received) > 0 {
 		for id, msg_id := range storage.received {
 			storage.SetLastReceivedID(id.appid, id.uid, id.device_id, msg_id)
-			off := &OfflineMessage{appid:id.appid, receiver:id.uid, msgid:msg_id, prev_msgid:id.device_id}
+			off := &MessageACKIn{appid:id.appid, receiver:id.uid, msgid:msg_id, device_id:id.device_id}
 			msg := &Message{cmd:MSG_ACK_IN, body:off}
 			storage.saveMessage(msg)
 		}
@@ -426,6 +426,8 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64, did int64) []
 	}
 
 	last_received_id, _ := storage.GetLastReceivedID(appid, uid, did)
+
+	log.Infof("last id:%d last received id:%d", last_id, last_received_id)
 	c := make([]*EMessage, 0, 10)
 	msgid := last_id
 	for ; msgid > 0; {
@@ -443,9 +445,14 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64, did int64) []
 		if off.msgid == 0 || off.msgid <= last_received_id {
 			break
 		}
+		limit := 400
+		//此设备首次登陆，只获取最近部分消息
+		if last_received_id == 0 && len(c) >= limit {
+			break
+		}
 
 		m := storage.LoadMessage(off.msgid)
-		c = append(c, &EMessage{msgid:off.msgid, msg:m})
+		c = append(c, &EMessage{msgid:off.msgid, device_id:off.device_id, msg:m})
 
 		msgid = off.prev_msgid
 	}
@@ -531,8 +538,8 @@ func (storage *Storage) ExecMessage(msg *Message, msgid int64) {
 		off := msg.body.(*OfflineMessage)
 		storage.SetLastMessageID(off.appid, off.receiver, msgid)
 	} else if msg.cmd == MSG_ACK_IN {
-		off := msg.body.(*OfflineMessage)
-		did := off.prev_msgid
+		off := msg.body.(*MessageACKIn)
+		did := off.device_id
 		storage.SetLastReceivedID(off.appid, off.receiver, did, off.msgid)
 	} else if msg.cmd == MSG_GROUP_IM_LIST {
 		off := msg.body.(*GroupOfflineMessage)

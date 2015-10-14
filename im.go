@@ -139,7 +139,7 @@ func SaveGroupMessage(appid int64, gid int64, m *Message) (int64, error) {
 	return msgid, nil
 }
 
-func SaveMessage(appid int64, uid int64, m *Message) (int64, error) {
+func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, error) {
 	storage_pool := GetStorageConnPool(uid)
 	storage, err := storage_pool.Get()
 	if err != nil {
@@ -152,6 +152,7 @@ func SaveMessage(appid int64, uid int64, m *Message) (int64, error) {
 	sae.msg = m
 	sae.appid = appid
 	sae.receiver = uid
+	sae.device_id = device_id
 
 	msgid, err := storage.SaveAndEnqueueMessage(sae)
 	if err != nil {
@@ -207,6 +208,40 @@ func DispatchAppMessage(amsg *AppMessage) {
 		return
 	}
 	for c, _ := range(clients) {
+		//自己在同一台设备上发出的消息，不再发送回去
+		if amsg.msg.cmd == MSG_IM || amsg.msg.cmd == MSG_GROUP_IM {
+			m := amsg.msg.body.(*IMMessage)
+			if m.sender == amsg.receiver && amsg.device_id == c.device_ID {
+				continue
+			}
+		}
+
+		if amsg.msgid > 0 {
+			c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+		} else {
+			c.wt <- amsg.msg
+		}
+	}
+}
+
+func DispatchOfflineMessage(amsg *AppMessage) {
+	log.Info("dispatch app message:", Command(amsg.msg.cmd))
+
+	route := app_route.FindRoute(amsg.appid)
+	if route == nil {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+		return
+	}
+	clients := route.FindClientSet(amsg.receiver)
+	if len(clients) == 0 {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+		return
+	}
+	for c, _ := range(clients) {
+		if c.device_ID != amsg.device_id {
+			continue
+		}
+
 		if amsg.msgid > 0 {
 			c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
 		} else {
@@ -326,14 +361,14 @@ func main() {
 
 	channels = make([]*Channel, 0)
 	for _, addr := range(config.storage_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, nil)
+		channel := NewChannel(addr, DispatchAppMessage, nil, DispatchOfflineMessage)
 		channel.Start()
 		channels = append(channels, channel)
 	}
 
 	route_channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, DispatchRoomMessage)
+		channel := NewChannel(addr, DispatchAppMessage, DispatchRoomMessage, nil)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}

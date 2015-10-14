@@ -93,10 +93,6 @@ func send(uid int64, receiver int64) {
 			ack := ReceiveMessage(conn)
 			if ack.cmd == MSG_ACK {
 				break
-			} else if ack.cmd == MSG_PEER_ACK {
-				seq++
-				m := &Message{MSG_ACK, seq, DEFAULT_VERSION, &MessageACK{int32(ack.seq)}}
-				SendMessage(conn, m)
 			}
 		}
 	}

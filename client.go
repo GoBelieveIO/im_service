@@ -185,8 +185,8 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.device_id = login.device_id
 	client.platform_id = login.platform_id
 	client.tm = time.Now()
-	log.Infof("auth token:%s appid:%d uid:%d device id:%s", 
-		login.token, client.appid, client.uid, client.device_id)
+	log.Infof("auth token:%s appid:%d uid:%d device id:%s:%d", 
+		login.token, client.appid, client.uid, client.device_id, client.device_ID)
 
 	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
 	client.wt <- msg
@@ -249,10 +249,13 @@ func (client *Client) HandleIMMessage(msg *IMMessage, seq int) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
-	msgid, err := SaveMessage(client.appid, msg.receiver, m)
+	msgid, err := SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		return
 	}
+
+	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
+	SaveMessage(client.appid, msg.sender, client.device_ID, m)
 
 	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 
@@ -282,11 +285,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	} else {
 		members := group.Members()
 		for member := range members {
-			//群消息不再发送给自己
-			if member == client.uid {
-				continue
-			}
-			_, err := SaveMessage(client.appid, member, m)
+			_, err := SaveMessage(client.appid, member, client.device_ID, m)
 			if err != nil {
 				continue
 			}
@@ -326,17 +325,6 @@ func (client *Client) HandleACK(ack *MessageACK) {
 
 	if msg == nil {
 		return
-	}
-	
-	if msg.cmd == MSG_IM {
-		im := msg.body.(*IMMessage)
-		ack := &MessagePeerACK{im.receiver, im.sender, im.msgid}
-		m := &Message{cmd: MSG_PEER_ACK, body: ack}
-
-		_, err := SaveMessage(client.appid, im.sender, m)
-		if err != nil {
-			return
-		}
 	}
 }
 
@@ -527,10 +515,6 @@ func (client *Client) Write() {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
 			client.send(msg)
-			if msg.cmd == MSG_PEER_ACK {
-				client.RemoveUnAckMessage(&MessageACK{int32(seq)})
-				client.DequeueMessage(emsg.msgid)
-			}
 		}
 	}
 }

@@ -349,7 +349,7 @@ def send_client(uid, receiver, msg_type):
         cmd, s, msg = recv_message(sock)
         if cmd == MSG_ACK and msg == msg_seq:
             break
-        elif cmd == MSG_PEER_ACK or cmd == MSG_GROUP_NOTIFICATION:
+        elif cmd == MSG_GROUP_NOTIFICATION:
             print "send ack..."
             seq += 1
             send_message(MSG_ACK, seq, s, sock)
@@ -357,26 +357,6 @@ def send_client(uid, receiver, msg_type):
             print "cmd:", cmd, " ", msg
     task += 1
     print "send success"
-
-def send_wait_peer_ack_client(uid, receiver):
-    global task
-    sock, seq =  connect_server(uid, 23000)
-    im = IMMessage()
-    im.sender = uid
-    im.receiver = receiver
-    im.content = "test im"
-    seq += 1
-    send_message(MSG_IM, seq, im, sock)
-    while True:
-        cmd, s, msg = recv_message(sock)
-        if cmd == MSG_PEER_ACK:
-            seq += 1
-            send_message(MSG_ACK, seq, s, sock)
-            break
-        else:
-            print "cmd:", cmd, " ", msg
-    task += 1
-    print "peer ack received"
 
 def send_inputing(uid, receiver):
     global task
@@ -479,26 +459,6 @@ def TestInputing():
         time.sleep(1)
 
     print "test inputting completed"
-
-def TestPeerACK():
-    global task
-    task = 0
-
-    t3 = threading.Thread(target=recv_message_client, args=(13635273142,23000))
-    t3.setDaemon(True)
-    t3.start()
-
-    time.sleep(1)
-
-    t2 = threading.Thread(target=send_wait_peer_ack_client, args=(13635273143,13635273142))
-    t2.setDaemon(True)
-    t2.start()
-
-
-    while task < 2:
-        time.sleep(1)
-
-    print "test peer ack completed"
 
 def TestLoginPoint():
     recv_login_point(13635273142)
@@ -740,8 +700,6 @@ def main():
         TestClusterGroupMessage()
         time.sleep(1)
 
-    TestPeerACK()
-    time.sleep(1)
     TestInputing()
     time.sleep(1)
      

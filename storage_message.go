@@ -61,7 +61,7 @@ func init() {
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
 
 	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage)}
-	message_creators[MSG_ACK_IN] = func()IMessage{return new(OfflineMessage)}
+	message_creators[MSG_ACK_IN] = func()IMessage{return new(MessageACKIn)}
 
 	message_creators[MSG_SYNC_BEGIN] = func()IMessage{return new(SyncCursor)}
 	message_creators[MSG_SYNC_MESSAGE] = func()IMessage{return new(EMessage)}
@@ -102,6 +102,7 @@ func (cursor *SyncCursor) FromData(buff []byte) bool {
 
 type EMessage struct {
 	msgid int64
+	device_id int64
 	msg   *Message
 }
 
@@ -112,6 +113,7 @@ func (emsg *EMessage) ToData() []byte {
 
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, emsg.msgid)
+	binary.Write(buffer, binary.BigEndian, emsg.device_id)
 	mbuffer := new(bytes.Buffer)
 	WriteMessage(mbuffer, emsg.msg)
 	msg_buf := mbuffer.Bytes()
@@ -124,12 +126,13 @@ func (emsg *EMessage) ToData() []byte {
 }
 
 func (emsg *EMessage) FromData(buff []byte) bool {
-	if len(buff) < 10 {
+	if len(buff) < 18 {
 		return false
 	}
 
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &emsg.msgid)
+	binary.Read(buffer, binary.BigEndian, &emsg.device_id)
 	var l int16
 	binary.Read(buffer, binary.BigEndian, &l)
 	if int(l) > buffer.Len() {
@@ -198,6 +201,7 @@ type OfflineMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
+	device_id int64
 	prev_msgid  int64
 }
 
@@ -207,6 +211,7 @@ func (off *OfflineMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, off.appid)
 	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.msgid)
+	binary.Write(buffer, binary.BigEndian, off.device_id)
 	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
 	buf := buffer.Bytes()
 	return buf
@@ -220,9 +225,42 @@ func (off *OfflineMessage) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.appid)
 	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	if len(buff) == 40 {
+		binary.Read(buffer, binary.BigEndian, &off.device_id)
+	}
 	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
 	return true
 }
+
+type MessageACKIn struct {
+	appid    int64
+	receiver int64
+	msgid    int64
+	device_id  int64
+}
+
+func (off *MessageACKIn) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, off.appid)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
+	binary.Write(buffer, binary.BigEndian, off.msgid)
+	binary.Write(buffer, binary.BigEndian, off.device_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (off *MessageACKIn) FromData(buff []byte) bool {
+	if len(buff) < 32 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &off.appid)
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
+	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	binary.Read(buffer, binary.BigEndian, &off.device_id)
+	return true
+}
+
 
 type DQMessage struct {
 	appid    int64
@@ -320,6 +358,7 @@ type SAEMessage struct {
 	msg       *Message
 	appid     int64
 	receiver  int64
+	device_id int64
 }
 
 func (sae *SAEMessage) ToData() []byte {
@@ -342,6 +381,7 @@ func (sae *SAEMessage) ToData() []byte {
 
 	binary.Write(buffer, binary.BigEndian, sae.appid)
 	binary.Write(buffer, binary.BigEndian, sae.receiver)
+	binary.Write(buffer, binary.BigEndian, sae.device_id)
 	buf := buffer.Bytes()
 	return buf
 }
@@ -368,11 +408,12 @@ func (sae *SAEMessage) FromData(buff []byte) bool {
 	}
 	sae.msg = msg
 	
-	if buffer.Len() < 16 {
+	if buffer.Len() < 24 {
 		return false
 	}
 	binary.Read(buffer, binary.BigEndian, &sae.appid)
 	binary.Read(buffer, binary.BigEndian, &sae.receiver)
+	binary.Read(buffer, binary.BigEndian, &sae.device_id)
 	return true
 }
 

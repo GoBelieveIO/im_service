@@ -406,12 +406,12 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 	//保证消息以id递增的顺序发出
 	t := make(chan int64)	
 	f := func() {
-		msgid := storage.SavePeerMessage(appid, uid, sae.msg)
+		msgid := storage.SavePeerMessage(appid, uid, sae.device_id, sae.msg)
 		
 		id := &AppUserID{appid:appid, uid:uid}
 		s := FindClientSet(id)
 		for c := range s {
-			am := &AppMessage{appid:appid, receiver:uid, msgid:msgid, msg:sae.msg}
+			am := &AppMessage{appid:appid, receiver:uid, msgid:msgid, device_id:sae.device_id, msg:sae.msg}
 			m := &Message{cmd:MSG_PUBLISH, body:am}
 			c.wt <- m
 		}
@@ -528,8 +528,16 @@ func (client *Client) HandleSubscribe(id *StorageSubscriber) {
 		if id.device_id > 0 {
 			messages := storage.LoadOfflineMessage(id.appid, id.uid, id.device_id)
 			for _, emsg := range(messages) {
-				am := &AppMessage{appid:id.appid, receiver:id.uid, msgid:emsg.msgid, msg:emsg.msg}
-				m := &Message{cmd:MSG_PUBLISH, body:am}
+				if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
+					m := emsg.msg.body.(*IMMessage)
+					//同一台设备自己发出的消息
+					if m.sender == id.uid && emsg.device_id == id.device_id {
+						continue
+					}
+				}
+
+				am := &AppMessage{appid:id.appid, receiver:id.uid, msgid:emsg.msgid, device_id:id.device_id, msg:emsg.msg}
+				m := &Message{cmd:MSG_PUBLISH_OFFLINE, body:am}
 				client.wt <- m
 			}
 		}

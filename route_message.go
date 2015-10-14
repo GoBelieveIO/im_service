@@ -22,6 +22,7 @@ import "bytes"
 import "encoding/binary"
 
 //路由服务器消息
+const MSG_PUBLISH_OFFLINE = 128
 const MSG_SUBSCRIBE_STORAGE = 129
 const MSG_SUBSCRIBE = 130
 const MSG_UNSUBSCRIBE = 131
@@ -41,6 +42,7 @@ func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
+	message_creators[MSG_PUBLISH_OFFLINE] = func()IMessage{return new(AppMessage)}
 
 	message_creators[MSG_SUBSCRIBE_GROUP] = func()IMessage{return new(AppGroupMemberID)}
 	message_creators[MSG_UNSUBSCRIBE_GROUP] = func()IMessage{return new(AppGroupMemberID)}
@@ -50,6 +52,7 @@ func init() {
 	message_creators[MSG_UNSUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
 	message_creators[MSG_PUBLISH_ROOM] = func()IMessage{return new(AppMessage)}
 
+	message_descriptions[MSG_PUBLISH_OFFLINE] = "MSG_PUBLISH_OFFLINE"
 	message_descriptions[MSG_SUBSCRIBE_STORAGE] = "MSG_SUBSCRIBE_STORAGE"
 	message_descriptions[MSG_SUBSCRIBE] = "MSG_SUBSCRIBE"
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
@@ -96,6 +99,7 @@ type AppMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
+	device_id int64//离线消息代表接受者的设备id， 在线消息代表发送者的设备id
 	msg      *Message
 }
 
@@ -109,6 +113,7 @@ func (amsg *AppMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, amsg.appid)
 	binary.Write(buffer, binary.BigEndian, amsg.receiver)
 	binary.Write(buffer, binary.BigEndian, amsg.msgid)
+	binary.Write(buffer, binary.BigEndian, amsg.device_id)
 	mbuffer := new(bytes.Buffer)
 	WriteMessage(mbuffer, amsg.msg)
 	msg_buf := mbuffer.Bytes()
@@ -121,7 +126,7 @@ func (amsg *AppMessage) ToData() []byte {
 }
 
 func (amsg *AppMessage) FromData(buff []byte) bool {
-	if len(buff) < 26 {
+	if len(buff) < 34 {
 		return false
 	}
 
@@ -129,6 +134,7 @@ func (amsg *AppMessage) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &amsg.appid)
 	binary.Read(buffer, binary.BigEndian, &amsg.receiver)
 	binary.Read(buffer, binary.BigEndian, &amsg.msgid)
+	binary.Read(buffer, binary.BigEndian, &amsg.device_id)
 
 	var l int16
 	binary.Read(buffer, binary.BigEndian, &l)

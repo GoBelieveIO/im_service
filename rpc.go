@@ -110,7 +110,7 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 
 func SendIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
-	msgid, err := SaveMessage(appid, im.receiver, m)
+	msgid, err := SaveMessage(appid, im.receiver, 0, m)
 	if err != nil {
 		return
 	}
