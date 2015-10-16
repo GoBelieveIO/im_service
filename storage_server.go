@@ -343,12 +343,12 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	//保证群组消息以id递增的顺序发出去
 	t := make(chan int64)
 	f := func () {
-		msgid := storage.SaveGroupMessage(appid, gid, sae.msg)
+		msgid := storage.SaveGroupMessage(appid, gid, sae.device_id, sae.msg)
 
 		s := FindGroupClientSet(appid, gid)
 		for c := range s {
 			log.Info("publish group message")
-			am := &AppMessage{appid:appid, receiver:gid, msgid:msgid, msg:sae.msg}
+			am := &AppMessage{appid:appid, receiver:gid, msgid:msgid, device_id:sae.device_id, msg:sae.msg}
 			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
 			c.wt <- m
 		}
@@ -389,7 +389,9 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 }
 
 func (client *Client) HandleDQGroupMessage(dq *DQGroupMessage) {
-	storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.gid, dq.receiver)
+	if dq.device_id > 0 {
+		storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.gid, dq.receiver, dq.device_id)
+	}
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
@@ -454,6 +456,7 @@ func (client *Client) HandleDQMessage(dq *DQMessage) {
 func (client *Client) WriteEMessage(emsg *EMessage) []byte{
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, emsg.msgid)
+	binary.Write(buffer, binary.BigEndian, emsg.device_id)
 	SendMessage(buffer, emsg.msg)
 	return buffer.Bytes()
 }
@@ -496,23 +499,47 @@ func (client *Client) HandleLoadHistory(lh *LoadHistory) {
 	SendMessage(client.conn, msg)	
 }
 
+const GROUP_OFFLINE_LIMIT = 200
+
+func (client *Client) HandleLoadGroupOffline(lh *LoadGroupOffline) {
+	messages := storage.LoadGroupOfflineMessage(lh.appid, lh.gid, lh.uid, lh.device_id, GROUP_OFFLINE_LIMIT)
+	result := &MessageResult{status:0}
+	buffer := new(bytes.Buffer)
+
+	var count int16 = 0
+	for _, emsg := range(messages) {
+		if emsg.msg.cmd == MSG_GROUP_IM {
+			im := emsg.msg.body.(*IMMessage)
+			if im.sender == lh.uid && emsg.device_id == lh.device_id {
+				continue
+			}
+		}
+		count += 1
+	}
+	binary.Write(buffer, binary.BigEndian, count)
+	for _, emsg := range(messages) {
+		if emsg.msg.cmd == MSG_GROUP_IM {
+			im := emsg.msg.body.(*IMMessage)
+			if im.sender == lh.uid && emsg.device_id == lh.device_id {
+				continue
+			}
+		}
+		ebuf := client.WriteEMessage(emsg)
+		var size int16 = int16(len(ebuf))
+		binary.Write(buffer, binary.BigEndian, size)
+		buffer.Write(ebuf)
+	}
+	result.content = buffer.Bytes()
+	msg := &Message{cmd:MSG_RESULT, body:result}
+	SendMessage(client.conn, msg)
+}
+
 func (client *Client) HandleSubscribeGroup(lo *AppGroupMemberID) {
 	log.Infof("subscribe group appid:%d gid:%d uid:%d\n", lo.appid, lo.gid, lo.uid)
 	AddClient(client)
 
-	f := func () {
-		messages := storage.LoadGroupOfflineMessage(lo.appid, lo.gid, lo.uid, int(lo.limit))
-		for _, emsg := range(messages) {
-			am := &AppMessage{appid:lo.appid, receiver:lo.gid, msgid:emsg.msgid, msg:emsg.msg}
-			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
-			client.wt <- m
-		}
-
-		route := client.app_route.FindOrAddRoute(lo.appid)
-		route.AddGroupMember(lo.gid, lo.uid)
-	}
-	c := GetGroupChan(lo.gid)
-	c <- f
+	route := client.app_route.FindOrAddRoute(lo.appid)
+	route.AddGroupMember(lo.gid, lo.uid)
 }
 
 func (client *Client) HandleUnSubscribeGroup(id *AppGroupMemberID) {
@@ -575,6 +602,8 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleSubscribeGroup(msg.body.(*AppGroupMemberID))
 	case MSG_UNSUBSCRIBE_GROUP:
 		client.HandleUnSubscribeGroup(msg.body.(*AppGroupMemberID))
+	case MSG_LOAD_GROUP_OFFLINE:
+		client.HandleLoadGroupOffline(msg.body.(*LoadGroupOffline))
 	case MSG_SUBSCRIBE_STORAGE:
 		client.HandleSubscribe(msg.body.(*StorageSubscriber))
 	case MSG_UNSUBSCRIBE:

@@ -34,6 +34,18 @@ const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
 
+type AppUserLoginID struct {
+	appid  int64
+	uid    int64
+	device_id int64
+}
+
+type AppGroupMemberLoginID struct {
+	appid  int64
+	gid    int64
+	uid    int64
+	device_id int64
+}
 
 type Storage struct {
 	root      string
@@ -41,14 +53,14 @@ type Storage struct {
 	mutex     sync.Mutex
 	file      *os.File
 
-	group_received   map[AppGroupMemberID]int64
-	received         map[StorageSubscriber]int64
+	group_received   map[AppGroupMemberLoginID]int64
+	received         map[AppUserLoginID]int64
 }
 
 func NewStorage(root string) *Storage {
 	storage := new(Storage)
-	storage.group_received = make(map[AppGroupMemberID]int64)
-	storage.received = make(map[StorageSubscriber]int64)
+	storage.group_received = make(map[AppGroupMemberLoginID]int64)
+	storage.received = make(map[AppUserLoginID]int64)
 
 	storage.root = root
 
@@ -258,7 +270,7 @@ func (storage *Storage) SetLastReceivedID(appid int64, uid int64, did int64, msg
 func (storage *Storage) getLastReceivedID(appid int64, uid int64, did int64) (int64, error) {
 	key := fmt.Sprintf("%d_%d_%d_1", appid, uid, did)
 
-	id := StorageSubscriber{appid:appid, uid:uid, device_id:did}
+	id := AppUserLoginID{appid:appid, uid:uid, device_id:did}
 	if msgid, ok := storage.received[id]; ok {
 		return msgid, nil
 	}
@@ -294,18 +306,18 @@ func (storage *Storage) DequeueOffline(msg_id int64, appid int64, receiver int64
 		log.Infof("ack msgid:%d last:%d\n", msg_id, last)
 		return
 	}
-	id := StorageSubscriber{appid:appid, uid:receiver, device_id:did}
+	id := AppUserLoginID{appid:appid, uid:receiver, device_id:did}
 	storage.received[id] = msg_id
 }
 
-func (storage *Storage) SaveGroupMessage(appid int64, gid int64, msg *Message) int64 {
+func (storage *Storage) SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) int64 {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 
 	msgid := storage.saveMessage(msg)
 
 	last_id, _ := storage.GetLastGroupMessageID(appid, gid)
-	lt := &GroupOfflineMessage{appid:appid, gid:gid, msgid:msgid, prev_msgid:last_id}
+	lt := &GroupOfflineMessage{appid:appid, gid:gid, msgid:msgid, device_id:device_id, prev_msgid:last_id}
 	m := &Message{cmd:MSG_GROUP_IM_LIST, body:lt}
 	
 	last_id = storage.saveMessage(m)
@@ -349,10 +361,10 @@ func (storage *Storage) SetLastGroupReceivedID(appid int64, gid int64, uid int64
 	}
 }
 
-func (storage *Storage) getLastGroupReceivedID(appid int64, gid int64, uid int64) (int64, error) {
-	key := fmt.Sprintf("g_%d_%d_%d", appid, gid, uid)
+func (storage *Storage) getLastGroupReceivedID(appid int64, gid int64, uid int64, device_id int64) (int64, error) {
+	key := fmt.Sprintf("g_%d_%d_%d_%d", appid, gid, uid, device_id)
 
-	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid}
+	id := AppGroupMemberLoginID{appid:appid, gid:gid, uid:uid, device_id:device_id}
 	if msgid, ok := storage.group_received[id]; ok {
 		return msgid, nil
 	}
@@ -370,23 +382,23 @@ func (storage *Storage) getLastGroupReceivedID(appid int64, gid int64, uid int64
 	return msgid, nil
 }
 
-func (storage *Storage) GetLastGroupReceivedID(appid int64, gid int64, uid int64) (int64, error) {
+func (storage *Storage) GetLastGroupReceivedID(appid int64, gid int64, uid int64, device_id int64) (int64, error) {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
-	return storage.getLastGroupReceivedID(appid, gid, uid)
+	return storage.getLastGroupReceivedID(appid, gid, uid, device_id)
 }
 
-func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64) {
+func (storage *Storage) DequeueGroupOffline(msg_id int64, appid int64, gid int64, device_id int64, receiver int64) {
 	log.Infof("dequeue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 
-	last, _ := storage.getLastGroupReceivedID(appid, gid, receiver)
+	last, _ := storage.getLastGroupReceivedID(appid, gid, receiver, device_id)
 	if msg_id <= last {
 		log.Infof("group ack msgid:%d last:%d\n", msg_id, last)
 		return
 	}
-	id := AppGroupMemberID{appid:appid, gid:gid, uid:receiver}
+	id := AppGroupMemberLoginID{appid:appid, gid:gid, uid:receiver}
 	storage.group_received[id] = msg_id
 }
 
@@ -405,7 +417,7 @@ func (storage *Storage) FlushReceived() {
 			msg := &Message{cmd:MSG_ACK_IN, body:off}
 			storage.saveMessage(msg)
 		}
-		storage.received = make(map[StorageSubscriber]int64)
+		storage.received = make(map[AppUserLoginID]int64)
 	}
 
 	if len(storage.group_received) > 0 {
@@ -415,7 +427,7 @@ func (storage *Storage) FlushReceived() {
 			msg := &Message{cmd:MSG_GROUP_ACK_IN, body:off}
 			storage.saveMessage(msg)
 		}
-		storage.group_received = make(map[AppGroupMemberID]int64)
+		storage.group_received = make(map[AppGroupMemberLoginID]int64)
 	}
 }
 
@@ -471,14 +483,14 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64, did int64) []
 	return c
 }
 
-func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, limit int) []*EMessage {
+func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, device_id int64, limit int) []*EMessage {
 	last_id, err := storage.GetLastGroupMessageID(appid, gid)
 	if err != nil {
 		log.Info("get last group message id err:", err)
 		return nil
 	}
 
-	last_received_id, _ := storage.GetLastGroupReceivedID(appid, gid, uid)
+	last_received_id, _ := storage.GetLastGroupReceivedID(appid, gid, uid, device_id)
 
 	c := make([]*EMessage, 0, 10)
 
@@ -500,7 +512,7 @@ func (storage *Storage) LoadGroupOfflineMessage(appid int64, gid int64, uid int6
 		}
 
 		m := storage.LoadMessage(off.msgid)
-		c = append(c, &EMessage{msgid:off.msgid, msg:m})
+		c = append(c, &EMessage{msgid:off.msgid, device_id:off.device_id, msg:m})
 
 		msgid = off.prev_msgid
 

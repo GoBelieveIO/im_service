@@ -28,11 +28,12 @@ import log "github.com/golang/glog"
 const MSG_SAVE_AND_ENQUEUE = 200
 const MSG_DEQUEUE = 201
 const MSG_LOAD_OFFLINE = 202
-const MSG_RESULT = 203
-const MSG_LOAD_HISTORY = 204
+const MSG_LOAD_GROUP_OFFLINE = 203
+const MSG_RESULT = 204
+const MSG_LOAD_HISTORY = 205
 
-const MSG_SAVE_AND_ENQUEUE_GROUP = 205
-const MSG_DEQUEUE_GROUP = 206
+const MSG_SAVE_AND_ENQUEUE_GROUP = 206
+const MSG_DEQUEUE_GROUP = 207
 
 
 //主从同步消息
@@ -51,6 +52,7 @@ func init() {
 	message_creators[MSG_SAVE_AND_ENQUEUE] = func()IMessage{return new(SAEMessage)}
 	message_creators[MSG_DEQUEUE] = func()IMessage{return new(DQMessage)}
 	message_creators[MSG_LOAD_OFFLINE] = func()IMessage{return new(AppUserID)}
+	message_creators[MSG_LOAD_GROUP_OFFLINE] = func()IMessage{return new(LoadGroupOffline)}
 	message_creators[MSG_RESULT] = func()IMessage{return new(MessageResult)}
 	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
 	
@@ -296,6 +298,7 @@ type DQGroupMessage struct {
 	receiver int64
 	msgid    int64
 	gid      int64
+	device_id int64
 }
 
 func (dq *DQGroupMessage) ToData() []byte {
@@ -304,12 +307,13 @@ func (dq *DQGroupMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, dq.receiver)
 	binary.Write(buffer, binary.BigEndian, dq.msgid)
 	binary.Write(buffer, binary.BigEndian, dq.gid)
+	binary.Write(buffer, binary.BigEndian, dq.device_id)
 	buf := buffer.Bytes()
 	return buf
 }
 
 func (dq *DQGroupMessage) FromData(buff []byte) bool {
-	if len(buff) < 32 {
+	if len(buff) < 40 {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)
@@ -317,6 +321,7 @@ func (dq *DQGroupMessage) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &dq.receiver)
 	binary.Read(buffer, binary.BigEndian, &dq.msgid)
 	binary.Read(buffer, binary.BigEndian, &dq.gid)
+	binary.Read(buffer, binary.BigEndian, &dq.device_id)
 	return true
 }
 
@@ -326,6 +331,7 @@ type GroupOfflineMessage struct {
 	receiver int64
 	msgid    int64
 	gid      int64
+	device_id int64
 	prev_msgid  int64
 }
 
@@ -335,6 +341,7 @@ func (off *GroupOfflineMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.msgid)
 	binary.Write(buffer, binary.BigEndian, off.gid)
+	binary.Write(buffer, binary.BigEndian, off.device_id)
 	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
 	buf := buffer.Bytes()
 	return buf
@@ -349,6 +356,9 @@ func (off *GroupOfflineMessage) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	binary.Read(buffer, binary.BigEndian, &off.msgid)
 	binary.Read(buffer, binary.BigEndian, &off.gid)
+	if len(buff) == 48 {
+		binary.Read(buffer, binary.BigEndian, &off.device_id)
+	}
 	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
 	return true
 }
@@ -470,7 +480,7 @@ type LoadGroupOffline struct {
 	appid  int64
 	gid    int64
 	uid    int64
-	limit  int32
+	device_id int64
 }
 
 func (lo *LoadGroupOffline) ToData() []byte {
@@ -478,19 +488,19 @@ func (lo *LoadGroupOffline) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, lo.appid)
 	binary.Write(buffer, binary.BigEndian, lo.gid)
 	binary.Write(buffer, binary.BigEndian, lo.uid)
-	binary.Write(buffer, binary.BigEndian, lo.limit)
+	binary.Write(buffer, binary.BigEndian, lo.device_id)
 	buf := buffer.Bytes()
 	return buf
 }
 
 func (lo *LoadGroupOffline) FromData(buff []byte) bool {
-	if len(buff) < 28 {
+	if len(buff) < 32 {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &lo.appid)
 	binary.Read(buffer, binary.BigEndian, &lo.gid)
 	binary.Read(buffer, binary.BigEndian, &lo.uid)
-	binary.Read(buffer, binary.BigEndian, &lo.limit)
+	binary.Read(buffer, binary.BigEndian, &lo.device_id)
 	return true
 }

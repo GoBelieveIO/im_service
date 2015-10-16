@@ -137,6 +137,7 @@ func (client *StorageConn) ReadEMessage(buf []byte) *EMessage {
 	emsg := &EMessage{}
 	buffer := bytes.NewBuffer(buf)
 	binary.Read(buffer, binary.BigEndian, &emsg.msgid)
+	binary.Read(buffer, binary.BigEndian, &emsg.device_id)
 	emsg.msg = ReceiveMessage(buffer)
 	if emsg.msg == nil {
 		return nil
@@ -182,6 +183,13 @@ func (client *StorageConn) ReceiveMessages() ([]*EMessage, error) {
 		messages[i] = emsg
 	}
 	return messages, nil
+}
+
+func (client *StorageConn) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, device_id int64)([]*EMessage, error) {
+	id := &LoadGroupOffline{appid:appid, uid:uid, gid:gid, device_id:device_id}
+	msg := &Message{cmd:MSG_LOAD_GROUP_OFFLINE, body:id}
+	SendMessage(client.conn, msg)
+	return client.ReceiveMessages()
 }
 
 func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64) ([]*EMessage, error) {

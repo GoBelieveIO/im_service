@@ -116,7 +116,7 @@ func GetUserStorageChannel(uid int64) *Channel {
 	return channels[index]
 }
 
-func SaveGroupMessage(appid int64, gid int64, m *Message) (int64, error) {
+func SaveGroupMessage(appid int64, gid int64, device_id int64, m *Message) (int64, error) {
 	log.Infof("save group message:%d %d\n", appid, gid)
 	storage_pool := GetGroupStorageConnPool(gid)
 	storage, err := storage_pool.Get()
@@ -130,6 +130,7 @@ func SaveGroupMessage(appid int64, gid int64, m *Message) (int64, error) {
 	sae.msg = m
 	sae.appid = appid
 	sae.receiver = gid
+	sae.device_id = device_id
 
 	msgid, err := storage.SaveAndEnqueueGroupMessage(sae)
 	if err != nil {
@@ -287,11 +288,6 @@ func DispatchGroupMessage(amsg *AppMessage) {
 
 	members := group.Members()
 	for member := range members {
-		//群消息不再发送给自己
-		if member == im.sender {
-			continue
-		}
-
 	    clients := route.FindClientSet(member)
 		if len(clients) == 0 {
 			continue
@@ -299,6 +295,10 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		 
 		if clients != nil {
 			for c, _ := range(clients) {
+				//不再发送给发送者所在的设备
+				if c.uid == im.sender && c.device_ID == amsg.device_id {
+					continue
+				}
 				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
 			}
 		}

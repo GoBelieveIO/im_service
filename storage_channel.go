@@ -24,8 +24,6 @@ import "time"
 import "sync"
 import log "github.com/golang/glog"
 
-const GROUP_OFFLINE_LIMIT = 200
-
 type StorageChannel struct {
 	addr            string
 	mutex           sync.Mutex
@@ -45,7 +43,6 @@ func NewStorageChannel(addr string, f func(*AppMessage)) *StorageChannel {
 
 func (sc *StorageChannel) SubscribeGroup(appid int64, gid int64, uid int64) {
 	sc.mutex.Lock()
-	limit := int32(GROUP_OFFLINE_LIMIT)
 	if _, ok := sc.app_subs[appid]; !ok {
 		sc.app_subs[appid] = &ApplicationSubscriber{appid:appid, subs:make(map[int64]*GroupSubscriber)}
 	}
@@ -67,7 +64,7 @@ func (sc *StorageChannel) SubscribeGroup(appid int64, gid int64, uid int64) {
 
 	log.Infof("subscribe group appid:%d gid:%d uid:%d\n", appid, gid, uid)
 	
-	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid, limit:limit}
+	id := AppGroupMemberID{appid:appid, gid:gid, uid:uid}
 	msg := &Message{cmd: MSG_SUBSCRIBE_GROUP, body: &id}
 	sc.wt <- msg
 }
@@ -114,13 +111,12 @@ func (sc *StorageChannel) GetAllSubscriber() []*AppGroupMemberID {
 	sc.mutex.Lock()
 	defer sc.mutex.Unlock()
 
-	limit := int32(GROUP_OFFLINE_LIMIT)
 	subs := make([]*AppGroupMemberID, 0, 100)
 
 	for appid, as := range sc.app_subs {
 		for uid, sub := range as.subs {
 			for gid := range sub.groups {
-				id := &AppGroupMemberID{appid:appid, gid:gid, uid:uid, limit:limit}				
+				id := &AppGroupMemberID{appid:appid, gid:gid, uid:uid}
 				subs = append(subs, id)
 			}
 		}

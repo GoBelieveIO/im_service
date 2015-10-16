@@ -128,6 +128,40 @@ func (client *Client) HandleMessage(msg *Message) {
 	}
 }
 
+func (client *Client) LoadGroupOfflineMessage(gid int64) ([]*EMessage, error) {
+	storage_pool := GetGroupStorageConnPool(gid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return nil, err
+	}
+	defer storage_pool.Release(storage)
+
+	return storage.LoadGroupOfflineMessage(client.appid, gid, client.uid, client.device_ID)
+}
+
+func (client *Client) LoadGroupOffline() {
+	if client.device_ID == 0 {
+		return
+	}
+
+	groups := group_manager.FindUserGroups(client.appid, client.uid)
+	for _, group := range groups {
+		if !group.super {
+			continue
+		}
+		messages, err := client.LoadGroupOfflineMessage(group.gid)
+		if err != nil {
+			log.Errorf("load group offline message err:%d %s", group.gid, err)
+			continue
+		}
+
+		for _, emsg := range messages {
+			client.ewt <- emsg
+		}
+	}
+}
+
 func (client *Client) SubscribeGroup() {
 	group_center.SubscribeGroup(client.appid, client.uid)
 }
@@ -199,6 +233,8 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	channel.SubscribeStorage(client.appid, client.uid, client.device_ID)
 	channel = GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
+
+	client.LoadGroupOffline()
 
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
@@ -278,7 +314,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		return
 	}
 	if group.super {
-		_, err := SaveGroupMessage(client.appid, msg.receiver, m)
+		_, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 		if err != nil {
 			return
 		}
@@ -420,7 +456,7 @@ func (client *Client) DequeueGroupMessage(msgid int64, gid int64) {
 	}
 	defer storage_pool.Release(storage)
 
-	dq := &DQGroupMessage{msgid:msgid, appid:client.appid, receiver:client.uid, gid:gid}
+	dq := &DQGroupMessage{msgid:msgid, appid:client.appid, receiver:client.uid, gid:gid, device_id:client.device_ID}
 	err = storage.DequeueGroupMessage(dq)
 	if err != nil {
 		log.Error("dequeue message err:", err)
