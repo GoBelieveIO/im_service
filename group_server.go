@@ -99,14 +99,14 @@ func (group_server *GroupServer) AuthRequest(r *http.Request) (int64, int64, err
 }
 
 func (group_server *GroupServer) CreateGroup(appid int64, gname string,
-	master int64, members []int64) int64 {
+	master int64, members []int64, super int8) int64 {
 	db, err := group_server.OpenDB()
 	if err != nil {
 		log.Info("error:", err)
 		return 0
 	}
 	defer db.Close()
-	gid := CreateGroup(db, appid, master, gname)
+	gid := CreateGroup(db, appid, master, gname, super)
 	if gid == 0 {
 		return 0
 	}
@@ -114,7 +114,7 @@ func (group_server *GroupServer) CreateGroup(appid int64, gname string,
 		AddGroupMember(db, gid, member)
 	}
 
-	content := fmt.Sprintf("%d,%d", gid, appid)
+	content := fmt.Sprintf("%d,%d,%d", gid, appid, super)
 	group_server.PublishMessage("group_create", content)
 
 	for _, member := range members {
@@ -250,6 +250,17 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	name := v["name"].(string)
+	
+	var super int8
+	if _, ok := v["super"].(bool); ok {
+		s := v["super"].(bool)
+		log.Info("super:", s)
+		if s {
+			super = 1
+		} else {
+			super = 0
+		}
+	}
 
 	ms := v["members"].([]interface{})
 	members := make([]int64, len(ms))
@@ -262,7 +273,7 @@ func (group_server *GroupServer) HandleCreate(w http.ResponseWriter, r *http.Req
 	}
 	log.Info("create group master:", master, " members:", members)
 
-	gid := group_server.CreateGroup(appid, name, master, members)
+	gid := group_server.CreateGroup(appid, name, master, members, super)
 	if gid == 0 {
 		WriteHttpError(500, "db error", w)
 		return

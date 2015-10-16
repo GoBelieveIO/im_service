@@ -44,6 +44,18 @@ func NewGroup(gid int64, appid int64, members []int64) *Group {
 	return group
 }
 
+func NewSuperGroup(gid int64, appid int64, members []int64) *Group {
+	group := new(Group)
+	group.appid = appid
+	group.gid = gid
+	group.super = true
+	group.members = NewIntSet()
+	for _, m := range members {
+		group.members.Add(m)
+	}
+	return group
+}
+
 
 func (group *Group) Members() IntSet {
 	return group.members
@@ -75,14 +87,15 @@ func (group *Group) IsEmpty() bool {
 	return len(group.members) == 0
 }
 
-func CreateGroup(db *sql.DB, appid int64, master int64, name string) int64 {
-	stmtIns, err := db.Prepare("INSERT INTO `group`(appid, master, name) VALUES( ?, ?, ? )")
+func CreateGroup(db *sql.DB, appid int64, master int64, name string, super int8) int64 {
+	log.Info("create group:", super)
+	stmtIns, err := db.Prepare("INSERT INTO `group`(appid, master, name, super) VALUES( ?, ?, ?, ? )")
 	if err != nil {
 		log.Info("error:", err)
 		return 0
 	}
 	defer stmtIns.Close()
-	result, err := stmtIns.Exec(appid, master, name)
+	result, err := stmtIns.Exec(appid, master, name, super)
 	if err != nil {
 		log.Info("error:", err)
 		return 0
@@ -167,7 +180,7 @@ func RemoveGroupMember(db *sql.DB, group_id int64, uid int64) bool {
 }
 
 func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
-	stmtIns, err := db.Prepare("SELECT id, appid FROM `group`")
+	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group`")
 	if err != nil {
 		log.Info("error:", err)
 		return nil, nil
@@ -179,14 +192,21 @@ func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
 	for rows.Next() {
 		var id int64
 		var appid int64
-		rows.Scan(&id, &appid)
+		var super int8
+		rows.Scan(&id, &appid, &super)
 		members, err := LoadGroupMember(db, id)
 		if err != nil {
 			log.Info("error:", err)
 			continue
 		}
-		group := NewGroup(id, appid, members)
-		groups[group.gid] = group
+
+		if super != 0 {
+			group := NewSuperGroup(id, appid, members)
+			groups[group.gid] = group
+		} else {
+			group := NewGroup(id, appid, members)
+			groups[group.gid] = group
+		}
 	}
 	return groups, nil
 }

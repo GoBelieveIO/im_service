@@ -80,7 +80,7 @@ func (group_manager *GroupManager) FindUserGroups(appid int64, uid int64) []*Gro
 
 func (group_manager *GroupManager) HandleCreate(data string) {
 	arr := strings.Split(data, ",")
-	if len(arr) != 2 {
+	if len(arr) != 3 {
 		log.Info("message error:", data)
 		return
 	}
@@ -94,6 +94,11 @@ func (group_manager *GroupManager) HandleCreate(data string) {
 		log.Info("error:", err)
 		return
 	}
+	super, err := strconv.ParseInt(arr[2], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
 
 	group_manager.mutex.Lock()
 	defer group_manager.mutex.Unlock()
@@ -102,7 +107,11 @@ func (group_manager *GroupManager) HandleCreate(data string) {
 		log.Infof("group:%d exists\n", gid)
 	}
 	log.Infof("create group:%d appid:%d", gid, appid)
-	group_manager.groups[gid] = NewGroup(gid, appid, nil)
+	if super != 0 {
+		group_manager.groups[gid] = NewSuperGroup(gid, appid, nil)
+	} else {
+		group_manager.groups[gid] = NewGroup(gid, appid, nil)
+	}
 }
 
 func (group_manager *GroupManager) HandleDisband(data string) {

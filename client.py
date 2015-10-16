@@ -508,7 +508,7 @@ def TestGroup():
     access_token = login(13635273142)
     url = URL + "/groups"
 
-    group = {"master":13635273142,"members":[13635273142], "name":"test"}
+    group = {"master":13635273142,"members":[13635273142], "name":"test", "super":True}
     headers = {}
     headers["Authorization"] = "Bearer " + access_token
     headers["Content-Type"] = "application/json; charset=UTF-8"
@@ -534,12 +534,21 @@ def TestGroup():
     print "test group completed"
 
 
+def TestSuperGroupOffline():
+    _TestGroupOffline(True)
+    print "test super group offline message completed"
+
 def TestGroupOffline():
+    _TestGroupOffline(False)
+
+    print "test group offline message completed"
+
+def _TestGroupOffline(is_super):
     access_token = login(13635273142)
 
     url = URL + "/groups"
 
-    group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
+    group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test", "super":is_super}
     headers = {}
     headers["Authorization"] = "Bearer " + access_token
     headers["Content-Type"] = "application/json; charset=UTF-8"
@@ -571,9 +580,8 @@ def TestGroupOffline():
     r = requests.delete(url, headers=headers)
     assert(r.status_code == 200)
 
-    print "test group offline message completed"
     
-def _TestGroupMessage(port):
+def _TestGroupMessage(is_super, port):
     global task
     task = 0
 
@@ -586,7 +594,7 @@ def _TestGroupMessage(port):
     #create group
     access_token = login(13635273142)
     url = URL + "/groups"
-    group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
+    group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test", "super":is_super}
     headers = {}
     headers["Authorization"] = "Bearer " + access_token
     headers["Content-Type"] = "application/json; charset=UTF-8"
@@ -610,13 +618,20 @@ def _TestGroupMessage(port):
     assert(r.status_code == 200)
 
 
+def TestSuperGroupMessage():
+    _TestGroupMessage(True, 23000)
+    print "test super group message completed"    
 
 def TestGroupMessage():
-    _TestGroupMessage(23000)
+    _TestGroupMessage(False, 23000)
     print "test group message completed"    
 
+def TestClusterSuperGroupMessage():
+    _TestGroupMessage(True, 24000)
+    print "test cluster super group message completed"    
+
 def TestClusterGroupMessage():
-    _TestGroupMessage(24000)
+    _TestGroupMessage(False, 24000)
     print "test cluster group message completed"    
 
 def TestGroupNotification():
@@ -686,18 +701,27 @@ def main():
      
     TestGroup()
     time.sleep(1)
-
+     
     TestGroupNotification()
     time.sleep(1)
 
     TestGroupMessage()
     time.sleep(1)
 
+    TestSuperGroupMessage()
+    time.sleep(1)
+
     TestGroupOffline()
+    time.sleep(1)
+
+    TestSuperGroupOffline()
     time.sleep(1)
 
     if cluster:
         TestClusterGroupMessage()
+        time.sleep(1)
+
+        TestClusterSuperGroupMessage()
         time.sleep(1)
 
     TestInputing()
