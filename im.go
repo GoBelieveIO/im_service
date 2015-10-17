@@ -361,14 +361,14 @@ func main() {
 
 	channels = make([]*Channel, 0)
 	for _, addr := range(config.storage_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, nil, DispatchOfflineMessage)
+		channel := NewChannel(addr, DispatchAppMessage, nil)
 		channel.Start()
 		channels = append(channels, channel)
 	}
 
 	route_channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, DispatchRoomMessage, nil)
+		channel := NewChannel(addr, DispatchAppMessage, DispatchRoomMessage)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}

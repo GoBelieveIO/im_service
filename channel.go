@@ -44,17 +44,15 @@ type Channel struct {
 	subscribers     map[int64]*Subscriber
 
 	dispatch        func(*AppMessage)
-	dispatch_off    func(*AppMessage)
 	dispatch_room   func(*AppMessage)
 
 }
 
-func NewChannel(addr string, f func(*AppMessage), f2 func(*AppMessage), f3 func(*AppMessage)) *Channel {
+func NewChannel(addr string, f func(*AppMessage), f2 func(*AppMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
 	channel.dispatch_room = f2
-	channel.dispatch_off = f3
 	channel.addr = addr
 	channel.wt = make(chan *Message, 10)
 	return channel
@@ -107,15 +105,6 @@ func (channel *Channel) GetAllSubscriber() []*AppUserID {
 		}
 	}
 	return subs
-}
-
-func (channel *Channel) SubscribeStorage(appid int64, uid int64, did int64) {
-	count := channel.AddSubscribe(appid, uid)
-	log.Info("sub count:", count)
-
-	id := &StorageSubscriber{appid: appid, uid: uid, device_id:did}
-	msg := &Message{cmd: MSG_SUBSCRIBE_STORAGE, body: id}
-	channel.wt <- msg
 }
 
 func (channel *Channel) Subscribe(appid int64, uid int64) {
@@ -264,11 +253,6 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 				amsg := msg.body.(*AppMessage)
 				if channel.dispatch_room != nil {
 					channel.dispatch_room(amsg)
-				}
-			} else if msg.cmd == MSG_PUBLISH_OFFLINE {
-				amsg := msg.body.(*AppMessage)
-				if channel.dispatch != nil {
-					channel.dispatch_off(amsg)
 				}
 			} else {
 				log.Error("unknown message cmd:", msg.cmd)

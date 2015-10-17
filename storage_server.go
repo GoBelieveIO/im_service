@@ -268,6 +268,7 @@ func (client *Client) Write() {
 	for {
 		msg := <- client.wt
 		if msg == nil {
+			client.conn.Close()
 			break
 		}
 		SendMessage(client.conn, msg)
@@ -461,16 +462,33 @@ func (client *Client) WriteEMessage(emsg *EMessage) []byte{
 	return buffer.Bytes()
 }
 
-func (client *Client) HandleLoadOffline(app_user_id *AppUserID) {
-	//invalid device id
-	var did int64 = 0
-	messages := storage.LoadOfflineMessage(app_user_id.appid, app_user_id.uid, did)
+func (client *Client) HandleLoadOffline(id *LoadOffline) {
+	messages := storage.LoadOfflineMessage(id.appid, id.uid, id.device_id)
 	result := &MessageResult{status:0}
 	buffer := new(bytes.Buffer)
-	var count int16
-	count = int16(len(messages))
+
+	var count int16 = 0
+	for _, emsg := range(messages) {
+		if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
+			m := emsg.msg.body.(*IMMessage)
+			//同一台设备自己发出的消息
+			if m.sender == id.uid && emsg.device_id == id.device_id {
+				continue
+			}
+		}
+		count += 1
+	}
+
 	binary.Write(buffer, binary.BigEndian, count)
 	for _, emsg := range(messages) {
+		if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
+			m := emsg.msg.body.(*IMMessage)
+			//同一台设备自己发出的消息
+			if m.sender == id.uid && emsg.device_id == id.device_id {
+				continue
+			}
+		}
+
 		ebuf := client.WriteEMessage(emsg)
 		var size int16 = int16(len(ebuf))
 		binary.Write(buffer, binary.BigEndian, size)
@@ -547,34 +565,12 @@ func (client *Client) HandleUnSubscribeGroup(id *AppGroupMemberID) {
 	route.RemoveGroupMember(id.gid, id.uid)
 }
 
-func (client *Client) HandleSubscribe(id *StorageSubscriber) {
-	log.Infof("subscribe appid:%d uid:%d device id:%d", id.appid, id.uid, id.device_id)
+func (client *Client) HandleSubscribe(id *AppUserID) {
+	log.Infof("subscribe appid:%d uid:%d", id.appid, id.uid)
 	AddClient(client)
 
-	f := func() {
-		if id.device_id > 0 {
-			messages := storage.LoadOfflineMessage(id.appid, id.uid, id.device_id)
-			for _, emsg := range(messages) {
-				if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
-					m := emsg.msg.body.(*IMMessage)
-					//同一台设备自己发出的消息
-					if m.sender == id.uid && emsg.device_id == id.device_id {
-						continue
-					}
-				}
-
-				am := &AppMessage{appid:id.appid, receiver:id.uid, msgid:emsg.msgid, device_id:id.device_id, msg:emsg.msg}
-				m := &Message{cmd:MSG_PUBLISH_OFFLINE, body:am}
-				client.wt <- m
-			}
-		}
-
-		route := client.app_route.FindOrAddRoute(id.appid)
-		route.AddUserID(id.uid)
-	}
-
-	c := GetUserChan(id.uid)
-	c <- f
+	route := client.app_route.FindOrAddRoute(id.appid)
+	route.AddUserID(id.uid)
 }
 
 func (client *Client) HandleUnsubscribe(id *AppUserID) {
@@ -587,7 +583,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", Command(msg.cmd))
 	switch msg.cmd {
 	case MSG_LOAD_OFFLINE:
-		client.HandleLoadOffline(msg.body.(*AppUserID))
+		client.HandleLoadOffline(msg.body.(*LoadOffline))
 	case MSG_SAVE_AND_ENQUEUE:
 		client.HandleSaveAndEnqueue(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE:
@@ -604,8 +600,8 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleUnSubscribeGroup(msg.body.(*AppGroupMemberID))
 	case MSG_LOAD_GROUP_OFFLINE:
 		client.HandleLoadGroupOffline(msg.body.(*LoadGroupOffline))
-	case MSG_SUBSCRIBE_STORAGE:
-		client.HandleSubscribe(msg.body.(*StorageSubscriber))
+	case MSG_SUBSCRIBE:
+		client.HandleSubscribe(msg.body.(*AppUserID))
 	case MSG_UNSUBSCRIBE:
 		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	default:

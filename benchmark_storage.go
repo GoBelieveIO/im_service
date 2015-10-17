@@ -7,7 +7,7 @@ import "fmt"
 
 var storage_address string = "127.0.0.1:3333"
 var appid int64 = 8
-
+var device_id int64 = 1
 
 var concurrent int
 var count int
@@ -35,6 +35,7 @@ func Test_SetAndEnqueue() {
 	sae.msg = m
 	sae.appid = appid
 	sae.receiver = 1000
+	sae.device_id = device_id
 
 	msgid, err := storage.SaveAndEnqueueMessage(sae)
 	if err != nil {
@@ -43,7 +44,7 @@ func Test_SetAndEnqueue() {
 	}
 	log.Println("msgid:", msgid)
 
-	messages, err := storage.LoadOfflineMessage(appid, 1000)
+	messages, err := storage.LoadOfflineMessage(appid, 1000, device_id)
 	if err != nil {
 		log.Println("load offline message err:", err)
 		return

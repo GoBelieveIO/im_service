@@ -35,7 +35,8 @@ type Client struct {
 	version int
 	tm     time.Time
 	wt     chan *Message
-	ewt    chan *EMessage
+	ewt    chan *EMessage //在线消息
+	owt    chan *EMessage //离线消息
 
 	room_id int64
 
@@ -56,6 +57,7 @@ func NewClient(conn interface{}) *Client {
 	client.conn = conn // conn is net.Conn or engineio.Conn
 	client.wt = make(chan *Message, 10)
 	client.ewt = make(chan *EMessage, 10)
+	client.owt = make(chan *EMessage, 10)
 
 	client.unacks = make(map[int]int64)
 	client.unackMessages = make(map[int]*EMessage)
@@ -157,8 +159,30 @@ func (client *Client) LoadGroupOffline() {
 		}
 
 		for _, emsg := range messages {
-			client.ewt <- emsg
+			client.owt <- emsg
 		}
+	}
+}
+
+func (client *Client) LoadOffline() {
+	if client.device_ID == 0 {
+		return
+	}
+	storage_pool := GetStorageConnPool(client.uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return
+	}
+	defer storage_pool.Release(storage)
+
+	messages, err := storage.LoadOfflineMessage(client.appid, client.uid, client.device_ID)
+	if err != nil {
+		log.Errorf("load offline message err:%d %s", client.uid, err)
+		return
+	}
+	for _, emsg := range messages {
+		client.owt <- emsg
 	}
 }
 
@@ -190,6 +214,11 @@ func (client *Client) AuthToken(token string) (int64, int64, error) {
 
 
 func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
+	if client.uid > 0 {
+		log.Info("repeat login")
+		return
+	}
+
 	var err error
 	client.appid, client.uid, err = client.AuthToken(login.token)
 	if err != nil {
@@ -230,11 +259,15 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 
 	client.SubscribeGroup()
 	channel := GetUserStorageChannel(client.uid)
-	channel.SubscribeStorage(client.appid, client.uid, client.device_ID)
+	channel.Subscribe(client.appid, client.uid)
 	channel = GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
 
+	client.LoadOffline()
 	client.LoadGroupOffline()
+	
+	close(client.owt)
+	log.Infof("offline loaded:%d", client.uid)
 
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
@@ -518,6 +551,51 @@ func (client *Client) AddUnAckMessage(emsg *EMessage) {
 func (client *Client) Write() {
 	seq := 0
 	running := true
+	loaded := false
+
+	//发送离线消息
+	for running && !loaded {
+		select {
+		case msg := <-client.wt:
+			if msg == nil {
+				client.close()
+				atomic.AddInt64(&server_summary.nconnections, -1)
+				if client.uid > 0 {
+					atomic.AddInt64(&server_summary.nclients, -1)
+				}
+				running = false
+				log.Infof("client:%d socket closed", client.uid)
+				break
+			}
+			if msg.cmd == MSG_RT {
+				atomic.AddInt64(&server_summary.out_message_count, 1)
+			}
+			seq++
+
+			//以当前客户端所用版本号发送消息
+			vmsg := &Message{msg.cmd, seq, client.version, msg.body}
+			client.send(vmsg)
+		case emsg, ok := <- client.owt:
+			if !ok {
+				//离线消息读取完毕
+				loaded = true
+				break
+			}
+			seq++
+
+			emsg.msg.seq = seq
+			client.AddUnAckMessage(emsg)
+
+			//以当前客户端所用版本号发送消息
+			msg := &Message{emsg.msg.cmd, seq, client.version, emsg.msg.body}
+			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+				atomic.AddInt64(&server_summary.out_message_count, 1)
+			}
+			client.send(msg)
+		}
+	}
+	
+	//发送在线消息
 	for running {
 		select {
 		case msg := <-client.wt:

@@ -51,7 +51,7 @@ const MSG_ACK_IN = 255
 func init() {
 	message_creators[MSG_SAVE_AND_ENQUEUE] = func()IMessage{return new(SAEMessage)}
 	message_creators[MSG_DEQUEUE] = func()IMessage{return new(DQMessage)}
-	message_creators[MSG_LOAD_OFFLINE] = func()IMessage{return new(AppUserID)}
+	message_creators[MSG_LOAD_OFFLINE] = func()IMessage{return new(LoadOffline)}
 	message_creators[MSG_LOAD_GROUP_OFFLINE] = func()IMessage{return new(LoadGroupOffline)}
 	message_creators[MSG_RESULT] = func()IMessage{return new(MessageResult)}
 	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
@@ -475,6 +475,33 @@ func (lh *LoadHistory) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &lh.limit)
 	return true
 }
+
+type LoadOffline struct {
+	appid  int64
+	uid    int64
+	device_id int64
+}
+
+func (lo *LoadOffline) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, lo.appid)
+	binary.Write(buffer, binary.BigEndian, lo.uid)
+	binary.Write(buffer, binary.BigEndian, lo.device_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (lo *LoadOffline) FromData(buff []byte) bool {
+	if len(buff) < 24 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &lo.appid)
+	binary.Read(buffer, binary.BigEndian, &lo.uid)
+	binary.Read(buffer, binary.BigEndian, &lo.device_id)
+	return true
+}
+
 
 type LoadGroupOffline struct {
 	appid  int64

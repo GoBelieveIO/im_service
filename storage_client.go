@@ -192,8 +192,8 @@ func (client *StorageConn) LoadGroupOfflineMessage(appid int64, gid int64, uid i
 	return client.ReceiveMessages()
 }
 
-func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64) ([]*EMessage, error) {
-	id := &AppUserID{appid:appid, uid:uid}
+func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64, device_id int64) ([]*EMessage, error) {
+	id := &LoadOffline{appid:appid, uid:uid, device_id:device_id}
 	msg := &Message{cmd:MSG_LOAD_OFFLINE, body:id}
 	SendMessage(client.conn, msg)
 	return client.ReceiveMessages()
