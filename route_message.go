@@ -68,7 +68,7 @@ type AppMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
-	device_id int64//离线消息代表接受者的设备id， 在线消息代表发送者的设备id
+	device_id int64
 	msg      *Message
 }
 

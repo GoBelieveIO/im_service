@@ -225,32 +225,6 @@ func DispatchAppMessage(amsg *AppMessage) {
 	}
 }
 
-func DispatchOfflineMessage(amsg *AppMessage) {
-	log.Info("dispatch app message:", Command(amsg.msg.cmd))
-
-	route := app_route.FindRoute(amsg.appid)
-	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	clients := route.FindClientSet(amsg.receiver)
-	if len(clients) == 0 {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	for c, _ := range(clients) {
-		if c.device_ID != amsg.device_id {
-			continue
-		}
-
-		if amsg.msgid > 0 {
-			c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
-		} else {
-			c.wt <- amsg.msg
-		}
-	}
-}
-
 func DispatchRoomMessage(amsg *AppMessage) {
 	log.Info("dispatch room message", Command(amsg.msg.cmd))
 	room_id := amsg.receiver
