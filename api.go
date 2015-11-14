@@ -168,6 +168,7 @@ func RunAPI() {
 
 	r.HandleFunc("/device/bind", BindToken).Methods("POST")
 	r.HandleFunc("/device/unbind", UnbindToken).Methods("POST")
+	r.HandleFunc("/notification/groups/{gid}", SetGroupQuiet).Methods("POST")
 	r.HandleFunc("/auth/grant", AuthGrant).Methods("POST")
 	r.HandleFunc("/messages", PostIMMessage).Methods("POST")
 	r.HandleFunc("/messages", LoadLatestMessage).Methods("GET")

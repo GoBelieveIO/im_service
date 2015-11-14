@@ -32,6 +32,7 @@ import "github.com/bitly/go-simplejson"
 import log "github.com/golang/glog"
 import "fmt"
 import "github.com/garyburd/redigo/redis"
+import "github.com/gorilla/mux"
 
 func WriteHttpError(status int, err string, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
@@ -287,4 +288,40 @@ func UnbindToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(200)	
+}
+
+func SetGroupQuiet(w http.ResponseWriter, r *http.Request) {
+	appid, uid, err := BearerAuthentication(r)
+	if err != nil {
+		WriteHttpError(401, "require auth", w)
+		return
+	}
+
+	vars := mux.Vars(r)
+	gid, err := strconv.ParseInt(vars["gid"], 10, 64)
+	if err != nil {
+		WriteHttpError(400, "group id is't integer", w)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+	
+	obj, err := simplejson.NewJson(body)
+	if err != nil {
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+
+	quiet, err := obj.Get("quiet").Int()
+	if err != nil {
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+
+	SetNotificationQuietMode(appid, uid, gid, quiet)
+	w.WriteHeader(200)
 }

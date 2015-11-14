@@ -216,3 +216,18 @@ func ResetUserDeviceToken(appid int64, uid int64, device_token string, ng_device
 	}
 	return nil	
 }
+
+func SetNotificationQuietMode(appid int64, uid int64, gid int64, quiet int) error {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("users_%d_%d", appid, uid)
+	field := fmt.Sprintf("group_%d", gid)
+
+	_, err := conn.Do("HSET", key, field, quiet)
+	if err != nil {
+		log.Info("hget err:", err)
+		return err
+	}
+	return nil
+}
