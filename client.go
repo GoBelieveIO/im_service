@@ -339,7 +339,7 @@ func (client *Client) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	}
 
 	msg.timestamp = int32(time.Now().Unix())
-	m := &Message{cmd: MSG_GROUP_IM, body: msg}
+	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 
 	group := group_manager.FindGroup(msg.receiver)
 	if group == nil {
@@ -624,7 +624,7 @@ func (client *Client) Write() {
 			client.AddUnAckMessage(emsg)
 
 			//以当前客户端所用版本号发送消息
-			msg := &Message{emsg.msg.cmd, seq, client.version, emsg.msg.body}
+			msg := &Message{cmd:emsg.msg.cmd, seq:seq, version:client.version, body:emsg.msg.body}
 			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
