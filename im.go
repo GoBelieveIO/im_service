@@ -241,14 +241,10 @@ func DispatchRoomMessage(amsg *AppMessage) {
 }
 
 func DispatchGroupMessage(amsg *AppMessage) {
-	//log.Info("dispatch group message:")
+	log.Info("dispatch group message:", Command(amsg.msg.cmd))
 	group := group_manager.FindGroup(amsg.receiver)
 	if group == nil {
 		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
-		return
-	}
-	if amsg.msg.cmd != MSG_GROUP_IM {
-		log.Warning("invalid group message cmd:", Command(amsg.msg.cmd))
 		return
 	}
 
@@ -257,8 +253,6 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return
 	}
-
-	im := amsg.msg.body.(*IMMessage)
 
 	members := group.Members()
 	for member := range members {
@@ -269,9 +263,13 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		 
 		if clients != nil {
 			for c, _ := range(clients) {
-				//不再发送给发送者所在的设备
-				if c.uid == im.sender && c.device_ID == amsg.device_id {
-					continue
+				if amsg.msg.cmd == MSG_GROUP_IM {
+					im := amsg.msg.body.(*IMMessage)
+					
+					//不再发送给发送者所在的设备
+					if c.uid == im.sender && c.device_ID == amsg.device_id {
+						continue
+					}
 				}
 				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
 			}

@@ -634,7 +634,7 @@ def TestClusterGroupMessage():
     _TestGroupMessage(False, 24000)
     print "test cluster group message completed"    
 
-def TestGroupNotification():
+def _TestGroupNotification(is_super):
     global task
     task = 0
 
@@ -648,7 +648,8 @@ def TestGroupNotification():
 
     url = URL + "/groups"
 
-    group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test"}
+    group = {"master":13635273142,"members":[13635273142,13635273143], 
+             "super":is_super, "name":"test"}
     headers = {}
     headers["Authorization"] = "Bearer " + access_token
     headers["Content-Type"] = "application/json; charset=UTF-8"
@@ -664,7 +665,16 @@ def TestGroupNotification():
     r = requests.delete(url, headers=headers)
     print r.status_code, r.text
 
+
+
+def TestGroupNotification():
+    _TestGroupNotification(False)
     print "test group notification completed"  
+
+def TestSuperGroupNotification():
+    _TestGroupNotification(True)
+    print "test super group notification completed"  
+
 
 def _TestRoomMessage(port):
     global task
@@ -701,8 +711,11 @@ def main():
      
     TestGroup()
     time.sleep(1)
-     
+    
     TestGroupNotification()
+    time.sleep(1)
+
+    TestSuperGroupNotification()
     time.sleep(1)
 
     TestGroupMessage()

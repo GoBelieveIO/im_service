@@ -88,7 +88,7 @@ func (group *Group) IsEmpty() bool {
 }
 
 func CreateGroup(db *sql.DB, appid int64, master int64, name string, super int8) int64 {
-	log.Info("create group:", super)
+	log.Info("create group super:", super)
 	stmtIns, err := db.Prepare("INSERT INTO `group`(appid, master, name, super) VALUES( ?, ?, ?, ? )")
 	if err != nil {
 		log.Info("error:", err)

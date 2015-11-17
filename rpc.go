@@ -9,31 +9,15 @@ import log "github.com/golang/glog"
 import "io/ioutil"
 import "github.com/bitly/go-simplejson"
 
-
 func SendGroupNotification(appid int64, gid int64, 
 	notification string, members IntSet) {
 
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
 
 	for member := range(members) {
-		sae := &SAEMessage{}
-		sae.msg = msg
-		sae.appid = appid
-		sae.receiver = member
-
-		storage_pool := GetStorageConnPool(member)
-
-		storage, err := storage_pool.Get()
+		_, err := SaveMessage(appid, member, 0, msg)
 		if err != nil {
-			log.Error("connect storage err:", err)
-			return
-		}
-		defer storage_pool.Release(storage)
-
-		_, err = storage.SaveAndEnqueueMessage(sae)
-		if err != nil {
-			log.Error("saveandequeue message err:", err)
-			return
+			break
 		}
 	}
 }

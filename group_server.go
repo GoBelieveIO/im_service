@@ -30,6 +30,7 @@ import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 import "strings"
+import "time"
 
 type BroadcastMessage struct {
 	channel string
@@ -127,6 +128,7 @@ func (group_server *GroupServer) CreateGroup(appid int64, gname string,
 	v["master"] = master
 	v["name"] = gname
 	v["members"] = members
+	v["timestamp"] = int32(time.Now().Unix())
 	op := make(map[string]interface{})
 	op["create"] = v
 
@@ -149,6 +151,7 @@ func (group_server *GroupServer) DisbandGroup(appid int64, gid int64) bool {
 
 	v := make(map[string]interface{})
 	v["group_id"] = gid
+	v["timestamp"] = int32(time.Now().Unix())
 	op := make(map[string]interface{})
 	op["disband"] = v
 
@@ -175,6 +178,7 @@ func (group_server *GroupServer) AddGroupMember(appid int64, gid int64, uid int6
 	v := make(map[string]interface{})
 	v["group_id"] = gid
 	v["member_id"] = uid
+	v["timestamp"] = int32(time.Now().Unix())
 	op := make(map[string]interface{})
 	op["add_member"] = v
 
@@ -201,6 +205,7 @@ func (group_server *GroupServer) QuitGroup(appid int64, gid int64, uid int64) bo
 	v := make(map[string]interface{})
 	v["group_id"] = gid
 	v["member_id"] = uid
+	v["timestamp"] = int32(time.Now().Unix())
 	op := make(map[string]interface{})
 	op["quit_group"] = v
 	group_server.SendGroupNotification(appid, gid, op, []int64{uid})
