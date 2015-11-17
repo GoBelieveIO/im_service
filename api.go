@@ -64,8 +64,8 @@ func NewRedisPool(server, password string) *redis.Pool {
 }
 
 
-func SendIMMessage(body string, appid int64, sender int64) error {
-	url := fmt.Sprintf("%s/post_im_message?appid=%d&sender=%d", config.im_url, appid, sender)
+func SendIMMessage(body string, appid int64, msg_type string, sender int64) error {
+	url := fmt.Sprintf("%s/post_im_message?appid=%d&class=%s&sender=%d", config.im_url, appid, msg_type, sender)
 	resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
 	if err != nil {
 		log.Info("post err:", err)
@@ -86,19 +86,39 @@ func PostIMMessage(w http.ResponseWriter, r *http.Request) {
 	var uid int64
 	var err error
 
-	appid, uid, err = BearerAuthentication(r)
+	appid, err = BasicAuthorization(r)
 	if err != nil {
-		WriteHttpError(403, err.Error(), w)
-		return
+		appid, uid, err = BearerAuthentication(r)
+		if err != nil {
+			WriteHttpError(403, err.Error(), w)
+			return
+		}
 	}
 	
+	vars := mux.Vars(r)
+	class, ok := vars["class"]
+	if !ok {
+		WriteHttpError(400, "message class is empty", w)
+		return
+	}
+
+	var msg_type string
+	if class == "groups" {
+		msg_type = "group"
+	} else if class == "peers" {
+		msg_type = "peer"
+	} else {
+		WriteHttpError(400, "invalid message class", w)
+		return
+	}
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
 		return
 	}
 
-	err = SendIMMessage(string(body), appid, uid)
+	err = SendIMMessage(string(body), appid, msg_type, uid)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
 		return
@@ -170,7 +190,7 @@ func RunAPI() {
 	r.HandleFunc("/device/unbind", UnbindToken).Methods("POST")
 	r.HandleFunc("/notification/groups/{gid}", SetGroupQuiet).Methods("POST")
 	r.HandleFunc("/auth/grant", AuthGrant).Methods("POST")
-	r.HandleFunc("/messages", PostIMMessage).Methods("POST")
+	r.HandleFunc("/messages/{class}", PostIMMessage).Methods("POST")
 	r.HandleFunc("/messages", LoadLatestMessage).Methods("GET")
 
 	http.Handle("/", handlers.LoggingHandler(os.Stdout, r))

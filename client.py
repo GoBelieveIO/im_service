@@ -367,7 +367,42 @@ def send_inputing(uid, receiver):
     send_message(MSG_INPUTING, seq, m, sock)
     task += 1
     
+def send_http_peer_message(uid, receiver):
+    global task
+    url = URL + "/messages/peers"
+    content = json.dumps({"text":"test"})
+    obj = {"sender":uid, "receiver":receiver, "content":content}
+    secret = md5.new(APP_SECRET).digest().encode("hex")
+    basic = base64.b64encode(str(APP_ID) + ":" + secret)
+    headers = {'Content-Type': 'application/json; charset=UTF-8',
+               'Authorization': 'Basic ' + basic}
+     
+    res = requests.post(url, data=json.dumps(obj), headers=headers)
+    if res.status_code != 200:
+        print res.status_code, res.content
+        return
+    print "send http peer message:", res.status_code
+    task += 1
 
+
+def send_http_group_message(uid, receiver):
+    global task
+    url = URL + "/messages/groups"
+    content = json.dumps({"text":"test"})
+    obj = {"sender":uid, "receiver":receiver, "content":content}
+    secret = md5.new(APP_SECRET).digest().encode("hex")
+    basic = base64.b64encode(str(APP_ID) + ":" + secret)
+    headers = {'Content-Type': 'application/json; charset=UTF-8',
+               'Authorization': 'Basic ' + basic}
+     
+    res = requests.post(url, data=json.dumps(obj), headers=headers)
+    if res.status_code != 200:
+        print res.status_code, res.content
+        return
+    print "send http group message:", res.status_code
+    task += 1
+    
+    
 def TestCluster():
     global task
     task = 0
@@ -422,6 +457,25 @@ def TestSendAndRecv():
         time.sleep(1)
     print "test single completed"
 
+def TestHttpSendAndRecv():
+    global task
+    task = 0
+    t3 = threading.Thread(target=recv_message_client, args=(13635273142,))
+    t3.setDaemon(True)
+    t3.start()
+    
+    time.sleep(1)
+    
+    t2 = threading.Thread(target=send_http_peer_message, args=(13635273143,13635273142))
+    t2.setDaemon(True)
+    t2.start()
+    
+    while task < 2:
+        time.sleep(1)
+
+    print "test http peer message completed"
+
+    
 def TestOffline():
     global task
     task = 0
@@ -532,6 +586,46 @@ def TestGroup():
 
 
     print "test group completed"
+
+
+def TestSendHttpGroupMessage():
+    global task
+    task = 0
+
+    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,23000))
+    t3.setDaemon(True)
+    t3.start()
+
+    time.sleep(1)
+
+    #create group
+    is_super = False
+    access_token = login(13635273142)
+    url = URL + "/groups"
+    group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test", "super":is_super}
+    headers = {}
+    headers["Authorization"] = "Bearer " + access_token
+    headers["Content-Type"] = "application/json; charset=UTF-8"
+    r = requests.post(url, data=json.dumps(group), headers = headers)
+    assert(r.status_code == 200)
+    obj = json.loads(r.content)
+    group_id = obj["data"]["group_id"]
+    print "group id:", group_id
+    time.sleep(1)
+
+    t2 = threading.Thread(target=send_http_group_message, args=(13635273142, group_id))
+    t2.setDaemon(True)
+    t2.start()
+
+
+    while task < 2:
+        time.sleep(1)
+
+    url = URL + "/groups/%s"%str(group_id)
+    r = requests.delete(url, headers=headers)
+    assert(r.status_code == 200)
+
+    print "test send http group message completed"
 
 
 def TestSuperGroupOffline():
@@ -711,32 +805,32 @@ def main():
      
     TestGroup()
     time.sleep(1)
-    
+     
     TestGroupNotification()
     time.sleep(1)
-
+     
     TestSuperGroupNotification()
     time.sleep(1)
-
+     
     TestGroupMessage()
     time.sleep(1)
-
+     
     TestSuperGroupMessage()
     time.sleep(1)
-
+     
     TestGroupOffline()
     time.sleep(1)
-
+     
     TestSuperGroupOffline()
     time.sleep(1)
-
+     
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)
-
+     
         TestClusterSuperGroupMessage()
         time.sleep(1)
-
+     
     TestInputing()
     time.sleep(1)
      
@@ -748,17 +842,23 @@ def main():
      
     if cluster:
         TestClusterRoomMessage()
-     
+    
     TestSendAndRecv()
     time.sleep(1)
-
+     
     TestOffline()
     time.sleep(1)
-
+     
     if cluster:
         TestCluster()
         time.sleep(1)
-     
+
+    TestHttpSendAndRecv()
+    time.sleep(1)
+
+    TestSendHttpGroupMessage()
+    time.sleep(1)
+
     TestLoginPoint()
     time.sleep(1)
     TestPingPong()

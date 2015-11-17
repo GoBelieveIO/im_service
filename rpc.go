@@ -91,20 +91,43 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 }
 
+func SendGroupIMMessage(im *IMMessage, appid int64) {
+	m := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, body:im}
+	group := group_manager.FindGroup(im.receiver)
+	if group == nil {
+		log.Warning("can't find group:", im.receiver)
+		return
+	}
+	if group.super {
+		_, err := SaveGroupMessage(appid, im.receiver, 0, m)
+		if err != nil {
+			return
+		}
+	} else {
+		members := group.Members()
+		for member := range members {
+			_, err := SaveMessage(appid, member, 0, m)
+			if err != nil {
+				continue
+			}
+		}
+	}
+	atomic.AddInt64(&server_summary.in_message_count, 1)
+}
 
 func SendIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
-	msgid, err := SaveMessage(appid, im.receiver, 0, m)
+	_, err := SaveMessage(appid, im.receiver, 0, m)
 	if err != nil {
 		return
 	}
 
+	//保存到发送者自己的消息队列
+	SaveMessage(appid, im.sender, 0, m)
 	atomic.AddInt64(&server_summary.in_message_count, 1)
-	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", im.sender, im.receiver, msgid)
 }
 
 func PostIMMessage(w http.ResponseWriter, req *http.Request) {
-	log.Info("post im message")
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -127,6 +150,18 @@ func PostIMMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	var is_group bool
+	msg_type := m.Get("class")
+	if msg_type == "group" {
+		is_group = true
+	} else if msg_type == "peer" {
+		is_group = false
+	} else {
+		log.Info("invalid message class")
+		WriteHttpError(400, "invalid message class", w)
+		return
+	}
+
 	obj, err := simplejson.NewJson(body)
 	if err != nil {
 		log.Info("error:", err)
@@ -134,14 +169,12 @@ func PostIMMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	receiver, err := obj.Get("receiver").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return		
+	sender2, err := obj.Get("sender").Int64()
+	if err == nil && sender == 0 {
+		sender = sender2
 	}
 
-	id, err := obj.Get("msgid").Int64()
+	receiver, err := obj.Get("receiver").Int64()
 	if err != nil {
 		log.Info("error:", err)
 		WriteHttpError(400, "invalid json format", w)
@@ -158,12 +191,17 @@ func PostIMMessage(w http.ResponseWriter, req *http.Request) {
 	im := &IMMessage{}
 	im.sender = sender
 	im.receiver = receiver
-	im.msgid = int32(id)
+	im.msgid = 0
 	im.timestamp = int32(time.Now().Unix())
 	im.content = content
 
-	SendIMMessage(im, appid)
-	log.Info("post im message success")
+	if is_group {
+		SendGroupIMMessage(im, appid)
+		log.Info("post group im message success")
+ 	} else {
+		SendIMMessage(im, appid)
+		log.Info("post peer im message success")
+	}
 	w.WriteHeader(200)
 }
 
