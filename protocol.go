@@ -47,6 +47,7 @@ const MSG_RT = 17
 const MSG_ENTER_ROOM = 18
 const MSG_LEAVE_ROOM = 19
 const MSG_ROOM_IM = 20
+const MSG_SYSTEM = 21
 
 
 const PLATFORM_IOS = 1
@@ -81,6 +82,7 @@ func init() {
 	message_creators[MSG_ENTER_ROOM] = func()IMessage{return new(Room)}
 	message_creators[MSG_LEAVE_ROOM] = func()IMessage{return new(Room)}
 	message_creators[MSG_ROOM_IM] = func()IMessage{return &RoomMessage{new(RTMessage)}}
+	message_creators[MSG_SYSTEM] = func()IMessage{return new(SystemMessage)}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
 	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -103,6 +105,7 @@ func init() {
 	message_descriptions[MSG_ENTER_ROOM] = "MSG_ENTER_ROOM"
 	message_descriptions[MSG_LEAVE_ROOM] = "MSG_LEAVE_ROOM"
 	message_descriptions[MSG_ROOM_IM] = "MSG_ROOM_IM"
+	message_descriptions[MSG_SYSTEM] = "MSG_SYSTEM"
 }
 
 type Command int
@@ -692,6 +695,19 @@ func (inputing *MessageInputing) FromData(buff []byte) bool {
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &inputing.sender)
 	binary.Read(buffer, binary.BigEndian, &inputing.receiver)
+	return true
+}
+
+type SystemMessage struct {
+	notification string
+}
+
+func (sys *SystemMessage) ToData() []byte {
+	return []byte(sys.notification)
+}
+
+func (sys *SystemMessage) FromData(buff []byte) bool {
+	sys.notification = string(buff)
 	return true
 }
 

@@ -73,6 +73,7 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_group_notification", PostGroupNotification)
 	http.HandleFunc("/post_im_message", PostIMMessage)
 	http.HandleFunc("/load_latest_message", LoadLatestMessage)
+	http.HandleFunc("/post_system_message", SendSystemMessage)
 
 	HTTPService(addr, nil)
 }

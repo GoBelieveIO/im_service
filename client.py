@@ -28,6 +28,7 @@ MSG_RT = 17
 MSG_ENTER_ROOM = 18
 MSG_LEAVE_ROOM = 19
 MSG_ROOM_IM = 20
+MSG_SYSTEM = 21
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -124,6 +125,8 @@ def recv_message(sock):
     elif cmd == MSG_ACK:
         ack, = struct.unpack("!i", content)
         return cmd, seq, ack
+    elif cmd == MSG_SYSTEM:
+        return cmd, seq, content
     elif cmd == MSG_INPUTING:
         sender, receiver = struct.unpack("!qq", content)
         return cmd, seq, (sender, receiver)
@@ -136,7 +139,8 @@ APP_ID = 7
 APP_KEY = "sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44"
 APP_SECRET = '0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1'
 HOST = "127.0.0.1"
-URL = "http://127.0.0.1:23002"
+#URL = "http://127.0.0.1:23002"
+URL = "http://192.168.33.10"
 
 def login(uid):
     url = URL + "/auth/grant"
@@ -402,6 +406,37 @@ def send_http_group_message(uid, receiver):
     print "send http group message:", res.status_code
     task += 1
     
+def send_system_message(uid):
+    global task
+    url = URL + "/messages/systems"
+    obj = {
+        "receiver":uid,
+        "content":"system message content"
+    }
+    secret = md5.new(APP_SECRET).digest().encode("hex")
+    basic = base64.b64encode(str(APP_ID) + ":" + secret)
+    headers = {'Content-Type': 'application/json; charset=UTF-8',
+               'Authorization': 'Basic ' + basic}
+     
+    res = requests.post(url, data=json.dumps(obj), headers=headers)
+    if res.status_code != 200:
+        print res.status_code, res.content
+        return
+    print "send system message:", res.status_code
+    task += 1
+    
+def recv_system_message_client(uid):
+    def handle_message(cmd, s, msg):
+        if cmd == MSG_SYSTEM:
+            print "cmd:", cmd, msg
+            return True
+        else:
+            print "cmd:", cmd, msg
+            return False
+
+    recv_client(uid, 23000, handle_message)
+    print "recv system message success"
+
     
 def TestCluster():
     global task
@@ -571,6 +606,11 @@ def TestGroup():
     assert(r.status_code == 200)
     obj = json.loads(r.content)
     group_id = obj["data"]["group_id"]
+
+
+    url = URL + "/groups/%s"%str(group_id)
+    r = requests.patch(url, data=json.dumps({"name":"test_new"}), headers = headers)
+    assert(r.status_code == 200)
 
     url = URL + "/groups/%s/members"%str(group_id)
     r = requests.post(url, data=json.dumps({"uid":13635273143}), headers = headers)
@@ -797,6 +837,26 @@ def TestClusterRoomMessage():
     print "test cluster room message completed"
 
 
+def TestSystemMessage():
+    global task
+    task = 0
+ 
+    room_id = 1
+    t3 = threading.Thread(target=recv_system_message_client, args=(13635273142, ))
+    t3.setDaemon(True)
+    t3.start()
+
+    time.sleep(1)
+    
+    t2 = threading.Thread(target=send_system_message, args=(13635273142, ))
+    t2.setDaemon(True)
+    t2.start()
+    
+    while task < 2:
+        time.sleep(1)
+
+    print "test system message completed"
+    
 def main():
     cluster = True
      
@@ -842,7 +902,7 @@ def main():
      
     if cluster:
         TestClusterRoomMessage()
-    
+     
     TestSendAndRecv()
     time.sleep(1)
      
@@ -852,11 +912,15 @@ def main():
     if cluster:
         TestCluster()
         time.sleep(1)
-
+     
     TestHttpSendAndRecv()
     time.sleep(1)
-
+     
+     
     TestSendHttpGroupMessage()
+    time.sleep(1)
+
+    TestSystemMessage()
     time.sleep(1)
 
     TestLoginPoint()

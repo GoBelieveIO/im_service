@@ -268,3 +268,36 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 	w.Write(b)
 	log.Info("load latest message success")
 }
+
+func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	uid, err := strconv.ParseInt(m.Get("uid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+	sys := &SystemMessage{string(body)}
+	msg := &Message{cmd:MSG_SYSTEM, body:sys}
+
+	_, err = SaveMessage(appid, uid, 0, msg)
+	if err != nil {
+		WriteHttpError(500, "internal server error", w)
+	} else {
+		w.WriteHeader(200)
+	}
+}
