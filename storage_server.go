@@ -517,7 +517,7 @@ func (client *Client) HandleLoadHistory(lh *LoadHistory) {
 	SendMessage(client.conn, msg)	
 }
 
-const GROUP_OFFLINE_LIMIT = 200
+const GROUP_OFFLINE_LIMIT = 100
 
 func (client *Client) HandleLoadGroupOffline(lh *LoadGroupOffline) {
 	messages := storage.LoadGroupOfflineMessage(lh.appid, lh.gid, lh.uid, lh.device_id, GROUP_OFFLINE_LIMIT)

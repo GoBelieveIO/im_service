@@ -457,7 +457,7 @@ func (storage *Storage) LoadOfflineMessage(appid int64, uid int64, did int64) []
 		if off.msgid == 0 || off.msgid <= last_received_id {
 			break
 		}
-		limit := 400
+		limit := 100
 		//此设备首次登陆，只获取最近部分消息
 		if last_received_id == 0 && len(c) >= limit {
 			break
