@@ -48,16 +48,6 @@ type RouteConfig struct {
 	listen string
 }
 
-type APIConfig struct {
-	port  int
-	redis_address       string
-	mysqldb_datasource  string
-	appdb_datasource    string
-
-	//发送群组通知消息
-	im_url              string
-}
-
 func get_int(app_cfg map[string]string, key string) int {
 	concurrency, present := app_cfg[key]
 	if !present {
@@ -143,22 +133,5 @@ func read_route_cfg(cfg_path string) *RouteConfig {
 	}
 
 	config.listen = get_string(app_cfg, "listen")
-	return config
-}
-
-func read_api_cfg(cfg_path string) *APIConfig {
-	config := new(APIConfig)
-	app_cfg := make(map[string]string)
-	err := cfg.Load(cfg_path, app_cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	config.port = get_int(app_cfg, "port")
-	config.redis_address = get_string(app_cfg, "redis_address")
-	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
-	config.appdb_datasource = get_string(app_cfg, "appdb_source")
-	config.im_url = get_string(app_cfg, "im_url")
-
 	return config
 }
