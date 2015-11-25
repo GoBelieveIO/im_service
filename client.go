@@ -652,7 +652,7 @@ func (client *Client) send(msg *Message) {
 			log.Info("send msg:", Command(msg.cmd),  " tcp err:", err)
 		}
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
-		SendEngineIOMessage(conn, msg)
+		SendEngineIOBinaryMessage(conn, msg)
 	}
 }
 

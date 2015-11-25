@@ -26,6 +26,7 @@ import (
 	"github.com/googollee/go-engine.io"
 	"io/ioutil"
 	"net/http"
+	"bytes"
 )
 
 type SIOServer struct {
@@ -74,8 +75,22 @@ func handlerEngineIOClient(conn engineio.Conn) {
 	client.Run()
 }
 
-func SendEngineIOMessage(conn engineio.Conn, msg *Message) {
+func SendEngineIOBinaryMessage(conn engineio.Conn, msg *Message) {
+	w, err := conn.NextWriter(engineio.MessageBinary)
+	if err != nil {
+		log.Info("get next writer fail")
+		return
+	}
+	log.Info("message version:", msg.version)
+	err = SendMessage(w, msg)
+	if err != nil {
+		log.Info("engine io write error")
+		return
+	}
+	w.Close()
+}
 
+func SendEngineIOMessage(conn engineio.Conn, msg *Message) {
 	w, err := conn.NextWriter(engineio.MessageText)
 	if err != nil {
 		log.Info("get next writer fail")
@@ -99,7 +114,6 @@ func SendEngineIOMessage(conn engineio.Conn, msg *Message) {
 
 func ToJson(msg *Message) ([]byte, error) {
 	data := msg.ToMap()
-	log.Info(data)
 	return json.Marshal(data)
 }
 
@@ -114,13 +128,15 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 	}
 	r.Close()
 	if t == engineio.MessageText {
-		log.Info(string(b))
 		return ReadMessage(b)
 	} else {
-		log.Info("receive binary data")
-		return nil
+		return ReadBinaryMesage(b)
 	}
+}
 
+func ReadBinaryMesage(b []byte) *Message {
+	reader := bytes.NewReader(b)
+	return ReceiveMessage(reader)
 }
 
 func ReadMessage(b []byte) *Message {

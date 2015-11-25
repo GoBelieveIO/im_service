@@ -392,24 +392,6 @@ func (message *Message) FromJson(msg *simplejson.Json) bool {
 	}
 }
 
-func WriteHeader(len int32, seq int32, cmd byte, version byte, buffer io.Writer) {
-	binary.Write(buffer, binary.BigEndian, len)
-	binary.Write(buffer, binary.BigEndian, seq)
-	t := []byte{cmd, byte(version), 0, 0}
-	buffer.Write(t)
-}
-
-func ReadHeader(buff []byte) (int, int, int, int) {
-	var length int32
-	var seq int32
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &length)
-	binary.Read(buffer, binary.BigEndian, &seq)
-	cmd, _ := buffer.ReadByte()
-	version, _ := buffer.ReadByte()
-	return int(length), int(seq), int(cmd), int(version)
-}
-
 type RTMessage struct {
 	sender    int64
 	receiver  int64
@@ -871,6 +853,25 @@ func (id *AppGroupMemberID) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &id.uid)
 
 	return true
+}
+
+
+func WriteHeader(len int32, seq int32, cmd byte, version byte, buffer io.Writer) {
+	binary.Write(buffer, binary.BigEndian, len)
+	binary.Write(buffer, binary.BigEndian, seq)
+	t := []byte{cmd, byte(version), 0, 0}
+	buffer.Write(t)
+}
+
+func ReadHeader(buff []byte) (int, int, int, int) {
+	var length int32
+	var seq int32
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &length)
+	binary.Read(buffer, binary.BigEndian, &seq)
+	cmd, _ := buffer.ReadByte()
+	version, _ := buffer.ReadByte()
+	return int(length), int(seq), int(cmd), int(version)
 }
 
 func WriteMessage(w *bytes.Buffer, msg *Message) {
