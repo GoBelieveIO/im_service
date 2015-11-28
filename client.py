@@ -616,6 +616,12 @@ def TestGroup():
     r = requests.post(url, data=json.dumps({"uid":13635273143}), headers = headers)
     assert(r.status_code == 200)
 
+
+    url = URL + "/groups/%s/members"%str(group_id)
+    r = requests.post(url, data=json.dumps([13635273144,13635273145]), headers = headers)
+    assert(r.status_code == 200)
+
+
     url = URL + "/groups/%s/members/13635273143"%str(group_id)
     r = requests.delete(url, headers = headers)
 
