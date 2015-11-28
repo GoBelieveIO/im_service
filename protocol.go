@@ -48,6 +48,7 @@ const MSG_ENTER_ROOM = 18
 const MSG_LEAVE_ROOM = 19
 const MSG_ROOM_IM = 20
 const MSG_SYSTEM = 21
+const MSG_UNREAD_COUNT = 22
 
 
 const PLATFORM_IOS = 1
@@ -83,6 +84,7 @@ func init() {
 	message_creators[MSG_LEAVE_ROOM] = func()IMessage{return new(Room)}
 	message_creators[MSG_ROOM_IM] = func()IMessage{return &RoomMessage{new(RTMessage)}}
 	message_creators[MSG_SYSTEM] = func()IMessage{return new(SystemMessage)}
+	message_creators[MSG_UNREAD_COUNT] = func()IMessage{return new(MessageUnreadCount)}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
 	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -106,6 +108,7 @@ func init() {
 	message_descriptions[MSG_LEAVE_ROOM] = "MSG_LEAVE_ROOM"
 	message_descriptions[MSG_ROOM_IM] = "MSG_ROOM_IM"
 	message_descriptions[MSG_SYSTEM] = "MSG_SYSTEM"
+	message_descriptions[MSG_UNREAD_COUNT] = "MSG_UNREAD_COUNT"
 }
 
 type Command int
@@ -677,6 +680,26 @@ func (inputing *MessageInputing) FromData(buff []byte) bool {
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &inputing.sender)
 	binary.Read(buffer, binary.BigEndian, &inputing.receiver)
+	return true
+}
+
+type MessageUnreadCount struct {
+	count int32
+}
+
+func (u *MessageUnreadCount) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, u.count)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (u *MessageUnreadCount) FromData(buff []byte) bool {
+	if len(buff) < 4 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &u.count)
 	return true
 }
 

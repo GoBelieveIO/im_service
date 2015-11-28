@@ -125,6 +125,8 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleLeaveRoom(msg.body.(*Room))
 	case MSG_ROOM_IM:
 		client.HandleRoomIM(msg.body.(*RoomMessage), msg.seq)
+	case MSG_UNREAD_COUNT:
+		client.HandleUnreadCount(msg.body.(*MessageUnreadCount))
 	default:
 		log.Info("unknown msg:", msg.cmd)
 	}
@@ -269,6 +271,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	close(client.owt)
 	log.Infof("offline loaded:%d", client.uid)
 
+	SetUserUnreadCount(client.appid, client.uid, 0)
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
 }
@@ -370,6 +373,10 @@ func (client *Client) HandleInputing(inputing *MessageInputing) {
 	msg := &Message{cmd: MSG_INPUTING, body: inputing}
 	client.SendMessage(inputing.receiver, msg)
 	log.Infof("inputting sender:%d receiver:%d", inputing.sender, inputing.receiver)
+}
+
+func (client *Client) HandleUnreadCount(u *MessageUnreadCount) {
+	SetUserUnreadCount(client.appid, client.uid, u.count)
 }
 
 func (client *Client) HandleACK(ack *MessageACK) {

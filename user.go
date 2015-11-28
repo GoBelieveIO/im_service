@@ -79,3 +79,14 @@ func CountDAU(appid int64, uid int64) {
 		log.Info("pfadd err:", err)
 	}
 }
+
+func SetUserUnreadCount(appid int64, uid int64, count int32) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("users_%d_%d", appid, uid)
+	_, err := conn.Do("HSET", key, "unread", count)
+	if err != nil {
+		log.Info("hset err:", err)
+	}
+}
