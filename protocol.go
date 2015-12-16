@@ -27,18 +27,26 @@ import "github.com/bitly/go-simplejson"
 import "fmt"
 import "errors"
 
+//deprecated
 const MSG_HEARTBEAT = 1
 const MSG_AUTH = 2
+
 const MSG_AUTH_STATUS = 3
+//persistent
 const MSG_IM = 4
+
 const MSG_ACK = 5
 const MSG_RST = 6
 const MSG_GROUP_NOTIFICATION = 7
 const MSG_GROUP_IM = 8
+//deprecated
 const MSG_PEER_ACK = 9
+
 const MSG_INPUTING = 10
+//deprecated
 const MSG_SUBSCRIBE_ONLINE_STATE = 11
 const MSG_ONLINE_STATE = 12
+
 const MSG_PING = 13
 const MSG_PONG = 14
 const MSG_AUTH_TOKEN = 15
@@ -47,10 +55,12 @@ const MSG_RT = 17
 const MSG_ENTER_ROOM = 18
 const MSG_LEAVE_ROOM = 19
 const MSG_ROOM_IM = 20
+//persistent
 const MSG_SYSTEM = 21
+
 const MSG_UNREAD_COUNT = 22
 
-
+//平台号
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
