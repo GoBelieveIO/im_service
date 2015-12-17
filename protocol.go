@@ -23,7 +23,6 @@ import "io"
 import "bytes"
 import "encoding/binary"
 import log "github.com/golang/glog"
-import "github.com/bitly/go-simplejson"
 import "fmt"
 import "errors"
 
@@ -37,12 +36,14 @@ const MSG_IM = 4
 
 const MSG_ACK = 5
 const MSG_RST = 6
+//persistent
 const MSG_GROUP_NOTIFICATION = 7
 const MSG_GROUP_IM = 8
+
 //deprecated
 const MSG_PEER_ACK = 9
-
 const MSG_INPUTING = 10
+
 //deprecated
 const MSG_SUBSCRIBE_ONLINE_STATE = 11
 const MSG_ONLINE_STATE = 12
@@ -179,230 +180,6 @@ func (message *Message) FromData(buff []byte) bool {
 	}
 
 	return len(buff) == 0
-}
-
-func (message *Message) ToMap() map[string]interface{} {
-	data := make(map[string]interface{})
-	data["cmd"] = message.cmd
-	data["seq"] = message.seq
-	cmd := message.cmd
-	if cmd == MSG_AUTH {
-		body := message.body.(*Authentication)
-		data["body"] = map[string]interface{}{
-			"uid":         body.uid,
-		}
-	} else if cmd == MSG_AUTH_STATUS {
-		body := message.body.(*AuthenticationStatus)
-		data["body"] = map[string]interface{}{
-			"status": body.status,
-		}
-	} else if cmd == MSG_IM || cmd == MSG_GROUP_IM {
-		body := message.body.(*IMMessage)
-		data["body"] = map[string]interface{}{
-			"sender":    body.sender,
-			"receiver":  body.receiver,
-			"timestamp": body.timestamp,
-			"msgid":     body.msgid,
-			"content":   body.content,
-		}
-	} else if cmd == MSG_ACK {
-		data["body"] = message.body.(*MessageACK).seq
-	} else if cmd == MSG_PEER_ACK {
-		body := message.body.(*MessagePeerACK)
-		data["body"] = map[string]interface{}{
-			"sender":   body.sender,
-			"receiver": body.receiver,
-			"msgid":    body.msgid,
-		}
-	} else if cmd == MSG_HEARTBEAT || cmd == MSG_PING || cmd == MSG_PONG {
-		data["body"] = nil
-	} else if cmd == MSG_INPUTING {
-		body := message.body.(*MessageInputing)
-		data["body"] = map[string]interface{}{
-			"sender":   body.sender,
-			"receiver": body.receiver,
-		}
-	} else if cmd == MSG_GROUP_NOTIFICATION {
-		data["body"] = message.body.(*GroupNotification).notification
-	} else if cmd == MSG_ONLINE_STATE {
-		body := message.body.(*MessageOnlineState)
-		data["body"] = map[string]interface{}{
-			"sender": body.sender,
-			"online": body.online,
-		}
-	} else {
-		data["body"] = nil
-	}
-	return data
-}
-
-func (message *Message) FromJson(msg *simplejson.Json) bool {
-	switch message.cmd {
-	case MSG_AUTH:
-		uid, err := msg.Get("body").Get("uid").Int64()
-		if err != nil {
-			log.Info("get uid fail")
-			return false
-		}
-
-		data := &Authentication{}
-		data.uid = uid
-		message.body = data
-		return true
-	case MSG_AUTH_TOKEN:
-		token, err := msg.Get("body").Get("access_token").String()
-		if err != nil {
-			log.Info("get access token fail")
-			return false
-		}
-		platform_id, err := msg.Get("body").Get("platform_id").Int()
-		if err != nil {
-			log.Info("get platform id fail")
-			return false
-		}
-		device_id, err := msg.Get("body").Get("device_id").String()
-		if err != nil {
-			log.Info("get device id fail")
-			return false
-		}
-		data := &AuthenticationToken{}
-		data.token = token
-		data.platform_id = int8(platform_id)
-		data.device_id = device_id
-		message.body = data
-		return true
-	case MSG_AUTH_STATUS:
-		status, err := msg.Get("body").Get("status").Int()
-		if err != nil {
-			log.Info("get status fail")
-			return false
-		}
-
-		data := &AuthenticationStatus{}
-		data.status = int32(status)
-		message.body = data
-		return true
-
-	case MSG_IM, MSG_GROUP_IM:
-		sender, err := msg.Get("body").Get("sender").Int64()
-		if err != nil {
-			log.Info("get sender fail")
-			return false
-		}
-
-		receiver, err := msg.Get("body").Get("receiver").Int64()
-		if err != nil {
-			log.Info("get receiver fail")
-			return false
-		}
-
-		timestamp := msg.Get("body").Get("timestamp").MustInt(0)
-
-		msgid, err := msg.Get("body").Get("msgid").Int()
-		if err != nil {
-			log.Info("get msgid fail")
-			return false
-		}
-
-		content, err := msg.Get("body").Get("content").String()
-		if err != nil {
-			log.Info("get content fail")
-			return false
-		}
-		data := &IMMessage{}
-		data.sender = sender
-		data.receiver = receiver
-		data.timestamp = int32(timestamp)
-		data.msgid = int32(msgid)
-		data.content = content
-		message.body = data
-		return true
-	case MSG_ACK:
-		body, err := msg.Get("body").Int()
-		if err != nil {
-			log.Info("read body fail")
-			return false
-		}
-
-		message.body = &MessageACK{int32(body)}
-		return true
-	case MSG_HEARTBEAT, MSG_PING, MSG_PONG:
-		return true
-	case MSG_INPUTING:
-		sender, err := msg.Get("body").Get("sender").Int64()
-		if err != nil {
-			log.Info("get sender fail")
-			return false
-		}
-
-		receiver, err := msg.Get("body").Get("receiver").Int64()
-		if err != nil {
-			log.Info("get receiver fail")
-			return false
-		}
-
-		data := &MessageInputing{}
-		data.sender = sender
-		data.receiver = receiver
-		message.body = data
-		return true
-
-	case MSG_GROUP_NOTIFICATION:
-		body, err := msg.Get("body").String()
-		if err != nil {
-			log.Info("read body fail")
-			return false
-		}
-		
-		message.body = &GroupNotification{body}
-		return true
-	case MSG_PEER_ACK:
-		sender, err := msg.Get("body").Get("sender").Int64()
-		if err != nil {
-			log.Info("get sender fail")
-			return false
-		}
-
-		receiver, err := msg.Get("body").Get("receiver").Int64()
-		if err != nil {
-			log.Info("get receiver fail")
-			return false
-		}
-
-		msgid, err := msg.Get("body").Get("msgid").Int()
-		if err != nil {
-			log.Info("get msgid fail")
-			return false
-		}
-
-		data := &MessagePeerACK{}
-		data.sender = sender
-		data.receiver = receiver
-		data.msgid = int32(msgid)
-		message.body = data
-		return true
-
-	case MSG_SUBSCRIBE_ONLINE_STATE:
-		tmp, err := msg.Get("body").Get("uids").Array()
-		if err != nil {
-			log.Info("read body fail")
-			return false
-		}
-
-		data := &MessageSubscribeState{}
-		uids := make([]int64, len(tmp))
-		for i := range tmp {
-			log.Info(tmp[i])
-			if d, ok := tmp[i].(float64); ok {
-				uids[i] = int64(d)
-			}
-		}
-		data.uids = uids
-		message.body = data
-		return true
-	default:
-		return false
-	}
 }
 
 type RTMessage struct {

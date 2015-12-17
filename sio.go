@@ -20,8 +20,6 @@
 package main
 
 import (
-	"encoding/json"
-	"github.com/bitly/go-simplejson"
 	log "github.com/golang/glog"
 	"github.com/googollee/go-engine.io"
 	"io/ioutil"
@@ -90,33 +88,6 @@ func SendEngineIOBinaryMessage(conn engineio.Conn, msg *Message) {
 	w.Close()
 }
 
-func SendEngineIOMessage(conn engineio.Conn, msg *Message) {
-	w, err := conn.NextWriter(engineio.MessageText)
-	if err != nil {
-		log.Info("get next writer fail")
-		return
-	}
-
-	d, err := ToJson(msg)
-	if err != nil {
-		log.Info("json encode error")
-		return
-	}
-
-	n, err := w.Write(d)
-	if err != nil || n != len(d) {
-		log.Info("engine io write error")
-		return
-	}
-
-	w.Close()
-}
-
-func ToJson(msg *Message) ([]byte, error) {
-	data := msg.ToMap()
-	return json.Marshal(data)
-}
-
 func ReadEngineIOMessage(conn engineio.Conn) *Message {
 	t, r, err := conn.NextReader()
 	if err != nil {
@@ -128,7 +99,7 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 	}
 	r.Close()
 	if t == engineio.MessageText {
-		return ReadMessage(b)
+		return nil
 	} else {
 		return ReadBinaryMesage(b)
 	}
@@ -139,31 +110,3 @@ func ReadBinaryMesage(b []byte) *Message {
 	return ReceiveMessage(reader)
 }
 
-func ReadMessage(b []byte) *Message {
-	input, err := simplejson.NewJson(b)
-
-	if err != nil {
-		log.Info("json decode fail")
-		return nil
-	}
-
-	cmd, err := input.Get("cmd").Int()
-	if err != nil {
-		log.Info("json decode cmd fail")
-		return nil
-	}
-	seq, err := input.Get("seq").Int()
-	if err != nil {
-		log.Info("json decode seq fail")
-		return nil
-	}
-
-	msg := new(Message)
-	msg.cmd = cmd
-	msg.seq = seq
-
-	if msg.FromJson(input) {
-		return msg
-	}
-	return nil
-}
