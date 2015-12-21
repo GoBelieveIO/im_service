@@ -9,7 +9,7 @@ import json
 import uuid
 import base64
 import select
-
+import sys
 
 HOST = "imnode.gobelieve.io"
 PORT = 23000
@@ -32,6 +32,8 @@ MSG_PONG = 14
 MSG_AUTH_TOKEN = 15
 MSG_LOGIN_POINT = 16
 MSG_RT = 17
+MSG_SYSTEM = 21
+
 
 #platform
 PLATFORM_IOS = 1
@@ -45,7 +47,7 @@ class AuthenticationToken:
     def __init__(self):
         self.token = ""
         self.platform_id = PLATFORM_SERVER
-        self.device_id = str(uuid.uuid1())
+        self.device_id = ""
 
 class IMMessage:
     def __init__(self):
@@ -137,7 +139,7 @@ class Client(object):
         self.seq = 0
         self.sock = None
 
-    def connect_server(self, token, host=None):
+    def connect_server(self, device_id, token, host=None):
         if host is not None:
             address = (host, PORT)
         else:
@@ -146,6 +148,7 @@ class Client(object):
         sock.connect(address)
         auth = AuthenticationToken()
         auth.token = token
+        auth.device_id = device_id
         self.seq = self.seq + 1
         send_message(MSG_AUTH_TOKEN, self.seq, auth, sock)
         cmd, _, msg = recv_message(sock)
@@ -158,6 +161,10 @@ class Client(object):
     def close(self):
         self.sock.close()
 
+    def ack_message(self, s):
+        self.seq += 1
+        send_message(MSG_ACK, self.seq, s, self.sock)
+
     def recv_message(self):
         while True:
             rlist, _, xlist = select.select([self.sock], [], [self.sock], 60)
@@ -168,18 +175,55 @@ class Client(object):
                 send_message(MSG_PING, self.seq, None, self.sock)
                 continue
             if xlist:
-                return None
+                return 0, 0, None
             if rlist:
                 cmd, s, m = recv_message(self.sock)
+                return cmd, s, m
+
+
+
+DEVICE_ID = "ec452582-a7a9-11e5-87d3-34363bd464b2"
+if __name__ == "__main__":
+    #调用app自身的服务器获取连接im服务必须的access token
+    url = "http://demo.gobelieve.io/auth/token";
+    headers = {'Content-Type': 'application/json; charset=UTF-8'}
+    uid = 1
+    name = "测试用户%d"%uid
+    obj = {"uid":uid, "user_name":name}
+    resp = requests.post(url, data=json.dumps(obj), headers=headers)
+    if resp.status_code != 200:
+        sys.exit(1)
+    obj = json.loads(resp.text)
+    token = obj["token"]
+    print "token:", token
+
+    while True:
+        try:
+            client = Client()
+            r = client.connect_server(DEVICE_ID, token)
+            if not r:
+                continue
+            while True:
+                print "recv message..."
+                cmd, s, m = client.recv_message()
+                #socket disconnect
                 if cmd == 0 and s == 0 and m is None:
-                    return None
+                    print "socket disconnect"
+                    break
+
+                print "cmd:", cmd
                 if cmd == MSG_IM:
-                    self.seq += 1
-                    send_message(MSG_ACK, self.seq, s, self.sock)
-                    return m
-                elif cmd == MSG_PEER_ACK:
-                    print "peer ack"
-                    continue
+                    #handle im
+                    print "im:", m.sender, m.receiver, m.timestamp, m.content
+                    client.ack_message(s)
+                elif cmd == MSG_GROUP_IM:
+                    #handle group im
+                    print "group im:", m.sender, m.receiver, m.timestamp, m.content
+                    client.ack_message(s)
+                elif cmd == MSG_SYSTEM:
+                    #handle system
+                    print "system:", m
+                    client.ack_message(s)
                 elif cmd == MSG_PONG:
                     print "pong..."
                     continue
@@ -187,3 +231,7 @@ class Client(object):
                     print "unknow message:", cmd
                     continue
 
+        except Exception, e:
+            print "exception:", e
+            time.sleep(1)
+            continue
