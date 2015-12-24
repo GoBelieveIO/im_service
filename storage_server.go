@@ -379,7 +379,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 		
 		im := sae.msg.body.(*IMMessage)
 		for uid, _ := range members {
-			if !IsGroupUserOnline(appid, gid, uid) {
+			if im.sender != uid && !IsGroupUserOnline(appid, gid, uid) {
 				off_members = append(off_members, uid)
 			}
 		}
@@ -436,10 +436,14 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
 
-	if !IsUserOnline(appid, uid) {
-		if sae.msg.cmd == MSG_IM {
+	if sae.msg.cmd == MSG_IM {
+		im := sae.msg.body.(*IMMessage)
+		if im.receiver == uid && !IsUserOnline(appid, uid) {
 			client.PublishPeerMessage(appid, sae.msg.body.(*IMMessage))
-		} else if sae.msg.cmd == MSG_GROUP_IM {
+		}
+	} else if sae.msg.cmd == MSG_GROUP_IM {
+		im := sae.msg.body.(*IMMessage)
+		if im.sender != uid && !IsUserOnline(appid, uid) {
 			client.PublishGroupMessage(appid, []int64{uid}, sae.msg.body.(*IMMessage))
 		}
 	}
