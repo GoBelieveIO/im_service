@@ -341,14 +341,14 @@ func (auth *AuthenticationToken) FromData(buff []byte) bool {
 	buffer := bytes.NewBuffer(buff[1:])
 
 	binary.Read(buffer, binary.BigEndian, &l)
-	if int(l) > buffer.Len() {
+	if int(l) > buffer.Len() || int(l) < 0 {
 		return false
 	}
 	token := make([]byte, l)
 	buffer.Read(token)
 
 	binary.Read(buffer, binary.BigEndian, &l)
-	if int(l) > buffer.Len() {
+	if int(l) > buffer.Len() || int(l) < 0 {
 		return false
 	}
 	device_id := make([]byte, l)
