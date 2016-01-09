@@ -24,6 +24,9 @@ import "runtime"
 import "flag"
 import "fmt"
 import "time"
+import "bytes"
+import "encoding/binary"
+import "encoding/json"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 
@@ -229,10 +232,80 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 	route.RemoveUserID(id.uid)
 }
 
+
+const VOIP_COMMAND_DIAL = 1
+const VOIP_COMMAND_DIAL_VIDEO = 9
+
+
+func (client *Client) GetDialCount(ctl *VOIPControl) int {
+	if len(ctl.content) < 4 {
+		return 0
+	}
+
+	var ctl_cmd int32
+	buffer := bytes.NewBuffer(ctl.content)
+	binary.Read(buffer, binary.BigEndian, &ctl_cmd)
+	if ctl_cmd != VOIP_COMMAND_DIAL && ctl_cmd != VOIP_COMMAND_DIAL_VIDEO {
+		return 0
+	}
+
+	if len(ctl.content) != 8 {
+		return 0
+	}
+	var dial_count int32
+	binary.Read(buffer, binary.BigEndian, &dial_count)
+
+	return int(dial_count)
+}
+
+
+func (client *Client) IsROMApp(appid int64) bool {
+	return false
+}
+
+func (client *Client) PublishMessage(appid int64, ctl *VOIPControl) {
+	//首次拨号时发送apns通知
+	count := client.GetDialCount(ctl)
+	if count != 1 {
+		return
+	}
+
+	log.Infof("publish invite notification sender:%d receiver:%d", ctl.sender, ctl.receiver)
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["sender"] = ctl.sender
+	v["receiver"] = ctl.receiver
+	v["appid"] = appid
+	b, _ := json.Marshal(v)
+
+	var queue_name string
+	if client.IsROMApp(appid) {
+		queue_name = fmt.Sprintf("voip_push_queue_%d", appid)
+	} else {
+		queue_name = "voip_push_queue"
+	}
+
+	_, err := conn.Do("RPUSH", queue_name, b)
+	if err != nil {
+		log.Info("error:", err)
+	}
+}
+
+
 func (client *Client) HandlePublish(amsg *AppMessage) {
 	log.Infof("publish message appid:%d uid:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
 	receiver := &AppUserID{appid:amsg.appid, uid:amsg.receiver}
 	s := FindClientSet(receiver)
+
+	if len(s) == 0 {
+		//用户不在线,推送消息到终端
+		if amsg.msg.cmd == MSG_VOIP_CONTROL {
+			ctrl := amsg.msg.body.(*VOIPControl)
+			client.PublishMessage(amsg.appid, ctrl)
+		}
+	}
 
 	msg := &Message{cmd:MSG_PUBLISH, body:amsg}
 	for c := range(s) {
@@ -339,6 +412,27 @@ func ListenClient() {
 	Listen(handle_client, config.listen)
 }
 
+func NewRedisPool(server, password string) *redis.Pool {
+	return &redis.Pool{
+		MaxIdle:     100,
+		MaxActive:   500,
+		IdleTimeout: 480 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", server)
+			if err != nil {
+				return nil, err
+			}
+			if len(password) > 0 {
+				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+			return c, err
+		},
+	}
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -348,7 +442,9 @@ func main() {
 	}
 
 	config = read_route_cfg(flag.Args()[0])
-	log.Infof("listen:%s\n", config.listen)
+	log.Infof("listen:%s redis:%s\n", config.listen, config.redis_address)
+
+	redis_pool = NewRedisPool(config.redis_address, "")
 
 	ListenClient()
 }

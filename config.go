@@ -46,6 +46,7 @@ type StorageConfig struct {
 
 type RouteConfig struct {
 	listen string
+	redis_address       string
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -133,5 +134,6 @@ func read_route_cfg(cfg_path string) *RouteConfig {
 	}
 
 	config.listen = get_string(app_cfg, "listen")
+	config.redis_address = get_string(app_cfg, "redis_address")
 	return config
 }

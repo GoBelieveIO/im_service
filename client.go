@@ -19,6 +19,7 @@
 
 package main
 
+import "net"
 import "time"
 import "sync/atomic"
 import log "github.com/golang/glog"
@@ -27,6 +28,8 @@ type Client struct {
 	Connection//必须放在结构体首部
 	*IMClient
 	*RoomClient
+	*VOIPClient
+	public_ip int32
 }
 
 func NewClient(conn interface{}) *Client {
@@ -34,6 +37,15 @@ func NewClient(conn interface{}) *Client {
 
 	//初始化Connection
 	client.conn = conn // conn is net.Conn or engineio.Conn
+
+	if net_conn, ok := conn.(net.Conn); ok {
+		addr := net_conn.LocalAddr()
+		if taddr, ok := addr.(*net.TCPAddr); ok {
+			ip4 := taddr.IP.To4()
+			client.public_ip = int32(ip4[0]) << 24 | int32(ip4[1]) << 16 | int32(ip4[2]) << 8 | int32(ip4[3])
+		}
+	}
+
 	client.wt = make(chan *Message, 10)
 	client.ewt = make(chan *EMessage, 10)
 	client.owt = make(chan *EMessage, 10)
@@ -44,6 +56,7 @@ func NewClient(conn interface{}) *Client {
 
 	client.IMClient = &IMClient{&client.Connection}
 	client.RoomClient = &RoomClient{Connection:&client.Connection}
+	client.VOIPClient = &VOIPClient{Connection:&client.Connection}
 	return client
 }
 
@@ -84,6 +97,7 @@ func (client *Client) HandleMessage(msg *Message) {
 
 	client.IMClient.HandleMessage(msg)
 	client.RoomClient.HandleMessage(msg)
+	client.VOIPClient.HandleMessage(msg)
 }
 
 
@@ -112,13 +126,13 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.appid, client.uid, err = client.AuthToken(login.token)
 	if err != nil {
 		log.Info("auth token err:", err)
-		msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{1}}
+		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
 		client.wt <- msg
 		return
 	}
 	if  client.uid == 0 {
 		log.Info("auth token uid==0")
-		msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{1}}
+		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
 		client.wt <- msg
 		return
 	}
@@ -127,7 +141,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		client.device_ID, err = GetDeviceID(login.device_id, int(login.platform_id))
 		if err != nil {
 			log.Info("auth token uid==0")
-			msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{1}}
+			msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
 			client.wt <- msg
 			return
 		}
@@ -140,7 +154,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	log.Infof("auth token:%s appid:%d uid:%d device id:%s:%d", 
 		login.token, client.appid, client.uid, client.device_id, client.device_ID)
 
-	msg := &Message{cmd: MSG_AUTH_STATUS, body: &AuthenticationStatus{0}}
+	msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{0, client.public_ip}}
 	client.wt <- msg
 
 	client.SendLoginPoint()

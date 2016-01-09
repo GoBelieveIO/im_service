@@ -58,8 +58,9 @@ const MSG_LEAVE_ROOM = 19
 const MSG_ROOM_IM = 20
 //persistent
 const MSG_SYSTEM = 21
-
 const MSG_UNREAD_COUNT = 22
+
+const MSG_VOIP_CONTROL = 64
 
 //平台号
 const PLATFORM_IOS = 1
@@ -79,8 +80,6 @@ var vmessage_creators map[int]VersionMessageCreator = make(map[int]VersionMessag
 
 func init() {
 	message_creators[MSG_AUTH] = func()IMessage {return new(Authentication)}
-	message_creators[MSG_AUTH_STATUS] = func()IMessage {return new(AuthenticationStatus)}
-
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
 	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
 
@@ -89,6 +88,7 @@ func init() {
 	message_creators[MSG_SUBSCRIBE_ONLINE_STATE] = func()IMessage{return new(MessageSubscribeState)}
 	message_creators[MSG_ONLINE_STATE] = func()IMessage{return new(MessageOnlineState)}
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
+
 	message_creators[MSG_LOGIN_POINT] = func()IMessage{return new(LoginPoint)}
 	message_creators[MSG_RT] = func()IMessage{return new(RTMessage)}
 	message_creators[MSG_ENTER_ROOM] = func()IMessage{return new(Room)}
@@ -96,9 +96,12 @@ func init() {
 	message_creators[MSG_ROOM_IM] = func()IMessage{return &RoomMessage{new(RTMessage)}}
 	message_creators[MSG_SYSTEM] = func()IMessage{return new(SystemMessage)}
 	message_creators[MSG_UNREAD_COUNT] = func()IMessage{return new(MessageUnreadCount)}
+	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
 	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
+
+	vmessage_creators[MSG_AUTH_STATUS] = func()IVersionMessage{return new(AuthenticationStatus)}
 
 	message_descriptions[MSG_AUTH] = "MSG_AUTH"
 	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
@@ -120,6 +123,7 @@ func init() {
 	message_descriptions[MSG_ROOM_IM] = "MSG_ROOM_IM"
 	message_descriptions[MSG_SYSTEM] = "MSG_SYSTEM"
 	message_descriptions[MSG_UNREAD_COUNT] = "MSG_UNREAD_COUNT"
+	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 }
 
 type Command int
@@ -357,21 +361,31 @@ func (auth *AuthenticationToken) FromData(buff []byte) bool {
 
 type AuthenticationStatus struct {
 	status int32
+	ip int32 //兼容版本0
 }
 
-func (auth *AuthenticationStatus) ToData() []byte {
+func (auth *AuthenticationStatus) ToData(version int) []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, auth.status)
+	if version == 0 {
+		binary.Write(buffer, binary.BigEndian, auth.ip)
+	}
 	buf := buffer.Bytes()
 	return buf
 }
 
-func (auth *AuthenticationStatus) FromData(buff []byte) bool {
+func (auth *AuthenticationStatus) FromData(version int, buff []byte) bool {
 	if len(buff) < 4 {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &auth.status)
+	if version == 0 {
+		if len(buff) < 8 {
+			return false
+		}
+		binary.Read(buffer, binary.BigEndian, &auth.ip)
+	}
 	return true
 }
 
@@ -583,6 +597,34 @@ func (sub *MessageSubscribeState) FromData(buff []byte) bool {
 	for i := 0; i < int(count); i++ {
 		binary.Read(buffer, binary.BigEndian, &sub.uids[i])
 	}
+	return true
+}
+
+
+type VOIPControl struct {
+	sender   int64
+	receiver int64
+	content  []byte
+}
+
+func (ctl *VOIPControl) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, ctl.sender)
+	binary.Write(buffer, binary.BigEndian, ctl.receiver)
+	buffer.Write([]byte(ctl.content))
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (ctl *VOIPControl) FromData(buff []byte) bool {
+	if len(buff) <= 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff[:16])
+	binary.Read(buffer, binary.BigEndian, &ctl.sender)
+	binary.Read(buffer, binary.BigEndian, &ctl.receiver)
+	ctl.content = buff[16:]
 	return true
 }
 
