@@ -58,7 +58,11 @@ const MSG_LEAVE_ROOM = 19
 const MSG_ROOM_IM = 20
 //persistent
 const MSG_SYSTEM = 21
+
 const MSG_UNREAD_COUNT = 22
+
+//persistent
+const MSG_CUSTOMER_SERVICE = 23
 
 const MSG_VOIP_CONTROL = 64
 
@@ -96,6 +100,7 @@ func init() {
 	message_creators[MSG_ROOM_IM] = func()IMessage{return &RoomMessage{new(RTMessage)}}
 	message_creators[MSG_SYSTEM] = func()IMessage{return new(SystemMessage)}
 	message_creators[MSG_UNREAD_COUNT] = func()IMessage{return new(MessageUnreadCount)}
+	message_creators[MSG_CUSTOMER_SERVICE] = func()IMessage{return new(CustomerServiceMessage)}
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -123,6 +128,7 @@ func init() {
 	message_descriptions[MSG_ROOM_IM] = "MSG_ROOM_IM"
 	message_descriptions[MSG_SYSTEM] = "MSG_SYSTEM"
 	message_descriptions[MSG_UNREAD_COUNT] = "MSG_UNREAD_COUNT"
+	message_descriptions[MSG_CUSTOMER_SERVICE] = "MSG_CUSTOMER_SERVICE"
 	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 }
 
@@ -516,6 +522,36 @@ func (sys *SystemMessage) FromData(buff []byte) bool {
 	sys.notification = string(buff)
 	return true
 }
+
+type CustomerServiceMessage struct {
+	sender int64
+	receiver int64 //可能为0
+	timestamp int32
+	content string
+}
+
+func (cs *CustomerServiceMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, cs.sender)
+	binary.Write(buffer, binary.BigEndian, cs.receiver)
+	binary.Write(buffer, binary.BigEndian, cs.timestamp)
+	buffer.Write([]byte(cs.content))
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (cs *CustomerServiceMessage) FromData(buff []byte) bool {
+	if len(buff) < 20 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &cs.sender)
+	binary.Read(buffer, binary.BigEndian, &cs.receiver)
+	binary.Read(buffer, binary.BigEndian, &cs.timestamp)
+	cs.content = string(buff[20:])
+	return true
+}
+
 
 type GroupNotification struct {
 	notification string

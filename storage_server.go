@@ -328,6 +328,29 @@ func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IM
 	}
 }
 
+func (client *Client) PublishCSMessage(appid, receiver int64, cs *CustomerServiceMessage) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["sender"] = cs.sender
+	v["receiver"] = receiver
+	v["content"] = cs.content
+
+	b, _ := json.Marshal(v)
+	var queue_name string
+	if client.IsROMApp(appid) {
+		queue_name = fmt.Sprintf("push_queue_%d", appid)
+	} else {
+		queue_name = "push_queue"
+	}
+	_, err := conn.Do("RPUSH", queue_name, b)
+	if err != nil {
+		log.Info("rpush error:", err)
+	}
+}
+
 func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	if sae.msg == nil {
 		log.Error("sae msg is nil")
@@ -445,6 +468,11 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 		im := sae.msg.body.(*IMMessage)
 		if im.sender != uid && !IsUserOnline(appid, uid) {
 			client.PublishGroupMessage(appid, []int64{uid}, sae.msg.body.(*IMMessage))
+		}
+	} else if sae.msg.cmd == MSG_CUSTOMER_SERVICE {
+		cs := sae.msg.body.(*CustomerServiceMessage)
+		if cs.sender != uid && !IsUserOnline(appid, uid) {
+			client.PublishCSMessage(appid, uid, sae.msg.body.(*CustomerServiceMessage))
 		}
 	}
 }

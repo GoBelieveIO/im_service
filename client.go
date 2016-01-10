@@ -29,6 +29,7 @@ type Client struct {
 	*IMClient
 	*RoomClient
 	*VOIPClient
+	*CSClient
 	public_ip int32
 }
 
@@ -57,6 +58,7 @@ func NewClient(conn interface{}) *Client {
 	client.IMClient = &IMClient{&client.Connection}
 	client.RoomClient = &RoomClient{Connection:&client.Connection}
 	client.VOIPClient = &VOIPClient{Connection:&client.Connection}
+	client.CSClient = &CSClient{Connection:&client.Connection}
 	return client
 }
 
@@ -98,6 +100,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	client.IMClient.HandleMessage(msg)
 	client.RoomClient.HandleMessage(msg)
 	client.VOIPClient.HandleMessage(msg)
+	client.CSClient.HandleMessage(msg)
 }
 
 

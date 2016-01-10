@@ -43,7 +43,7 @@ var redis_pool *redis.Pool
 var storage_pools []*StorageConnPool
 var config *Config
 var server_summary *ServerSummary
-
+var customer_service *CustomerService
 
 func init() {
 	app_route = NewAppRoute()
@@ -314,6 +314,7 @@ func main() {
 	log.Info("storage addresses:", config.storage_addrs)
 	log.Info("route addressed:", config.route_addrs)
 	
+	customer_service = NewCustomerService()
 	redis_pool = NewRedisPool(config.redis_address, "")
 
 	storage_pools = make([]*StorageConnPool, 0)

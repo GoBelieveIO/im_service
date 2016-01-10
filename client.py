@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import struct
 import socket
 import threading
@@ -29,6 +30,8 @@ MSG_ENTER_ROOM = 18
 MSG_LEAVE_ROOM = 19
 MSG_ROOM_IM = 20
 MSG_SYSTEM = 21
+MSG_UNREAD_COUNT = 22
+MSG_CUSTOMER_SERVICE = 23
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -50,6 +53,13 @@ class IMMessage:
         self.msgid = 0
         self.content = ""
 
+class CSMessage:
+    def __init__(self):
+        self.sender = 0
+        self.receiver = 0
+        self.timestamp = 0
+        self.content = ""
+    
 #RoomMessage
 class RTMessage:
     def __init__(self):
@@ -67,6 +77,11 @@ def send_message(cmd, seq, msg, sock):
         length = 24 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
+        sock.sendall(h+b+msg.content)
+    elif cmd == MSG_CUSTOMER_SERVICE:
+        length = 20 + len(msg.content)
+        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!qqi", msg.sender, msg.receiver, msg.timestamp)
         sock.sendall(h+b+msg.content)
     elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         length = 16 + len(msg.content)
@@ -117,6 +132,11 @@ def recv_message(sock):
         im.sender, im.receiver, _, _ = struct.unpack("!qqii", content[:24])
         im.content = content[24:]
         return cmd, seq, im
+    elif cmd == MSG_CUSTOMER_SERVICE:
+        cs = CSMessage()
+        cs.sender, cs.receiver, cs.timestamp = struct.unpack("!qqi", content[:20])
+        cs.content = content[20:]
+        return cmd, seq, cs
     elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         rt = RTMessage()
         rt.sender, rt.receiver, = struct.unpack("!qq", content[:16])
@@ -238,6 +258,18 @@ def recv_message_client(uid, port=23000):
     recv_client(uid, port, handle_message)
     print "recv message success"
 
+def recv_customer_service_message_client(uid, port=23000):
+    def handle_message(cmd, s, msg):
+        if cmd == MSG_CUSTOMER_SERVICE:
+            print "cmd:", cmd, msg.content, msg.sender, msg.receiver, msg.timestamp
+            return True
+        else:
+            print "cmd:", cmd
+            return False
+
+    recv_client(uid, port, handle_message)
+    print "recv customer service message success"
+    
 def recv_rt_message_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_RT:
@@ -322,6 +354,18 @@ def send_room_message_client(uid, room_id):
     task += 1
     print "send success"
 
+def send_customer_service_message_client(uid):
+    global task
+    sock, seq =  connect_server(uid, 23000)
+
+    cs = CSMessage()
+    cs.sender = uid
+    cs.receiver = 0
+    cs.content = "test customer service"
+    seq += 1
+    send_message(MSG_CUSTOMER_SERVICE, seq, cs, sock)
+    task += 1
+    print "send customer service success"
 
 def send_rt_client(uid, receiver):
     global task
@@ -863,9 +907,57 @@ def TestSystemMessage():
 
     print "test system message completed"
     
+
+def add_customer_service_staff(staff_uid):
+    secret = md5.new(APP_SECRET).digest().encode("hex")
+    basic = base64.b64encode(str(APP_ID) + ":" + secret)
+    headers = {'Content-Type': 'application/json; charset=UTF-8',
+               'Authorization': 'Basic ' + basic}
+
+    url = URL + "/applications/%s"%APP_ID
+
+    obj = {"customer_service":True}
+    r = requests.patch(url, data=json.dumps(obj), headers=headers)
+    assert(r.status_code == 200)
+    print "enable customer service success"
+
+    obj = {"customer_service_mode":3}
+    r = requests.patch(url, data=json.dumps(obj), headers=headers)
+    assert(r.status_code == 200)
+    print "set customer service mode:3 success"
+
+    url = URL + "/applications/%s/staffs"%APP_ID
+    obj = {"staff_uid":staff_uid, "staff_name":"客服"}
+    r = requests.post(url, data=json.dumps(obj), headers=headers)
+    assert(r.status_code == 200)
+    print "add customer service staff success"
+
+
+
+def TestCustomerServiceMessage():
+    global task
+    task = 0
+    t3 = threading.Thread(target=recv_customer_service_message_client, args=(100, ))
+    t3.setDaemon(True)
+    t3.start()
+    
+
+    add_customer_service_staff(100)
+    
+    time.sleep(1)
+
+    t2 = threading.Thread(target=send_customer_service_message_client, args=(13635273142, ))
+    t2.setDaemon(True)
+    t2.start()
+    
+    while task < 2:
+        time.sleep(1)
+
+    print "test customer service message completed"
+
 def main():
     cluster = True
-     
+
     TestBindToken()
     time.sleep(1)
      
@@ -925,8 +1017,11 @@ def main():
      
     TestSendHttpGroupMessage()
     time.sleep(1)
-
+     
     TestSystemMessage()
+    time.sleep(1)
+
+    TestCustomerServiceMessage()
     time.sleep(1)
 
     TestLoginPoint()
