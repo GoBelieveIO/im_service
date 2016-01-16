@@ -23,6 +23,8 @@ import "sync"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
+import "github.com/garyburd/redigo/redis"
+import "fmt"
 
 type CustomerService struct {
 	mutex sync.Mutex
@@ -80,4 +82,31 @@ func (cs *CustomerService) GetApplicationConfig(appid int64) (int64, int) {
 	cs.mutex.Unlock()
 
 	return cs_group_id, cs_mode
+}
+
+func (cs *CustomerService) GetOnlineStaffID(appid int64) int64 {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("customer_service_online_%d", appid)
+
+	staff_id, err := redis.Int64(conn.Do("SRANDMEMBER", key))
+	if err != nil {
+		log.Error("srandmember err:", err)
+		return 0
+	}
+	return staff_id
+}
+
+func (cs *CustomerService) IsOnline(appid int64, staff_id int64) bool {
+	conn := redis_pool.Get()
+	defer conn.Close()
+	key := fmt.Sprintf("customer_service_online_%d", appid)	
+	
+	on, err := redis.Bool(conn.Do("SISMEMBER", key, staff_id))
+	if err != nil {
+		log.Error("sismember err:", err)
+		return false
+	}
+	return on
 }

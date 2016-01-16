@@ -926,13 +926,19 @@ def add_customer_service_staff(staff_uid):
     assert(r.status_code == 200)
     print "set customer service mode:3 success"
 
-    url = URL + "/applications/%s/staffs"%APP_ID
+    url = URL + "/staffs"
     obj = {"staff_uid":staff_uid, "staff_name":"客服"}
     r = requests.post(url, data=json.dumps(obj), headers=headers)
     assert(r.status_code == 200)
     print "add customer service staff success"
+    
+    url = URL + "/staffs/%d"%staff_uid
+    obj = {"state":"online"}
+    r = requests.patch(url, data=json.dumps(obj), headers=headers)
+    assert(r.status_code == 200)
+    print "user online"
 
-
+    
 
 def TestCustomerServiceMessage():
     global task
