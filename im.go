@@ -216,6 +216,12 @@ func DispatchAppMessage(amsg *AppMessage) {
 				continue
 			}
 		}
+		if amsg.msg.cmd == MSG_CUSTOMER_SERVICE {
+			m := amsg.msg.body.(*CustomerServiceMessage)
+			if m.sender == amsg.receiver && amsg.device_id == c.device_ID {
+				continue
+			}
+		}
 
 		if amsg.msgid > 0 {
 			c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}

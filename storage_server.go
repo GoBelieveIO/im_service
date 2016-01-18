@@ -501,20 +501,39 @@ func (client *Client) HandleLoadOffline(id *LoadOffline) {
 
 	var count int16 = 0
 	for _, emsg := range(messages) {
-		if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
+		if emsg.msg.cmd == MSG_IM || 
+			emsg.msg.cmd == MSG_GROUP_IM {
 			m := emsg.msg.body.(*IMMessage)
 			//同一台设备自己发出的消息
 			if m.sender == id.uid && emsg.device_id == id.device_id {
 				continue
 			}
 		}
+
+		if emsg.msg.cmd == MSG_CUSTOMER_SERVICE {
+			m := emsg.msg.body.(*CustomerServiceMessage)
+			//同一台设备自己发出的消息
+			if m.sender == id.uid && emsg.device_id == id.device_id {
+				continue
+			}
+		}
+
 		count += 1
 	}
 
 	binary.Write(buffer, binary.BigEndian, count)
 	for _, emsg := range(messages) {
-		if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
+		if emsg.msg.cmd == MSG_IM || 
+			emsg.msg.cmd == MSG_GROUP_IM {
 			m := emsg.msg.body.(*IMMessage)
+			//同一台设备自己发出的消息
+			if m.sender == id.uid && emsg.device_id == id.device_id {
+				continue
+			}
+		}
+
+		if emsg.msg.cmd == MSG_CUSTOMER_SERVICE {
+			m := emsg.msg.body.(*CustomerServiceMessage)
 			//同一台设备自己发出的消息
 			if m.sender == id.uid && emsg.device_id == id.device_id {
 				continue

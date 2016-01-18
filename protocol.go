@@ -523,12 +523,7 @@ func (sys *SystemMessage) FromData(buff []byte) bool {
 	return true
 }
 
-type CustomerServiceMessage struct {
-	sender int64
-	receiver int64 //可能为0
-	timestamp int32
-	content string
-}
+type CustomerServiceMessage IMMessage
 
 func (cs *CustomerServiceMessage) ToData() []byte {
 	buffer := new(bytes.Buffer)
