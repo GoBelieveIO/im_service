@@ -25,6 +25,8 @@ import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 import "fmt"
+import "strconv"
+import "time"
 
 type CustomerService struct {
 	mutex sync.Mutex
@@ -52,6 +54,7 @@ func (cs *CustomerService) LoadApplicationConfig(db *sql.DB, appid int64) (int64
 	var cs_group_id int64
 	var cs_mode int
 	err = row.Scan(&cs_group_id, &cs_mode)
+	log.Infof("application customer service group id:%d mode:%d", cs_group_id, cs_mode)
 	return cs_group_id, cs_mode, err
 }
 
@@ -109,4 +112,75 @@ func (cs *CustomerService) IsOnline(appid int64, staff_id int64) bool {
 		return false
 	}
 	return on
+}
+
+func (cs *CustomerService) HandleUpdate(data string) {
+	appid, err := strconv.ParseInt(data, 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+	log.Infof("application:%d update", appid)
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
+	delete(cs.app_groups, appid)
+	delete(cs.app_modes, appid)
+}
+
+func (cs *CustomerService) Clear() {
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
+	for k := range cs.app_groups {
+		delete(cs.app_groups, k)
+	}
+
+	for k := range cs.app_modes {
+		delete(cs.app_modes, k)
+	}
+}
+
+func (cs *CustomerService) RunOnce() bool {
+	c, err := redis.Dial("tcp", config.redis_address)
+	if err != nil {
+		log.Info("dial redis error:", err)
+		return false
+	}
+	psc := redis.PubSubConn{c}
+	psc.Subscribe("application_update")
+	cs.Clear()
+	for {
+		switch v := psc.Receive().(type) {
+		case redis.Message:
+			if v.Channel == "application_update" {
+				cs.HandleUpdate(string(v.Data))
+			} else {
+				log.Infof("%s: message: %s\n", v.Channel, v.Data)
+			}
+		case redis.Subscription:
+			log.Infof("%s: %s %d\n", v.Channel, v.Kind, v.Count)
+		case error:
+			log.Info("error:", v)
+			return true
+		}
+	}
+}
+
+func (cs *CustomerService) Run() {
+	nsleep := 1
+	for {
+		connected := cs.RunOnce()
+		if !connected {
+			nsleep *= 2
+			if nsleep > 60 {
+				nsleep = 60
+			}
+		} else {
+			nsleep = 1
+		}
+		time.Sleep(time.Duration(nsleep) * time.Second)
+	}
+}
+
+func (cs *CustomerService) Start() {
+	go cs.Run()
 }

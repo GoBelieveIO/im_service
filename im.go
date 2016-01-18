@@ -321,6 +321,8 @@ func main() {
 	log.Info("route addressed:", config.route_addrs)
 	
 	customer_service = NewCustomerService()
+	customer_service.Start()
+
 	redis_pool = NewRedisPool(config.redis_address, "")
 
 	storage_pools = make([]*StorageConnPool, 0)
