@@ -523,10 +523,17 @@ func (sys *SystemMessage) FromData(buff []byte) bool {
 	return true
 }
 
-type CustomerServiceMessage IMMessage
+type CustomerServiceMessage struct {
+	customer_id    int64//普通用户id
+	sender    int64
+	receiver  int64
+	timestamp int32
+	content   string
+}
 
 func (cs *CustomerServiceMessage) ToData() []byte {
 	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, cs.customer_id)
 	binary.Write(buffer, binary.BigEndian, cs.sender)
 	binary.Write(buffer, binary.BigEndian, cs.receiver)
 	binary.Write(buffer, binary.BigEndian, cs.timestamp)
@@ -540,10 +547,21 @@ func (cs *CustomerServiceMessage) FromData(buff []byte) bool {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)
+
+	if len(buff) >= 28 {
+		//兼容旧数据
+		binary.Read(buffer, binary.BigEndian, &cs.customer_id)
+	}
+
 	binary.Read(buffer, binary.BigEndian, &cs.sender)
 	binary.Read(buffer, binary.BigEndian, &cs.receiver)
 	binary.Read(buffer, binary.BigEndian, &cs.timestamp)
-	cs.content = string(buff[20:])
+
+	if len(buff) >= 28 {
+		cs.content = string(buff[28:])
+	} else {
+		cs.content = string(buff[20:])
+	}
 	return true
 }
 

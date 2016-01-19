@@ -41,10 +41,13 @@ func (client *CSClient) HandleMessage(msg *Message) {
 }
 
 func (client *CSClient) HandleCustomerService(cs *CustomerServiceMessage, seq int) {
-	if (cs.sender != client.uid) {
-		log.Warningf("cs message sender:%d client uid:%d\n", cs.sender, client.uid)
+	if cs.sender != client.uid {
+		log.Warningf("customer message sender:%d client uid:%d\n", 
+			cs.sender, client.uid)
 		return
 	}
+
+	is_question := (client.uid == cs.customer_id)
 
 	group_id, mode := customer_service.GetApplicationConfig(client.appid)
 
@@ -55,8 +58,13 @@ func (client *CSClient) HandleCustomerService(cs *CustomerServiceMessage, seq in
 	}
 
 	//来自客服人员的回复消息，接受者的id不能为0
-	if group.IsMember(cs.sender) && cs.receiver == 0 {
+	if !is_question && cs.customer_id == 0 {
 		log.Warning("customer service message receiver is 0")
+		return
+	}
+
+	if !is_question && !group.IsMember(client.uid) {
+		log.Warningf("client:%d is't in staff set", client.uid)
 		return
 	}
 
@@ -67,9 +75,9 @@ func (client *CSClient) HandleCustomerService(cs *CustomerServiceMessage, seq in
 	if (mode == CS_MODE_BROADCAST) {
 		err = client.Broadcast(cs, group)
 	} else if (mode == CS_MODE_ONLINE) {
-		err = client.OnlineSend(cs, group)
+		err = client.OnlineSend(cs, is_question)
 	} else if (mode == CS_MODE_FIX) {
-		err = client.FixSend(cs, group)
+		err = client.FixSend(cs, group, is_question)
 	} else {
 		log.Warning("do not support customer service mode:", mode)
 		return
@@ -82,9 +90,9 @@ func (client *CSClient) HandleCustomerService(cs *CustomerServiceMessage, seq in
 	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 }
 
-func (client *CSClient) OnlineSend(cs *CustomerServiceMessage, group *Group) error {
+func (client *CSClient) OnlineSend(cs *CustomerServiceMessage, is_question bool) error {
 	m := &Message{cmd:MSG_CUSTOMER_SERVICE, body:cs}
-	if group.IsMember(cs.sender) {
+	if !is_question {
 		//客服人员发送的消息
 		SaveMessage(client.appid, cs.sender, client.device_ID, m)
 		_, err := SaveMessage(client.appid, cs.receiver, client.device_ID, m)
@@ -107,19 +115,19 @@ func (client *CSClient) OnlineSend(cs *CustomerServiceMessage, group *Group) err
 				return errors.New("can't get a online staff")
 			}
 			client.staff_id = staff_id
+			log.Infof("new customer receiver staff id:%d", client.staff_id)
 		}
-
-		log.Infof("customer receiver:%d staff id:%d", cs.receiver, client.staff_id)
+		cs.receiver = client.staff_id
 		SaveMessage(client.appid, cs.sender, client.device_ID, m)
-		_, err := SaveMessage(client.appid, client.staff_id, client.device_ID, m)
+		_, err := SaveMessage(client.appid, cs.receiver, client.device_ID, m)
 		return err
 	}
 }
 
-func (client *CSClient) FixSend(cs *CustomerServiceMessage, group *Group) error {
+func (client *CSClient) FixSend(cs *CustomerServiceMessage, group *Group, is_question bool) error {
 	m := &Message{cmd:MSG_CUSTOMER_SERVICE, body:cs}
-	if group.IsMember(cs.sender) {
-		//客服人员发送的消息
+	if !is_question {
+		//客服人员发送的回复消息
 		SaveMessage(client.appid, cs.sender, client.device_ID, m)
 		_, err := SaveMessage(client.appid, cs.receiver, client.device_ID, m)
 		return err
@@ -145,10 +153,12 @@ func (client *CSClient) FixSend(cs *CustomerServiceMessage, group *Group) error 
 			
 			i = int(rand.Int31n(int32(len(members))))
 			client.staff_id = m[i]
+			log.Infof("customer receiver staff id:%d", client.staff_id)
 		}
-		log.Infof("customer receiver:%d staff id:%d", cs.receiver, client.staff_id)
+		
+		cs.receiver = client.staff_id
 		SaveMessage(client.appid, cs.sender, client.device_ID, m)
-		_, err := SaveMessage(client.appid, client.staff_id, client.device_ID, m)
+		_, err := SaveMessage(client.appid, cs.receiver, client.device_ID, m)
 		return err
 	}
 }
@@ -163,13 +173,7 @@ func (client *CSClient) Broadcast(cs *CustomerServiceMessage, group *Group) erro
 			return err
 		}
 	}
-
-	var err error = nil
-	if group.IsMember(cs.sender) {
-		_, err = SaveMessage(client.appid, cs.receiver, client.device_ID, m)
-	} else {
-		_, err = SaveMessage(client.appid, cs.sender, client.device_ID, m)
-	}
+	_, err := SaveMessage(client.appid, cs.customer_id, client.device_ID, m)
 
 	if err != nil {
 		log.Error("save message err:", err)
