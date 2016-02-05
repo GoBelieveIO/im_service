@@ -249,7 +249,7 @@ func (client *Client) GetDialCount(ctl *VOIPControl) int {
 		return 0
 	}
 
-	if len(ctl.content) != 8 {
+	if len(ctl.content) < 8 {
 		return 0
 	}
 	var dial_count int32
