@@ -22,7 +22,7 @@ package main
 import "strconv"
 import "log"
 import "strings"
-import "github.com/jimlawless/cfg"
+import "github.com/richmonkey/cfg"
 
 type Config struct {
 	port                int
