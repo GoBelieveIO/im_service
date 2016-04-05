@@ -13,6 +13,6 @@
 2. make
 3. 安装mysql数据库，redis，并导入db.sql
 4. 修改配置文件
-5. ./im im.cfg;./ims ims.cfg; ./im_api api.cfg; ./imr imr.cfg
+5. ./im im.cfg;./ims ims.cfg; ./imr imr.cfg
 
 注：工程中未包含平台的数据库结构文件
