@@ -91,7 +91,7 @@ func read_cfg(cfg_path string) *Config {
 	config.http_listen_address = get_string(app_cfg, "http_listen_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
-	config.mysqldb_appdatasource = get_string(app_cfg, "mysqldb_appsource")
+	config.mysqldb_appdatasource = get_opt_string(app_cfg, "mysqldb_appsource")
 	config.socket_io_address = get_string(app_cfg, "socket_io_address")
 
 	str := get_string(app_cfg, "storage_pool")
