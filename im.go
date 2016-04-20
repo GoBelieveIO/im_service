@@ -216,9 +216,18 @@ func DispatchAppMessage(amsg *AppMessage) {
 				continue
 			}
 		}
-		if amsg.msg.cmd == MSG_CUSTOMER_SERVICE {
-			m := amsg.msg.body.(*CustomerServiceMessage)
-			if m.sender == amsg.receiver && amsg.device_id == c.device_ID {
+
+		if amsg.msg.cmd == MSG_CUSTOMER {
+			m := amsg.msg.body.(*CustomerMessage)
+
+			if m.customer_appid == c.appid && m.customer_id == amsg.receiver && amsg.device_id == c.device_ID {
+				continue
+			}
+		}
+
+		if amsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
+			m := amsg.msg.body.(*CustomerMessage)
+			if m.customer_appid != c.appid && m.seller_id == amsg.receiver && amsg.device_id == c.device_ID {
 				continue
 			}
 		}
@@ -319,6 +328,7 @@ func main() {
 
 	log.Info("storage addresses:", config.storage_addrs)
 	log.Info("route addressed:", config.route_addrs)
+	log.Info("kefu appid:", config.kefu_appid)
 	
 	customer_service = NewCustomerService()
 	customer_service.Start()

@@ -28,70 +28,78 @@ import "fmt"
 import "strconv"
 import "time"
 
+type Store struct {
+	id       int64
+	group_id int64
+	mode     int
+}
+
 type CustomerService struct {
 	mutex sync.Mutex
-	app_groups map[int64]int64
-	app_modes map[int64]int
+	stores map[int64]*Store
 }
 
 func NewCustomerService() *CustomerService {
 	cs := new(CustomerService)
-	cs.app_groups = make(map[int64]int64)
-	cs.app_modes = make(map[int64]int)
+	cs.stores = make(map[int64]*Store)
 	return cs
 }
 
-func (cs *CustomerService) LoadApplicationConfig(db *sql.DB, appid int64) (int64, int, error) {
-	stmtIns, err := db.Prepare("SELECT cs_group_id, cs_mode FROM app WHERE id=?")
+func (cs *CustomerService) LoadStore(db *sql.DB, store_id int64) (*Store, error) {
+	stmtIns, err := db.Prepare("SELECT group_id, mode FROM store WHERE id=?")
 	if err != nil {
 		log.Info("error:", err)
-		return 0, 0, err
+		return nil, err
 	}
 
 	defer stmtIns.Close()
-	row := stmtIns.QueryRow(appid)
+	row := stmtIns.QueryRow(store_id)
 
-	var cs_group_id int64
-	var cs_mode int
-	err = row.Scan(&cs_group_id, &cs_mode)
-	log.Infof("application customer service group id:%d mode:%d", cs_group_id, cs_mode)
-	return cs_group_id, cs_mode, err
-}
-
-func (cs *CustomerService) GetApplicationConfig(appid int64) (int64, int) {
-	cs.mutex.Lock()
-	if group_id, ok := cs.app_groups[appid]; ok {
-		mode := cs.app_modes[appid]
-		cs.mutex.Unlock()
-		return group_id, mode
-	}
-	cs.mutex.Unlock()
-	db, err := sql.Open("mysql", config.mysqldb_appdatasource)
+	var group_id int64
+	var mode int
+	err = row.Scan(&group_id, &mode)
 	if err != nil {
 		log.Info("error:", err)
-		return 0, 0
+		return nil, err
+	}
+
+	s := &Store{}
+	s.id = store_id
+	s.group_id = group_id
+	s.mode = mode
+	return s, nil
+}
+
+func (cs *CustomerService) GetStore(store_id int64) (*Store, error) {
+	cs.mutex.Lock()
+	if s, ok := cs.stores[store_id]; ok {
+		cs.mutex.Unlock()
+		return s, nil
+	}
+	cs.mutex.Unlock()
+
+	db, err := sql.Open("mysql", config.mysqldb_datasource)
+	if err != nil {
+		log.Info("error:", err)
+		return nil, err
 	}
 	defer db.Close()
 
-	cs_group_id, cs_mode, err := cs.LoadApplicationConfig(db, appid)
+	s, err := cs.LoadStore(db, store_id)
 	if err != nil {
-		log.Error("db error:", err)
-		return 0, 0
+		return nil, err
 	}
-
 	cs.mutex.Lock()
-	cs.app_groups[appid] = cs_group_id
-	cs.app_modes[appid] = cs_mode
+	cs.stores[store_id] = s
 	cs.mutex.Unlock()
-
-	return cs_group_id, cs_mode
+	return s, nil
 }
 
-func (cs *CustomerService) GetOnlineStaffID(appid int64) int64 {
+func (cs *CustomerService) GetOnlineSellerID(store_id int64) int64 {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
-	key := fmt.Sprintf("customer_service_online_%d", appid)
+	key := fmt.Sprintf("customer_service_online_%d", store_id)
 
 	staff_id, err := redis.Int64(conn.Do("SRANDMEMBER", key))
 	if err != nil {
@@ -101,12 +109,12 @@ func (cs *CustomerService) GetOnlineStaffID(appid int64) int64 {
 	return staff_id
 }
 
-func (cs *CustomerService) IsOnline(appid int64, staff_id int64) bool {
+func (cs *CustomerService) IsOnline(store_id int64, seller_id int64) bool {
 	conn := redis_pool.Get()
 	defer conn.Close()
-	key := fmt.Sprintf("customer_service_online_%d", appid)	
+	key := fmt.Sprintf("customer_service_online_%d", store_id)	
 	
-	on, err := redis.Bool(conn.Do("SISMEMBER", key, staff_id))
+	on, err := redis.Bool(conn.Do("SISMEMBER", key, seller_id))
 	if err != nil {
 		log.Error("sismember err:", err)
 		return false
@@ -115,27 +123,22 @@ func (cs *CustomerService) IsOnline(appid int64, staff_id int64) bool {
 }
 
 func (cs *CustomerService) HandleUpdate(data string) {
-	appid, err := strconv.ParseInt(data, 10, 64)
+	store_id, err := strconv.ParseInt(data, 10, 64)
 	if err != nil {
 		log.Info("error:", err)
 		return
 	}
-	log.Infof("application:%d update", appid)
+	log.Infof("store:%d update", store_id)
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	delete(cs.app_groups, appid)
-	delete(cs.app_modes, appid)
+	delete(cs.stores, store_id)
 }
 
 func (cs *CustomerService) Clear() {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	for k := range cs.app_groups {
-		delete(cs.app_groups, k)
-	}
-
-	for k := range cs.app_modes {
-		delete(cs.app_modes, k)
+	for k := range cs.stores {
+		delete(cs.stores, k)
 	}
 }
 
@@ -146,12 +149,12 @@ func (cs *CustomerService) RunOnce() bool {
 		return false
 	}
 	psc := redis.PubSubConn{c}
-	psc.Subscribe("application_update")
+	psc.Subscribe("store_update")
 	cs.Clear()
 	for {
 		switch v := psc.Receive().(type) {
 		case redis.Message:
-			if v.Channel == "application_update" {
+			if v.Channel == "store_update" {
 				cs.HandleUpdate(string(v.Data))
 			} else {
 				log.Infof("%s: message: %s\n", v.Channel, v.Data)

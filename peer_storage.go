@@ -98,7 +98,6 @@ func (storage *PeerStorage) SetLastReceivedID(appid int64, uid int64, did int64,
 
 func (storage *PeerStorage) getLastReceivedID(appid int64, uid int64, did int64) (int64, error) {
 	key := fmt.Sprintf("%d_%d_%d_1", appid, uid, did)
-
 	id := AppUserLoginID{appid:appid, uid:uid, device_id:did}
 	if msgid, ok := storage.received[id]; ok {
 		return msgid, nil
@@ -106,7 +105,7 @@ func (storage *PeerStorage) getLastReceivedID(appid int64, uid int64, did int64)
 
 	value, err := storage.db.Get([]byte(key), nil)
 	if err != nil {
-		log.Error("put err:", err)
+		log.Error("get err:", err)
 		return 0, err
 	}
 
@@ -115,6 +114,7 @@ func (storage *PeerStorage) getLastReceivedID(appid int64, uid int64, did int64)
 		log.Error("parseint err:", err)
 		return 0, err
 	}
+
 	return msgid, nil
 }
 
@@ -126,7 +126,7 @@ func (storage *PeerStorage) GetLastReceivedID(appid int64, uid int64, did int64)
 
 
 func (storage *PeerStorage) DequeueOffline(msg_id int64, appid int64, receiver int64, did int64) {
-	log.Infof("dequeue offline:%d %d %d\n", appid, receiver, msg_id)
+	log.Infof("dequeue offline:%d %d %d %d\n", appid, receiver, did, msg_id)
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 

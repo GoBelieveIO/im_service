@@ -58,7 +58,7 @@ func NewClient(conn interface{}) *Client {
 	client.IMClient = &IMClient{&client.Connection}
 	client.RoomClient = &RoomClient{Connection:&client.Connection}
 	client.VOIPClient = &VOIPClient{Connection:&client.Connection}
-	client.CSClient = &CSClient{Connection:&client.Connection}
+	client.CSClient = NewCSClient(&client.Connection)
 	return client
 }
 

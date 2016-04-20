@@ -33,6 +33,10 @@ import "syscall"
 import "encoding/json"
 import "github.com/garyburd/redigo/redis"
 
+const GROUP_OFFLINE_LIMIT = 100
+const GROUP_C_COUNT = 10
+
+
 var storage *Storage
 var config *StorageConfig
 var master *Master
@@ -41,7 +45,6 @@ var clients ClientSet
 var mutex   sync.Mutex
 var redis_pool *redis.Pool
 
-const GROUP_C_COUNT = 10
 var group_c []chan func()
 
 func init() {
@@ -328,23 +331,23 @@ func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IM
 	}
 }
 
-func (client *Client) PublishCSMessage(appid, receiver int64, cs *CustomerServiceMessage) {
+func (client *Client) PublishCustomerMessage(appid, receiver int64, cs *CustomerMessage, cmd int) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
 	v := make(map[string]interface{})
 	v["appid"] = appid
-	v["sender"] = cs.sender
 	v["receiver"] = receiver
+	v["command"] = cmd
+	v["customer_appid"] = cs.customer_appid
+	v["customer"] = cs.customer_id
+	v["seller"] = cs.seller_id
+	v["store"] = cs.store_id
 	v["content"] = cs.content
 
 	b, _ := json.Marshal(v)
 	var queue_name string
-	if client.IsROMApp(appid) {
-		queue_name = fmt.Sprintf("push_queue_%d", appid)
-	} else {
-		queue_name = "push_queue"
-	}
+	queue_name = "customer_push_queue"
 	_, err := conn.Do("RPUSH", queue_name, b)
 	if err != nil {
 		log.Info("rpush error:", err)
@@ -469,10 +472,21 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 		if im.sender != uid && !IsUserOnline(appid, uid) {
 			client.PublishGroupMessage(appid, []int64{uid}, sae.msg.body.(*IMMessage))
 		}
-	} else if sae.msg.cmd == MSG_CUSTOMER_SERVICE {
-		cs := sae.msg.body.(*CustomerServiceMessage)
-		if cs.sender != uid && !IsUserOnline(appid, uid) {
-			client.PublishCSMessage(appid, uid, sae.msg.body.(*CustomerServiceMessage))
+	} else if sae.msg.cmd == MSG_CUSTOMER {
+		cs := sae.msg.body.(*CustomerMessage)
+
+		if appid != cs.customer_appid && !IsUserOnline(appid, uid) {
+			client.PublishCustomerMessage(appid, uid, cs, sae.msg.cmd)
+		}
+	} else if sae.msg.cmd == MSG_CUSTOMER_SUPPORT {
+		cs := sae.msg.body.(*CustomerMessage)
+		if appid == cs.customer_appid && !IsUserOnline(appid, uid) {
+			client.PublishCustomerMessage(appid, uid, cs, sae.msg.cmd)			
+		} 
+		//客服发出的消息群发到其它客服人员
+		if appid != cs.customer_appid && cs.seller_id != uid && 
+			!IsUserOnline(appid, uid) {
+			client.PublishCustomerMessage(appid, uid, cs,sae.msg.cmd)
 		}
 	}
 }
@@ -494,52 +508,53 @@ func (client *Client) WriteEMessage(emsg *EMessage) []byte{
 	return buffer.Bytes()
 }
 
+//过滤掉自己由当前设备发出的消息
+func (client *Client) filterMessages(messages []*EMessage, id *LoadOffline) []*EMessage {
+	c := make([]*EMessage, 0, 10)
+	
+	for _, emsg := range(messages) {
+		if emsg.msg.cmd == MSG_IM || 
+			emsg.msg.cmd == MSG_GROUP_IM {
+			m := emsg.msg.body.(*IMMessage)
+			//同一台设备自己发出的消息
+			if m.sender == id.uid && emsg.device_id == id.device_id {
+				continue
+			}
+		}
+		
+		if emsg.msg.cmd == MSG_CUSTOMER {
+			m := emsg.msg.body.(*CustomerMessage)
+			if id.appid == m.customer_appid && 
+				emsg.device_id == id.device_id && 
+				id.uid == m.customer_id {
+				continue
+			}
+		}
+
+		if emsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
+			m := emsg.msg.body.(*CustomerMessage)
+			if id.appid != m.customer_appid && 
+				emsg.device_id == id.device_id && 
+				id.uid == m.seller_id {
+				continue
+			}
+		}
+
+		c = append(c, emsg)
+	}
+	return c
+}
+
 func (client *Client) HandleLoadOffline(id *LoadOffline) {
 	messages := storage.LoadOfflineMessage(id.appid, id.uid, id.device_id)
 	result := &MessageResult{status:0}
 	buffer := new(bytes.Buffer)
 
-	var count int16 = 0
-	for _, emsg := range(messages) {
-		if emsg.msg.cmd == MSG_IM || 
-			emsg.msg.cmd == MSG_GROUP_IM {
-			m := emsg.msg.body.(*IMMessage)
-			//同一台设备自己发出的消息
-			if m.sender == id.uid && emsg.device_id == id.device_id {
-				continue
-			}
-		}
-
-		if emsg.msg.cmd == MSG_CUSTOMER_SERVICE {
-			m := emsg.msg.body.(*CustomerServiceMessage)
-			//同一台设备自己发出的消息
-			if m.sender == id.uid && emsg.device_id == id.device_id {
-				continue
-			}
-		}
-
-		count += 1
-	}
+	messages = client.filterMessages(messages, id)
+	count := int16(len(messages))
 
 	binary.Write(buffer, binary.BigEndian, count)
 	for _, emsg := range(messages) {
-		if emsg.msg.cmd == MSG_IM || 
-			emsg.msg.cmd == MSG_GROUP_IM {
-			m := emsg.msg.body.(*IMMessage)
-			//同一台设备自己发出的消息
-			if m.sender == id.uid && emsg.device_id == id.device_id {
-				continue
-			}
-		}
-
-		if emsg.msg.cmd == MSG_CUSTOMER_SERVICE {
-			m := emsg.msg.body.(*CustomerServiceMessage)
-			//同一台设备自己发出的消息
-			if m.sender == id.uid && emsg.device_id == id.device_id {
-				continue
-			}
-		}
-
 		ebuf := client.WriteEMessage(emsg)
 		var size int16 = int16(len(ebuf))
 		binary.Write(buffer, binary.BigEndian, size)
@@ -567,8 +582,6 @@ func (client *Client) HandleLoadHistory(lh *LoadHistory) {
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)	
 }
-
-const GROUP_OFFLINE_LIMIT = 100
 
 func (client *Client) HandleLoadGroupOffline(lh *LoadGroupOffline) {
 	messages := storage.LoadGroupOfflineMessage(lh.appid, lh.gid, lh.uid, lh.device_id, GROUP_OFFLINE_LIMIT)

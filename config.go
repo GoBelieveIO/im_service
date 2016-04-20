@@ -29,6 +29,8 @@ type Config struct {
 	mysqldb_datasource  string
 	mysqldb_appdatasource  string
 
+	kefu_appid          int64
+
 	redis_address       string
 	http_listen_address string
 	socket_io_address   string
@@ -56,12 +58,25 @@ func get_int(app_cfg map[string]string, key string) int {
 	if !present {
 		log.Fatalf("key:%s non exist", key)
 	}
-	n, err := strconv.Atoi(concurrency)
+	n, err := strconv.ParseInt(concurrency, 10, 64)
+	if err != nil {
+		log.Fatalf("key:%s is't integer", key)
+	}
+	return int(n)
+}
+
+func get_opt_int(app_cfg map[string]string, key string) int64 {
+	concurrency, present := app_cfg[key]
+	if !present {
+		return 0
+	}
+	n, err := strconv.ParseInt(concurrency, 10, 64)
 	if err != nil {
 		log.Fatalf("key:%s is't integer", key)
 	}
 	return n
 }
+
 
 func get_string(app_cfg map[string]string, key string) string {
 	concurrency, present := app_cfg[key]
@@ -91,8 +106,8 @@ func read_cfg(cfg_path string) *Config {
 	config.http_listen_address = get_string(app_cfg, "http_listen_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
-	config.mysqldb_appdatasource = get_opt_string(app_cfg, "mysqldb_appsource")
 	config.socket_io_address = get_string(app_cfg, "socket_io_address")
+	config.kefu_appid = get_opt_int(app_cfg, "kefu_appid")
 
 	str := get_string(app_cfg, "storage_pool")
     array := strings.Split(str, " ")

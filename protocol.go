@@ -61,8 +61,13 @@ const MSG_SYSTEM = 21
 
 const MSG_UNREAD_COUNT = 22
 
+//persistent, deprecated
+const MSG_CUSTOMER_SERVICE_ = 23
+
 //persistent
-const MSG_CUSTOMER_SERVICE = 23
+const MSG_CUSTOMER = 24 //顾客->客服
+const MSG_CUSTOMER_SUPPORT = 25 //客服->顾客
+
 
 const MSG_VOIP_CONTROL = 64
 
@@ -100,7 +105,11 @@ func init() {
 	message_creators[MSG_ROOM_IM] = func()IMessage{return &RoomMessage{new(RTMessage)}}
 	message_creators[MSG_SYSTEM] = func()IMessage{return new(SystemMessage)}
 	message_creators[MSG_UNREAD_COUNT] = func()IMessage{return new(MessageUnreadCount)}
-	message_creators[MSG_CUSTOMER_SERVICE] = func()IMessage{return new(CustomerServiceMessage)}
+	message_creators[MSG_CUSTOMER_SERVICE_] = func()IMessage{return new(CustomerServiceMessage)}
+
+	message_creators[MSG_CUSTOMER] = func()IMessage{return new(CustomerMessage)}
+	message_creators[MSG_CUSTOMER_SUPPORT] = func()IMessage{return new(CustomerMessage)}
+
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -128,7 +137,9 @@ func init() {
 	message_descriptions[MSG_ROOM_IM] = "MSG_ROOM_IM"
 	message_descriptions[MSG_SYSTEM] = "MSG_SYSTEM"
 	message_descriptions[MSG_UNREAD_COUNT] = "MSG_UNREAD_COUNT"
-	message_descriptions[MSG_CUSTOMER_SERVICE] = "MSG_CUSTOMER_SERVICE"
+	message_descriptions[MSG_CUSTOMER_SERVICE_] = "MSG_CUSTOMER_SERVICE"
+	message_descriptions[MSG_CUSTOMER] = "MSG_CUSTOMER"
+	message_descriptions[MSG_CUSTOMER_SUPPORT] = "MSG_CUSTOMER_SUPPORT"
 	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 }
 
@@ -562,6 +573,43 @@ func (cs *CustomerServiceMessage) FromData(buff []byte) bool {
 	} else {
 		cs.content = string(buff[20:])
 	}
+	return true
+}
+
+type CustomerMessage struct {
+	customer_appid int64//顾客id所在appid
+	customer_id    int64//顾客id
+	store_id	   int64
+	seller_id	   int64
+	timestamp	   int32
+	content		   string
+}
+
+func (cs *CustomerMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, cs.customer_appid)
+	binary.Write(buffer, binary.BigEndian, cs.customer_id)
+	binary.Write(buffer, binary.BigEndian, cs.store_id)
+	binary.Write(buffer, binary.BigEndian, cs.seller_id)
+	binary.Write(buffer, binary.BigEndian, cs.timestamp)
+	buffer.Write([]byte(cs.content))
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (cs *CustomerMessage) FromData(buff []byte) bool {
+	if len(buff) < 36 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &cs.customer_appid)
+	binary.Read(buffer, binary.BigEndian, &cs.customer_id)
+	binary.Read(buffer, binary.BigEndian, &cs.store_id)
+	binary.Read(buffer, binary.BigEndian, &cs.seller_id)
+	binary.Read(buffer, binary.BigEndian, &cs.timestamp)
+
+	cs.content = string(buff[36:])
+
 	return true
 }
 
