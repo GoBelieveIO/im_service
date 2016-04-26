@@ -128,7 +128,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	var err error
 	client.appid, client.uid, err = client.AuthToken(login.token)
 	if err != nil {
-		log.Info("auth token err:", err)
+		log.Infof("auth token:%s err:%s", login.token, err)
 		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
 		client.wt <- msg
 		return
