@@ -245,6 +245,16 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if len(messages) > 0 {
+		//reverse
+		size := len(messages)
+		for i := 0; i < size/2; i++ {
+			t := messages[i]
+			messages[i] = messages[size-i-1]
+			messages[size-i-1] = t
+		}
+	}
+
 	msg_list := make([]map[string]interface{}, 0, len(messages))
 	for _, emsg := range messages {
 		if emsg.msg.cmd != MSG_IM && emsg.msg.cmd != MSG_GROUP_IM {
@@ -267,6 +277,82 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 	b, _ := json.Marshal(obj)
 	w.Write(b)
 	log.Info("load latest message success")
+}
+
+func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
+	log.Info("load message")
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	uid, err := strconv.ParseInt(m.Get("uid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	msgid, err := strconv.ParseInt(m.Get("last_id"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	
+	storage_pool := GetStorageConnPool(uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		WriteHttpError(400, "server internal error", w)
+		return
+	}
+	defer storage_pool.Release(storage)
+
+	messages, err := storage.LoadHistoryMessage(appid, uid, msgid)
+	if err != nil {
+		WriteHttpError(400, "server internal error", w)
+		return
+	}
+
+	if len(messages) > 0 {
+		//reverse
+		size := len(messages)
+		for i := 0; i < size/2; i++ {
+			t := messages[i]
+			messages[i] = messages[size-i-1]
+			messages[size-i-1] = t
+		}
+	}
+
+	msg_list := make([]map[string]interface{}, 0, len(messages))
+	for _, emsg := range messages {
+		if emsg.msg.cmd != MSG_IM && emsg.msg.cmd != MSG_GROUP_IM {
+			continue
+		}
+		im := emsg.msg.body.(*IMMessage)
+		
+		obj := make(map[string]interface{})
+		obj["content"] = im.content
+		obj["timestamp"] = im.timestamp
+		obj["sender"] = im.sender
+		obj["receiver"] = im.receiver
+		obj["is_group"] = bool(emsg.msg.cmd == MSG_GROUP_IM)
+		obj["id"] = emsg.msgid
+		msg_list = append(msg_list, obj)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	obj := make(map[string]interface{})
+	obj["data"] = msg_list
+	b, _ := json.Marshal(obj)
+	w.Write(b)
+	log.Info("load history message success")
 }
 
 func SendSystemMessage(w http.ResponseWriter, req *http.Request) {

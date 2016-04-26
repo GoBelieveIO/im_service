@@ -200,10 +200,22 @@ func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64, device_id 
 }
 
 func (client *StorageConn) LoadLatestMessage(appid int64, uid int64, limit int32) ([]*EMessage, error) {
-	lh := &LoadHistory{}
+	lh := &LoadLatest{}
 	lh.limit = limit
 	lh.app_uid.appid = appid
 	lh.app_uid.uid = uid
+
+	msg := &Message{cmd:MSG_LOAD_LATEST, body:lh}
+	SendMessage(client.conn, msg)
+	return client.ReceiveMessages()
+}
+
+
+func (client *StorageConn) LoadHistoryMessage(appid int64, uid int64, msgid int64) ([]*EMessage, error) {
+	lh := &LoadHistory{}
+	lh.msgid = msgid
+	lh.appid = appid
+	lh.uid = uid
 
 	msg := &Message{cmd:MSG_LOAD_HISTORY, body:lh}
 	SendMessage(client.conn, msg)

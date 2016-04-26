@@ -139,6 +139,48 @@ func (storage *PeerStorage) DequeueOffline(msg_id int64, appid int64, receiver i
 	storage.received[id] = msg_id
 }
 
+//获取所有消息id大于msgid的消息
+func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msgid int64) []*EMessage {
+	last_id, err := storage.GetLastMessageID(appid, receiver)
+	if err != nil {
+		return nil
+	}
+	messages := make([]*EMessage, 0, 10)
+	for {
+		if last_id == 0 {
+			break
+		}
+
+		msg := storage.LoadMessage(last_id)
+		if msg == nil {
+			break
+		}
+		if msg.cmd != MSG_OFFLINE {
+			log.Warning("invalid message cmd:", msg.cmd)
+			break
+		}
+		off := msg.body.(*OfflineMessage)
+		if off.msgid <= msgid {
+			break
+		}
+
+		msg = storage.LoadMessage(off.msgid)
+		if msg == nil {
+			break
+		}
+		if msg.cmd != MSG_GROUP_IM && msg.cmd != MSG_IM {
+			last_id = off.prev_msgid
+			continue
+		}
+
+		emsg := &EMessage{msgid:off.msgid, msg:msg}
+		messages = append(messages, emsg)
+
+		last_id = off.prev_msgid
+	}
+	return messages
+}
+
 
 func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limit int) []*EMessage {
 	last_id, err := storage.GetLastMessageID(appid, receiver)

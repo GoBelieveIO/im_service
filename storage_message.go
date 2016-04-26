@@ -30,11 +30,10 @@ const MSG_DEQUEUE = 201
 const MSG_LOAD_OFFLINE = 202
 const MSG_LOAD_GROUP_OFFLINE = 203
 const MSG_RESULT = 204
-const MSG_LOAD_HISTORY = 205
-
+const MSG_LOAD_LATEST = 205
 const MSG_SAVE_AND_ENQUEUE_GROUP = 206
 const MSG_DEQUEUE_GROUP = 207
-
+const MSG_LOAD_HISTORY = 208
 
 //主从同步消息
 const MSG_SYNC_BEGIN = 210
@@ -54,6 +53,7 @@ func init() {
 	message_creators[MSG_LOAD_OFFLINE] = func()IMessage{return new(LoadOffline)}
 	message_creators[MSG_LOAD_GROUP_OFFLINE] = func()IMessage{return new(LoadGroupOffline)}
 	message_creators[MSG_RESULT] = func()IMessage{return new(MessageResult)}
+	message_creators[MSG_LOAD_LATEST] = func()IMessage{return new(LoadLatest)}
 	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
 	
 	message_creators[MSG_SAVE_AND_ENQUEUE_GROUP] = func()IMessage{return new(SAEMessage)}
@@ -73,6 +73,7 @@ func init() {
 	message_descriptions[MSG_DEQUEUE] = "MSG_DEQUEUE"
 	message_descriptions[MSG_LOAD_OFFLINE] = "MSG_LOAD_OFFLINE"
 	message_descriptions[MSG_RESULT] = "MSG_RESULT"
+	message_descriptions[MSG_LOAD_LATEST] = "MSG_LOAD_LATEST"
 	message_descriptions[MSG_LOAD_HISTORY] = "MSG_LOAD_HISTORY"
 
 	message_descriptions[MSG_SAVE_AND_ENQUEUE_GROUP] = "MSG_SAVE_AND_ENQUEUE_GROUP"
@@ -450,13 +451,13 @@ func (result *MessageResult) FromData(buff []byte) bool {
 	return true
 }
 
-type LoadHistory struct {
+type LoadLatest struct {
 	app_uid AppUserID
 	limit int32
 }
 
 
-func (lh *LoadHistory) ToData() []byte {
+func (lh *LoadLatest) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, lh.app_uid.appid)
 	binary.Write(buffer, binary.BigEndian, lh.app_uid.uid)
@@ -465,7 +466,7 @@ func (lh *LoadHistory) ToData() []byte {
 	return buf
 }
 
-func (lh *LoadHistory) FromData(buff []byte) bool {
+func (lh *LoadLatest) FromData(buff []byte) bool {
 	if len(buff) < 20 {
 		return false
 	}
@@ -475,6 +476,34 @@ func (lh *LoadHistory) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &lh.limit)
 	return true
 }
+
+type LoadHistory struct {
+	appid  int64
+	uid    int64
+	msgid  int64
+}
+
+
+func (lh *LoadHistory) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, lh.appid)
+	binary.Write(buffer, binary.BigEndian, lh.uid)
+	binary.Write(buffer, binary.BigEndian, lh.msgid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (lh *LoadHistory) FromData(buff []byte) bool {
+	if len(buff) < 24 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &lh.appid)
+	binary.Read(buffer, binary.BigEndian, &lh.uid)
+	binary.Read(buffer, binary.BigEndian, &lh.msgid)
+	return true
+}
+
 
 type LoadOffline struct {
 	appid  int64

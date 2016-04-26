@@ -565,8 +565,27 @@ func (client *Client) HandleLoadOffline(id *LoadOffline) {
 	SendMessage(client.conn, msg)
 }
 
-func (client *Client) HandleLoadHistory(lh *LoadHistory) {
+
+func (client *Client) HandleLoadLatest(lh *LoadLatest) {
 	messages := storage.LoadLatestMessages(lh.app_uid.appid, lh.app_uid.uid, int(lh.limit))
+	result := &MessageResult{status:0}
+	buffer := new(bytes.Buffer)
+	var count int16
+	count = int16(len(messages))
+	binary.Write(buffer, binary.BigEndian, count)
+	for _, emsg := range(messages) {
+		ebuf := client.WriteEMessage(emsg)
+		var size int16 = int16(len(ebuf))
+		binary.Write(buffer, binary.BigEndian, size)
+		buffer.Write(ebuf)
+	}
+	result.content = buffer.Bytes()
+	msg := &Message{cmd:MSG_RESULT, body:result}
+	SendMessage(client.conn, msg)	
+}
+
+func (client *Client) HandleLoadHistory(lh *LoadHistory) {
+	messages := storage.LoadHistoryMessages(lh.appid, lh.uid, lh.msgid)
 	result := &MessageResult{status:0}
 	buffer := new(bytes.Buffer)
 	var count int16
@@ -652,8 +671,10 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleSaveAndEnqueue(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE:
 		client.HandleDQMessage(msg.body.(*DQMessage))
+	case MSG_LOAD_LATEST:
+		client.HandleLoadLatest(msg.body.(*LoadLatest))
 	case MSG_LOAD_HISTORY:
-		client.HandleLoadHistory((*LoadHistory)(msg.body.(*LoadHistory)))
+		client.HandleLoadHistory(msg.body.(*LoadHistory))
 	case MSG_SAVE_AND_ENQUEUE_GROUP:
 		client.HandleSaveAndEnqueueGroup(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE_GROUP:
