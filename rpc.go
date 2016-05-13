@@ -257,18 +257,34 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 
 	msg_list := make([]map[string]interface{}, 0, len(messages))
 	for _, emsg := range messages {
-		if emsg.msg.cmd != MSG_IM && emsg.msg.cmd != MSG_GROUP_IM {
-			continue
+		if emsg.msg.cmd == MSG_IM || 
+			emsg.msg.cmd == MSG_GROUP_IM {
+			im := emsg.msg.body.(*IMMessage)
+			
+			obj := make(map[string]interface{})
+			obj["content"] = im.content
+			obj["timestamp"] = im.timestamp
+			obj["sender"] = im.sender
+			obj["receiver"] = im.receiver
+			obj["command"] = emsg.msg.cmd
+			obj["id"] = emsg.msgid
+			msg_list = append(msg_list, obj)
+			
+		} else if emsg.msg.cmd == MSG_CUSTOMER ||
+			emsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
+			im := emsg.msg.body.(*CustomerMessage)
+			
+			obj := make(map[string]interface{})
+			obj["content"] = im.content
+			obj["timestamp"] = im.timestamp
+			obj["customer_appid"] = im.customer_appid
+			obj["customer_id"] = im.customer_id
+			obj["store_id"] = im.store_id
+			obj["seller_id"] = im.seller_id
+			obj["command"] = emsg.msg.cmd
+			obj["id"] = emsg.msgid
+			msg_list = append(msg_list, obj)
 		}
-		im := emsg.msg.body.(*IMMessage)
-		
-		obj := make(map[string]interface{})
-		obj["content"] = im.content
-		obj["timestamp"] = im.timestamp
-		obj["sender"] = im.sender
-		obj["receiver"] = im.receiver
-		obj["is_group"] = bool(emsg.msg.cmd == MSG_GROUP_IM)
-		msg_list = append(msg_list, obj)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -332,19 +348,34 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
 
 	msg_list := make([]map[string]interface{}, 0, len(messages))
 	for _, emsg := range messages {
-		if emsg.msg.cmd != MSG_IM && emsg.msg.cmd != MSG_GROUP_IM {
-			continue
+		if emsg.msg.cmd == MSG_IM || 
+			emsg.msg.cmd == MSG_GROUP_IM {
+			im := emsg.msg.body.(*IMMessage)
+			
+			obj := make(map[string]interface{})
+			obj["content"] = im.content
+			obj["timestamp"] = im.timestamp
+			obj["sender"] = im.sender
+			obj["receiver"] = im.receiver
+			obj["command"] = emsg.msg.cmd
+			obj["id"] = emsg.msgid
+			msg_list = append(msg_list, obj)
+
+		} else if emsg.msg.cmd == MSG_CUSTOMER || 
+			emsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
+			im := emsg.msg.body.(*CustomerMessage)
+			
+			obj := make(map[string]interface{})
+			obj["content"] = im.content
+			obj["timestamp"] = im.timestamp
+			obj["customer_appid"] = im.customer_appid
+			obj["customer_id"] = im.customer_id
+			obj["store_id"] = im.store_id
+			obj["seller_id"] = im.seller_id
+			obj["command"] = emsg.msg.cmd
+			obj["id"] = emsg.msgid
+			msg_list = append(msg_list, obj)
 		}
-		im := emsg.msg.body.(*IMMessage)
-		
-		obj := make(map[string]interface{})
-		obj["content"] = im.content
-		obj["timestamp"] = im.timestamp
-		obj["sender"] = im.sender
-		obj["receiver"] = im.receiver
-		obj["is_group"] = bool(emsg.msg.cmd == MSG_GROUP_IM)
-		obj["id"] = emsg.msgid
-		msg_list = append(msg_list, obj)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

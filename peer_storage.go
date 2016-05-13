@@ -168,7 +168,10 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 		if msg == nil {
 			break
 		}
-		if msg.cmd != MSG_GROUP_IM && msg.cmd != MSG_IM {
+		if msg.cmd != MSG_GROUP_IM && 
+			msg.cmd != MSG_IM && 
+			msg.cmd != MSG_CUSTOMER && 
+			msg.cmd != MSG_CUSTOMER_SUPPORT {
 			last_id = off.prev_msgid
 			continue
 		}
@@ -206,7 +209,10 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 		if msg == nil {
 			break
 		}
-		if msg.cmd != MSG_GROUP_IM && msg.cmd != MSG_IM {
+		if msg.cmd != MSG_GROUP_IM && 
+			msg.cmd != MSG_IM && 
+			msg.cmd != MSG_CUSTOMER && 
+			msg.cmd != MSG_CUSTOMER_SUPPORT {
 			last_id = off.prev_msgid
 			continue
 		}
