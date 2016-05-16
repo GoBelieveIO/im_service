@@ -64,17 +64,3 @@ func WriteHttpObj(data map[string]interface{}, w http.ResponseWriter) {
 	b, _ := json.Marshal(obj)
 	w.Write(b)
 }
-
-func StartHttpServer(addr string) {
-	http.HandleFunc("/summary", Summary)
-	http.HandleFunc("/stack", Stack)
-
-	//rpc function
-	http.HandleFunc("/post_group_notification", PostGroupNotification)
-	http.HandleFunc("/post_im_message", PostIMMessage)
-	http.HandleFunc("/load_latest_message", LoadLatestMessage)
-	http.HandleFunc("/load_history_message", LoadHistoryMessage)
-	http.HandleFunc("/post_system_message", SendSystemMessage)
-
-	HTTPService(addr, nil)
-}

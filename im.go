@@ -23,6 +23,7 @@ import "fmt"
 import "flag"
 import "time"
 import "runtime"
+import "net/http"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
 
@@ -313,6 +314,23 @@ func (ob IMGroupObserver) OnGroupMemberAdd(group *Group, uid int64) {
 func (ob IMGroupObserver) OnGroupMemberRemove(group *Group, uid int64) {
 	group_center.UnsubscribeGroupMember(group.appid, group.gid, uid)
 }
+
+
+func StartHttpServer(addr string) {
+	http.HandleFunc("/summary", Summary)
+	http.HandleFunc("/stack", Stack)
+
+	//rpc function
+	http.HandleFunc("/post_group_notification", PostGroupNotification)
+	http.HandleFunc("/post_im_message", PostIMMessage)
+	http.HandleFunc("/load_latest_message", LoadLatestMessage)
+	http.HandleFunc("/load_history_message", LoadHistoryMessage)
+	http.HandleFunc("/post_system_message", SendSystemMessage)
+	http.HandleFunc("/post_room_message", SendRoomMessage)
+
+	HTTPService(addr, nil)
+}
+
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
