@@ -1,2 +1,4 @@
 #监听地址 ip:port ip一般使用内网网卡地址
 listen=:4444
+redis_address=192.168.33.10:6379
+
