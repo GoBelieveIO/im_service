@@ -222,6 +222,55 @@ func (client *StorageConn) LoadHistoryMessage(appid int64, uid int64, msgid int6
 	return client.ReceiveMessages()
 }
 
+func (client *StorageConn) InitQueue(appid int64, uid int64, did int64) error {
+	q := &InitQueue{}
+	q.appid = appid
+	q.uid = uid
+	q.device_id = did
+
+	msg := &Message{cmd:MSG_INIT_QUEUE, body:q}
+	SendMessage(client.conn, msg)
+	r := ReceiveMessage(client.conn)
+	if r == nil {
+		client.e = true
+		return errors.New("error connection")
+	}
+	if r.cmd != MSG_RESULT {
+		return errors.New("error cmd")
+	}
+	result := r.body.(*MessageResult)
+	if result.status != 0 {
+		return errors.New("error status")
+	}
+
+	return nil
+}
+
+func (client *StorageConn) InitGroupQueue(appid int64, gid int64, uid int64, did int64) error {
+	q := &InitGroupQueue{}
+	q.appid = appid
+	q.gid = gid
+	q.uid = uid
+	q.device_id = did
+
+	msg := &Message{cmd:MSG_INIT_GROUP_QUEUE, body:q}
+	SendMessage(client.conn, msg)
+	r := ReceiveMessage(client.conn)
+	if r == nil {
+		client.e = true
+		return errors.New("error connection")
+	}
+	if r.cmd != MSG_RESULT {
+		return errors.New("error cmd")
+	}
+	result := r.body.(*MessageResult)
+	if result.status != 0 {
+		return errors.New("error status")
+	}
+
+	return nil
+}
+
 var nowFunc = time.Now // for testing
 
 type idleConn struct {

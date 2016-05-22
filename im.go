@@ -316,6 +316,15 @@ func (ob IMGroupObserver) OnGroupMemberRemove(group *Group, uid int64) {
 }
 
 
+type loggingHandler struct {
+	handler http.Handler
+}
+
+func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log.Infof("http request:%s %s %s", r.RemoteAddr, r.Method, r.URL)
+	h.handler.ServeHTTP(w, r)
+}
+
 func StartHttpServer(addr string) {
 	http.HandleFunc("/summary", Summary)
 	http.HandleFunc("/stack", Stack)
@@ -327,8 +336,11 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/load_history_message", LoadHistoryMessage)
 	http.HandleFunc("/post_system_message", SendSystemMessage)
 	http.HandleFunc("/post_room_message", SendRoomMessage)
+	http.HandleFunc("/post_customer_message", SendCustomerMessage)
+	http.HandleFunc("/init_message_queue", InitMessageQueue)
 
-	HTTPService(addr, nil)
+	handler := loggingHandler{http.DefaultServeMux}
+	HTTPService(addr, handler)
 }
 
 

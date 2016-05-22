@@ -2,6 +2,7 @@ package main
 import "net/http"
 import "encoding/json"
 import "time"
+import "math/rand"
 import "net/url"
 import "strconv"
 import "sync/atomic"
@@ -464,5 +465,275 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request) {
 	channel := GetRoomChannel(room_id)
 	channel.PublishRoom(amsg)
 
+	w.WriteHeader(200)
+}
+
+func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	obj, err := simplejson.NewJson(body)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	customer_appid, err := obj.Get("customer_appid").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return		
+	}
+
+	customer_id, err := obj.Get("customer_id").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	store_id, err := obj.Get("store_id").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	seller_id, err := obj.Get("seller_id").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+	
+	content, err := obj.Get("content").String()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	store, err := customer_service.GetStore(store_id)
+	if err != nil {
+		log.Warning("get store err:", err)
+		WriteHttpError(500, "internal server error", w)
+		return
+	}
+
+	mode := store.mode
+	if (mode == CS_MODE_BROADCAST) {
+		cs := &CustomerMessage{}
+		cs.customer_appid = customer_appid
+		cs.customer_id = customer_id
+		cs.store_id = store_id
+		cs.seller_id = seller_id
+		cs.content = content
+		cs.timestamp = int32(time.Now().Unix())
+
+		m := &Message{cmd:MSG_CUSTOMER, body:cs}
+
+		group := group_manager.FindGroup(store.group_id)
+		if group == nil {
+			log.Warning("can't find group:", store.group_id)
+			WriteHttpError(500, "internal server error", w)
+			return
+		}
+
+		members := group.Members()
+		for member := range members {
+			_, err := SaveMessage(config.kefu_appid, member, 0, m)
+			if err != nil {
+				log.Error("save message err:", err)
+				WriteHttpError(500, "internal server error", w)
+				return
+			}
+		}
+		_, err := SaveMessage(cs.customer_appid, cs.customer_id, 0, m)
+
+		if err != nil {
+			log.Error("save message err:", err)
+			WriteHttpError(500, "internal server error", w)
+			return
+		}
+
+		obj := make(map[string]interface{})
+		obj["seller_id"] = 0
+		WriteHttpObj(obj, w)
+		return
+	} else if (mode == CS_MODE_ONLINE) {
+		if seller_id > 0 {
+			is_on := customer_service.IsOnline(store_id, seller_id)
+			if !is_on {
+				seller_id = customer_service.GetOnlineSellerID(store_id)
+				if seller_id == 0 {
+					WriteHttpError(400, "no seller online", w)
+					return
+				}
+			}
+		} else {
+			seller_id = customer_service.GetOnlineSellerID(store_id)
+			if seller_id == 0 {
+				WriteHttpError(400, "no seller online", w)
+				return
+			}
+		}
+	} else if (mode == CS_MODE_FIX) {
+		if seller_id > 0 {
+			group := group_manager.FindGroup(store.group_id)
+			if group == nil {
+				log.Warning("can't find group:", store.group_id)
+				WriteHttpError(500, "internal server error", w)
+				return
+			}
+			if !group.IsMember(seller_id) {
+				//重新选择一个客服人员
+				seller_id = 0
+			}
+		}
+		if seller_id == 0 {
+			group := group_manager.FindGroup(store.group_id)
+			if group == nil {
+				log.Warning("can't find group:", store.group_id)
+				WriteHttpError(500, "internal server error", w)
+				return
+			}
+			members := group.Members()
+			if len(members) == 0 {
+				WriteHttpError(500, "internal server error", w)
+				return
+			}
+			index := int(rand.Int31n(int32(len(members))))
+			i := 0
+			for k, _ := range members {
+				if i == index {
+					seller_id = k
+					break
+				}
+			}
+		}
+	}
+
+
+	//fix and online mode
+	cs := &CustomerMessage{}
+	cs.customer_appid = customer_appid
+	cs.customer_id = customer_id
+	cs.store_id = store_id
+	cs.seller_id = seller_id
+	cs.content = content
+	cs.timestamp = int32(time.Now().Unix())
+
+	m := &Message{cmd:MSG_CUSTOMER, body:cs}
+
+	SaveMessage(cs.customer_appid, cs.customer_id, 0, m)
+	_, err = SaveMessage(config.kefu_appid, cs.seller_id, 0, m)
+
+	if err != nil {
+		WriteHttpError(500, "internal server error", w)
+	} else {
+		obj := make(map[string]interface{})
+		obj["seller_id"] = seller_id
+		WriteHttpObj(obj, w)
+	}
+}
+
+
+func InitMessageQueue(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	obj, err := simplejson.NewJson(body)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	appid, err := obj.Get("appid").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	uid, err := obj.Get("uid").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	platform_id, err := obj.Get("platform_id").Int()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	device_id, err := obj.Get("device_id").String()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	if platform_id == PLATFORM_WEB || len(device_id) == 0 {
+		WriteHttpError(400, "invalid platform/device id", w)
+		return
+	}
+	
+	did, err := GetDeviceID(device_id, platform_id)
+
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(500, "server internal error", w)
+		return
+	}
+
+	storage_pool := GetStorageConnPool(uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		WriteHttpError(500, "server internal error", w)
+	}
+	defer storage_pool.Release(storage)
+
+	err = storage.InitQueue(appid, uid, did)
+
+	if err != nil {
+		log.Error("init queue err:", err)
+		WriteHttpError(500, "server internal error", w)
+		return
+	}
+
+	groups := group_manager.FindUserGroups(appid, uid)
+	for _, group := range groups {
+		if !group.super {
+			continue
+		}
+
+		storage_pool = GetGroupStorageConnPool(group.gid)
+		storage, err = storage_pool.Get()
+		if err != nil {
+			log.Error("connect storage err:", err)
+			WriteHttpError(500, "server internal error", w)
+			return
+		}
+		defer storage_pool.Release(storage)
+
+		err = storage.InitGroupQueue(appid, group.gid, uid, did)
+		if err != nil {
+			log.Error("init group queue err:", err)
+			WriteHttpError(500, "server internal error", w)
+			return
+		}
+	}
 	w.WriteHeader(200)
 }

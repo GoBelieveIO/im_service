@@ -34,11 +34,15 @@ const MSG_LOAD_LATEST = 205
 const MSG_SAVE_AND_ENQUEUE_GROUP = 206
 const MSG_DEQUEUE_GROUP = 207
 const MSG_LOAD_HISTORY = 208
+//初始化last received id
+const MSG_INIT_QUEUE = 209
+const MSG_INIT_GROUP_QUEUE = 210
+
 
 //主从同步消息
-const MSG_SYNC_BEGIN = 210
-const MSG_SYNC_MESSAGE = 211
-const MSG_SYNC_MESSAGE_BATCH = 212
+const MSG_SYNC_BEGIN = 220
+const MSG_SYNC_MESSAGE = 221
+const MSG_SYNC_MESSAGE_BATCH = 222
 
 //内部文件存储使用
 const MSG_GROUP_IM_LIST = 252
@@ -58,6 +62,9 @@ func init() {
 	
 	message_creators[MSG_SAVE_AND_ENQUEUE_GROUP] = func()IMessage{return new(SAEMessage)}
 	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(DQGroupMessage)}
+	message_creators[MSG_INIT_QUEUE] = func()IMessage{return new(InitQueue)}
+	message_creators[MSG_INIT_GROUP_QUEUE] = func()IMessage{return new(InitGroupQueue)}
+
 
 	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
@@ -75,6 +82,8 @@ func init() {
 	message_descriptions[MSG_RESULT] = "MSG_RESULT"
 	message_descriptions[MSG_LOAD_LATEST] = "MSG_LOAD_LATEST"
 	message_descriptions[MSG_LOAD_HISTORY] = "MSG_LOAD_HISTORY"
+	message_descriptions[MSG_INIT_QUEUE] = "MSG_INIT_QUEUE"
+	message_descriptions[MSG_INIT_GROUP_QUEUE] = "MSG_INIT_GROUP_QUEUE"
 
 	message_descriptions[MSG_SAVE_AND_ENQUEUE_GROUP] = "MSG_SAVE_AND_ENQUEUE_GROUP"
 	message_descriptions[MSG_DEQUEUE_GROUP] = "MSG_DEQUEUE_GROUP"
@@ -550,6 +559,66 @@ func (lo *LoadGroupOffline) ToData() []byte {
 }
 
 func (lo *LoadGroupOffline) FromData(buff []byte) bool {
+	if len(buff) < 32 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &lo.appid)
+	binary.Read(buffer, binary.BigEndian, &lo.gid)
+	binary.Read(buffer, binary.BigEndian, &lo.uid)
+	binary.Read(buffer, binary.BigEndian, &lo.device_id)
+	return true
+}
+
+type InitQueue struct {
+	appid int64
+	uid   int64
+	device_id   int64
+}
+
+
+
+func (lo *InitQueue) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, lo.appid)
+	binary.Write(buffer, binary.BigEndian, lo.uid)
+	binary.Write(buffer, binary.BigEndian, lo.device_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (lo *InitQueue) FromData(buff []byte) bool {
+	if len(buff) < 24 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &lo.appid)
+	binary.Read(buffer, binary.BigEndian, &lo.uid)
+	binary.Read(buffer, binary.BigEndian, &lo.device_id)
+	return true
+}
+
+
+type InitGroupQueue struct {
+	appid int64
+	gid   int64
+	uid   int64
+	device_id   int64
+}
+
+
+
+func (lo *InitGroupQueue) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, lo.appid)
+	binary.Write(buffer, binary.BigEndian, lo.gid)
+	binary.Write(buffer, binary.BigEndian, lo.uid)
+	binary.Write(buffer, binary.BigEndian, lo.device_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (lo *InitGroupQueue) FromData(buff []byte) bool {
 	if len(buff) < 32 {
 		return false
 	}

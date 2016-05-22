@@ -22,6 +22,7 @@ package main
 
 import "fmt"
 import "strconv"
+import "strings"
 import log "github.com/golang/glog"
 
 
@@ -40,6 +41,58 @@ func NewPeerStorage(f *StorageFile) *PeerStorage {
 	storage := &PeerStorage{StorageFile:f}
 	storage.received = make(map[AppUserLoginID]int64)
 	return storage
+}
+
+func (storage *Storage) InitQueue(appid int64, uid int64, did int64) {
+	id, _ := storage.GetLastReceivedID(appid, uid, did)
+	//设备之前有登录
+	if id > 0 {
+		return
+	}
+
+	start := fmt.Sprintf("%d_%d_", appid, uid)
+	max_id := int64(0)
+
+	//遍历"appid_uid_%did%_1",找出最大的值
+	iter := storage.db.NewIterator(nil, nil)
+	for ok := iter.Seek([]byte(start)); ok; ok = iter.Next() {
+		k := string(iter.Key())
+		v := string(iter.Value())
+
+		if !strings.HasPrefix(k, start) {
+			break
+		}
+
+		suffix := k[len(start):]
+		parts := strings.Split(suffix, "_")
+		if len(parts) == 2 && parts[1] == "1" {
+			received_id, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				log.Error("parse int err:", err)
+				break
+			}
+
+			if received_id > max_id {
+				max_id = received_id
+			}
+		}
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		log.Error("iter error:", err)
+	}
+
+	log.Infof("appid:%d uid:%d did:%d max received id:%d",
+		appid, uid, did, max_id)
+
+	if max_id > 0 {
+		storage.mutex.Lock()
+		defer storage.mutex.Unlock()
+
+		id := AppUserLoginID{appid:appid, uid:uid, device_id:did}
+		storage.received[id] = max_id
+	}
 }
 
 func (storage *PeerStorage) SavePeerMessage(appid int64, uid int64, device_id int64, msg *Message) int64 {

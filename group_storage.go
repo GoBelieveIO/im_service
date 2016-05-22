@@ -22,6 +22,7 @@ package main
 
 import "fmt"
 import "strconv"
+import "strings"
 import log "github.com/golang/glog"
 
 type AppGroupMemberLoginID struct {
@@ -41,6 +42,53 @@ func NewGroupStorage(f *StorageFile) *GroupStorage {
 	storage.group_received = make(map[AppGroupMemberLoginID]int64)
 	return storage
 }
+
+func (storage *Storage) InitGroupQueue(appid int64, gid int64, uid int64, did int64) {
+	member := &AppGroupMemberLoginID{appid:appid, gid:gid, uid:uid, device_id:did}
+	id, _ := storage.GetLastGroupReceivedID(member)
+	if id > 0 {
+		return
+	}
+
+	start := fmt.Sprintf("g_%d_%d_%d_", appid, gid, uid)
+	max_id := int64(0)
+
+	//遍历"g_appid_gid_uid_%did%",找出最大的值
+	iter := storage.db.NewIterator(nil, nil)
+	for ok := iter.Seek([]byte(start)); ok; ok = iter.Next() {
+		k := string(iter.Key())
+		v := string(iter.Value())
+
+		if !strings.HasPrefix(k, start) {
+			break
+		}
+
+		received_id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			log.Error("parse int err:", err)
+			break
+		}
+
+		if received_id > max_id {
+			max_id = received_id
+		}
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		log.Error("iter error:", err)
+	}
+
+	log.Infof("appid:%d gid:%d uid:%d did:%d max received id:%d",
+		appid, gid, uid, did, max_id)
+
+	if max_id > 0 {
+		storage.mutex.Lock()
+		defer storage.mutex.Unlock()
+		storage.group_received[*member] = max_id
+	}
+}
+
 
 func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) int64 {
 	storage.mutex.Lock()
