@@ -95,11 +95,56 @@ func (cs *CustomerService) GetStore(store_id int64) (*Store, error) {
 	return s, nil
 }
 
+func (cs *CustomerService) GetLastSellerID(appid, uid, store_id int64) int64 {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("users_%d_%d_%d", appid, uid, store_id)
+
+	seller_id, err := redis.Int64(conn.Do("GET", key))
+	if err != nil {
+		log.Error("get last seller id err:", err)
+		return 0
+	}
+	return seller_id
+}
+
+func (cs *CustomerService) SetLastSellerID(appid, uid, store_id, seller_id int64) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("users_%d_%d_%d", appid, uid, store_id)
+
+	//24hour expire
+	_, err := conn.Do("SET", key, seller_id, "EX", 3600*24)
+	if err != nil {
+		log.Error("get last seller id err:", err)
+		return
+	}
+}
+
+//随机获取一个的销售人员
+func (cs *CustomerService) GetSellerID(store_id int64) int64 {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("stores_seller_%d", store_id)
+
+	staff_id, err := redis.Int64(conn.Do("SRANDMEMBER", key))
+	if err != nil {
+		log.Error("srandmember err:", err)
+		return 0
+	}
+	return staff_id
+	
+}
+
+//随机获取一个在线的销售人员
 func (cs *CustomerService) GetOnlineSellerID(store_id int64) int64 {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
-	key := fmt.Sprintf("customer_service_online_%d", store_id)
+	key := fmt.Sprintf("stores_online_seller_%d", store_id)
 
 	staff_id, err := redis.Int64(conn.Do("SRANDMEMBER", key))
 	if err != nil {
@@ -112,7 +157,7 @@ func (cs *CustomerService) GetOnlineSellerID(store_id int64) int64 {
 func (cs *CustomerService) IsOnline(store_id int64, seller_id int64) bool {
 	conn := redis_pool.Get()
 	defer conn.Close()
-	key := fmt.Sprintf("customer_service_online_%d", store_id)	
+	key := fmt.Sprintf("stores_online_seller_%d", store_id)	
 	
 	on, err := redis.Bool(conn.Do("SISMEMBER", key, seller_id))
 	if err != nil {

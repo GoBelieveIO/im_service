@@ -2,7 +2,6 @@ package main
 import "net/http"
 import "encoding/json"
 import "time"
-import "math/rand"
 import "net/url"
 import "strconv"
 import "sync/atomic"
@@ -575,44 +574,29 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 		} else {
-			seller_id = customer_service.GetOnlineSellerID(store_id)
+			seller_id = customer_service.GetLastSellerID(customer_appid, customer_id, store_id)
+			if seller_id != 0 {
+				is_on := customer_service.IsOnline(store_id, seller_id)
+				if !is_on {
+					seller_id = customer_service.GetOnlineSellerID(store_id)
+				}
+			} else {
+				seller_id = customer_service.GetOnlineSellerID(store_id)
+			}
 			if seller_id == 0 {
 				WriteHttpError(400, "no seller online", w)
 				return
 			}
 		}
 	} else if (mode == CS_MODE_FIX) {
-		if seller_id > 0 {
-			group := group_manager.FindGroup(store.group_id)
-			if group == nil {
-				log.Warning("can't find group:", store.group_id)
-				WriteHttpError(500, "internal server error", w)
-				return
-			}
-			if !group.IsMember(seller_id) {
-				//重新选择一个客服人员
-				seller_id = 0
-			}
-		}
 		if seller_id == 0 {
-			group := group_manager.FindGroup(store.group_id)
-			if group == nil {
-				log.Warning("can't find group:", store.group_id)
-				WriteHttpError(500, "internal server error", w)
-				return
+			seller_id = customer_service.GetLastSellerID(customer_appid, customer_id, store_id)
+			if seller_id == 0 {
+				seller_id = customer_service.GetSellerID(store_id)
 			}
-			members := group.Members()
-			if len(members) == 0 {
-				WriteHttpError(500, "internal server error", w)
+			if seller_id == 0 {
+				WriteHttpError(400, "no seller in store", w)
 				return
-			}
-			index := int(rand.Int31n(int32(len(members))))
-			i := 0
-			for k, _ := range members {
-				if i == index {
-					seller_id = k
-					break
-				}
 			}
 		}
 	}
