@@ -354,6 +354,25 @@ func (client *Client) PublishCustomerMessage(appid, receiver int64, cs *Customer
 	}
 }
 
+
+func (client *Client) PublishSystemMessage(appid, receiver int64, content string) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["receiver"] = receiver
+	v["content"] = content
+
+	b, _ := json.Marshal(v)
+	var queue_name string
+	queue_name = "system_push_queue"
+	_, err := conn.Do("RPUSH", queue_name, b)
+	if err != nil {
+		log.Info("rpush error:", err)
+	}
+}
+
 func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 	if sae.msg == nil {
 		log.Error("sae msg is nil")
@@ -487,6 +506,11 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 		if appid != cs.customer_appid && cs.seller_id != uid && 
 			!IsUserOnline(appid, uid) {
 			client.PublishCustomerMessage(appid, uid, cs,sae.msg.cmd)
+		}
+	} else if sae.msg.cmd == MSG_SYSTEM {
+		sys := sae.msg.body.(*SystemMessage)
+		if config.is_push_system && !IsUserOnline(appid, uid) {
+			client.PublishSystemMessage(appid, uid, sys.notification)
 		}
 	}
 }
@@ -843,8 +867,8 @@ func main() {
 	}
 
 	config = read_storage_cfg(flag.Args()[0])
-	log.Infof("listen:%s storage root:%s sync listen:%s master address:%s\n", 
-		config.listen, config.storage_root, config.sync_listen, config.master_address)
+	log.Infof("listen:%s storage root:%s sync listen:%s master address:%s is push system:%d\n", 
+		config.listen, config.storage_root, config.sync_listen, config.master_address, config.is_push_system)
 
 	redis_pool = NewRedisPool(config.redis_address, "")
 	storage = NewStorage(config.storage_root)

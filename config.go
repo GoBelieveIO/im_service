@@ -46,6 +46,7 @@ type StorageConfig struct {
 	redis_address       string
 	sync_listen         string
 	master_address      string
+	is_push_system      bool
 }
 
 type RouteConfig struct {
@@ -140,6 +141,7 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.sync_listen = get_string(app_cfg, "sync_listen")
 	config.master_address = get_opt_string(app_cfg, "master_address")
+	config.is_push_system = get_opt_int(app_cfg, "is_push_system") == 1
 	return config
 }
 
