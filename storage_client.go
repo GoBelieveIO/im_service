@@ -146,7 +146,7 @@ func (client *StorageConn) ReadEMessage(buf []byte) *EMessage {
 }
 
 func (client *StorageConn) ReceiveMessages() ([]*EMessage, error) {
-	r := ReceiveMessage(client.conn)
+	r := ReceiveStorageMessage(client.conn)
 	if r == nil {
 		client.e = true
 		return nil, errors.New("error connection")
