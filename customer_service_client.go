@@ -97,6 +97,7 @@ func (client *CSClient) HandleCustomerMessage(msg *Message) {
 	cm := msg.body.(*CustomerMessage)
 	cm.timestamp = int32(time.Now().Unix())
 
+	log.Infof("customer message customer appid:%d customer id:%d store id:%d seller id:%d", cm.customer_appid, cm.customer_id, cm.store_id, cm.seller_id)
 	if cm.customer_appid != client.appid {
 		log.Warningf("message appid:%d client appid:%d", 
 			cm.customer_appid, client.appid)
