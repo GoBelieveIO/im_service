@@ -26,6 +26,7 @@ import "errors"
 const CS_MODE_FIX = 1
 const CS_MODE_ONLINE = 2
 const CS_MODE_BROADCAST = 3
+const CS_MODE_ORDER = 4
 
 type CSClient struct {
 	*Connection
@@ -128,6 +129,8 @@ func (client *CSClient) HandleCustomerMessage(msg *Message) {
 		err = client.OnlineSend(cm)
 	} else if (mode == CS_MODE_FIX) {
 		err = client.FixSend(cm)
+	} else if (mode == CS_MODE_ORDER) {
+		err = client.OrderSend(cm)
 	} else {
 		log.Warning("do not support customer service mode:", mode)
 		return
@@ -186,6 +189,33 @@ func (client *CSClient) OnlineSend(cs *CustomerMessage) error {
 	_, err := SaveMessage(config.kefu_appid, cs.seller_id, client.device_ID, m)
 	return err
 }
+
+
+func (client *CSClient) OrderSend(cs *CustomerMessage) error {
+	m := &Message{cmd:MSG_CUSTOMER, body:cs}
+	if cs.seller_id == 0 {
+		seller_id := customer_service.GetLastSellerID(client.appid, client.uid, cs.store_id)
+		if seller_id == 0 {
+			seller_id = customer_service.GetOrderSellerID(cs.store_id)
+			if seller_id == 0 {
+				log.Warning("customer service has not staffs")
+				return errors.New("customer service has not staffs")
+			}
+			customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
+			log.Infof("get seller id:%d", seller_id)
+		} else {
+			log.Infof("get last seller id:%d", seller_id)
+		}
+		cs.seller_id = seller_id
+	} else {
+		log.Infof("customer message seller id:%d", cs.seller_id)
+	}
+
+	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
+	_, err := SaveMessage(config.kefu_appid, cs.seller_id, client.device_ID, m)
+	return err
+}
+
 
 func (client *CSClient) FixSend(cs *CustomerMessage) error {
 	m := &Message{cmd:MSG_CUSTOMER, body:cs}

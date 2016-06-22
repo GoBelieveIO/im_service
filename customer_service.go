@@ -139,6 +139,34 @@ func (cs *CustomerService) GetSellerID(store_id int64) int64 {
 	
 }
 
+func (cs *CustomerService) GetOrderSellerID(store_id int64) int64 {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("stores_zseller_%d", store_id)
+
+	r, err := redis.Values(conn.Do("ZRANGE", key, 0, 0))
+	if err != nil {
+		log.Error("srange err:", err)
+		return 0
+	}
+
+	log.Info("zrange:", r, key)
+	var seller_id int64
+	_, err = redis.Scan(r, &seller_id)
+	if err != nil {
+		log.Error("scan err:", err)
+		return 0
+	}
+
+	_, err = conn.Do("ZINCRBY", key, 1, seller_id)
+	if err != nil {
+		log.Error("zincrby err:", err)
+	}
+	return seller_id
+}
+
+
 //随机获取一个在线的销售人员
 func (cs *CustomerService) GetOnlineSellerID(store_id int64) int64 {
 	conn := redis_pool.Get()
