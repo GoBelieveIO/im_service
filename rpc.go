@@ -593,11 +593,44 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 			seller_id = customer_service.GetLastSellerID(customer_appid, customer_id, store_id)
 			if seller_id == 0 {
 				seller_id = customer_service.GetSellerID(store_id)
+				if seller_id == 0 {
+					WriteHttpError(400, "no seller in store", w)
+					return
+				}
+				customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
 			}
+		}
+
+		is_exist := customer_service.IsExist(store_id, seller_id)
+		if !is_exist {
+			seller_id = customer_service.GetSellerID(store_id)
 			if seller_id == 0 {
 				WriteHttpError(400, "no seller in store", w)
 				return
 			}
+			customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
+		}
+	} else if (mode == CS_MODE_ORDER) {
+		if seller_id == 0 {
+			seller_id = customer_service.GetLastSellerID(customer_appid, customer_id, store_id)
+			if seller_id == 0 {
+				seller_id = customer_service.GetOrderSellerID(store_id)
+				if seller_id == 0 {
+					WriteHttpError(400, "no seller in store", w)
+					return
+				}
+				customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
+			}
+		}
+
+		is_exist := customer_service.IsExist(store_id, seller_id)
+		if !is_exist {
+			seller_id = customer_service.GetOrderSellerID(store_id)
+			if seller_id == 0 {
+				WriteHttpError(400, "no seller in store", w)
+				return
+			}
+			customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
 		}
 	}
 
@@ -623,6 +656,46 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 		obj["seller_id"] = seller_id
 		WriteHttpObj(obj, w)
 	}
+}
+
+
+func SendRealtimeMessage(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	sender, err := strconv.ParseInt(m.Get("sender"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+	receiver, err := strconv.ParseInt(m.Get("receiver"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	rt := &RTMessage{}
+	rt.sender = sender
+	rt.receiver = receiver
+	rt.content = string(body)
+
+	msg := &Message{cmd:MSG_RT, body:rt}
+	Send0Message(appid, receiver, msg)
+	w.WriteHeader(200)
 }
 
 

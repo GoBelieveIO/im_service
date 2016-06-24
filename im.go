@@ -337,6 +337,7 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_system_message", SendSystemMessage)
 	http.HandleFunc("/post_room_message", SendRoomMessage)
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
+	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
 	http.HandleFunc("/init_message_queue", InitMessageQueue)
 
 	handler := loggingHandler{http.DefaultServeMux}
