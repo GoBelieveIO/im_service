@@ -31,11 +31,13 @@ const CS_MODE_ORDER = 4
 type CSClient struct {
 	*Connection
 	sellers IntSet //在线的销售人员
+	dialog_sellers IntSet //正在对话的销售人员
 }
 
 func NewCSClient(conn *Connection) *CSClient {
 	c := &CSClient{Connection:conn}
 	c.sellers = NewIntSet()
+	c.dialog_sellers = NewIntSet()
 	return c
 }
 
@@ -78,6 +80,10 @@ func (client *CSClient) HandleCustomerSupportMessage(msg *Message) {
 		SaveMessage(client.appid, cm.seller_id, client.device_ID, m)
 		_, err = SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, m)
 	} else if (mode == CS_MODE_FIX) {
+		m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
+		SaveMessage(client.appid, cm.seller_id, client.device_ID, m)
+		_, err = SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, m)
+	} else if (mode == CS_MODE_ORDER) {
 		m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
 		SaveMessage(client.appid, cm.seller_id, client.device_ID, m)
 		_, err = SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, m)
@@ -211,6 +217,24 @@ func (client *CSClient) OrderSend(cs *CustomerMessage) error {
 		log.Infof("customer message seller id:%d", cs.seller_id)
 	}
 
+	//判断销售人员是否被删除
+	if !client.dialog_sellers.IsMember(cs.seller_id) {
+		is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
+		if is_exist {
+			client.dialog_sellers.Add(cs.seller_id)
+		} else {
+			seller_id := customer_service.GetOrderSellerID(cs.store_id)
+			if seller_id == 0 {
+				log.Warning("customer service has not staffs")
+				return errors.New("customer service has not staffs")
+			}
+			customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
+			log.Infof("get new seller id:%d old:%d", seller_id, cs.seller_id)
+			client.dialog_sellers.Add(seller_id)
+			cs.seller_id = seller_id
+		}
+	}
+
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
 	_, err := SaveMessage(config.kefu_appid, cs.seller_id, client.device_ID, m)
 	return err
@@ -235,6 +259,24 @@ func (client *CSClient) FixSend(cs *CustomerMessage) error {
 		cs.seller_id = seller_id
 	} else {
 		log.Infof("customer message seller id:%d", cs.seller_id)
+	}
+
+	//判断销售人员是否被删除
+	if !client.dialog_sellers.IsMember(cs.seller_id) {
+		is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
+		if is_exist {
+			client.dialog_sellers.Add(cs.seller_id)
+		} else {
+			seller_id := customer_service.GetSellerID(cs.store_id)
+			if seller_id == 0 {
+				log.Warning("customer service has not staffs")
+				return errors.New("customer service has not staffs")
+			}
+			customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
+			log.Infof("get new seller id:%d old:%d", seller_id, cs.seller_id)
+			client.dialog_sellers.Add(seller_id)
+			cs.seller_id = seller_id
+		}
 	}
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)

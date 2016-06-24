@@ -123,6 +123,21 @@ func (cs *CustomerService) SetLastSellerID(appid, uid, store_id, seller_id int64
 	}
 }
 
+//判断销售人员是否合法
+func (cs *CustomerService) IsExist(store_id int64, seller_id int64) bool {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("stores_seller_%d", store_id)
+
+	exists, err := redis.Bool(conn.Do("SISMEMBER", key, seller_id))
+	if err != nil {
+		log.Error("sismember err:", err)
+		return false
+	}
+	return exists
+}
+
 //随机获取一个的销售人员
 func (cs *CustomerService) GetSellerID(store_id int64) int64 {
 	conn := redis_pool.Get()
