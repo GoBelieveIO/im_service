@@ -37,11 +37,15 @@ type Store struct {
 type CustomerService struct {
 	mutex sync.Mutex
 	stores map[int64]*Store
+	sellers map[int64]int //销售员 sellerid:timestamp
+	online_sellers map[int64]int //在线的销售员 sellerid:timestamp
 }
 
 func NewCustomerService() *CustomerService {
 	cs := new(CustomerService)
 	cs.stores = make(map[int64]*Store)
+	cs.sellers = make(map[int64]int)
+	cs.online_sellers = make(map[int64]int)
 	return cs
 }
 
@@ -125,6 +129,19 @@ func (cs *CustomerService) SetLastSellerID(appid, uid, store_id, seller_id int64
 
 //判断销售人员是否合法
 func (cs *CustomerService) IsExist(store_id int64, seller_id int64) bool {
+	now := int(time.Now().Unix())
+	cs.mutex.Lock()
+	if t, ok := cs.sellers[seller_id]; ok {
+		if now - t < 10*60 {
+			cs.mutex.Unlock()
+			return true
+		}
+		//缓存超时
+		delete(cs.sellers, seller_id)
+	}
+	cs.mutex.Unlock()
+
+	
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -134,6 +151,12 @@ func (cs *CustomerService) IsExist(store_id int64, seller_id int64) bool {
 	if err != nil {
 		log.Error("sismember err:", err)
 		return false
+	}
+
+	if exists {
+		cs.mutex.Lock()
+		cs.sellers[seller_id] = now
+		cs.mutex.Unlock()
 	}
 	return exists
 }
@@ -198,6 +221,18 @@ func (cs *CustomerService) GetOnlineSellerID(store_id int64) int64 {
 }
 
 func (cs *CustomerService) IsOnline(store_id int64, seller_id int64) bool {
+	now := int(time.Now().Unix())
+	cs.mutex.Lock()
+	if t, ok := cs.online_sellers[seller_id]; ok {
+		if now - t < 10*60 {
+			cs.mutex.Unlock()
+			return true
+		}
+		//缓存超时
+		delete(cs.online_sellers, seller_id)
+	}
+	cs.mutex.Unlock()
+
 	conn := redis_pool.Get()
 	defer conn.Close()
 	key := fmt.Sprintf("stores_online_seller_%d", store_id)	
@@ -206,6 +241,12 @@ func (cs *CustomerService) IsOnline(store_id int64, seller_id int64) bool {
 	if err != nil {
 		log.Error("sismember err:", err)
 		return false
+	}
+
+	if on {
+		cs.mutex.Lock()
+		cs.online_sellers[seller_id] = now
+		cs.mutex.Unlock()
 	}
 	return on
 }

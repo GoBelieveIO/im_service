@@ -30,14 +30,10 @@ const CS_MODE_ORDER = 4
 
 type CSClient struct {
 	*Connection
-	sellers IntSet //在线的销售人员
-	dialog_sellers IntSet //正在对话的销售人员
 }
 
 func NewCSClient(conn *Connection) *CSClient {
 	c := &CSClient{Connection:conn}
-	c.sellers = NewIntSet()
-	c.dialog_sellers = NewIntSet()
 	return c
 }
 
@@ -163,7 +159,6 @@ func (client *CSClient) OnlineSend(cs *CustomerMessage) error {
 				log.Warning("can't get a online seller")
 				return errors.New("can't get a online seller")
 			}
-			client.sellers.Add(seller_id)
 			log.Infof("new seller id:%d", seller_id)
 		} else {
 			log.Infof("last seller id:%d", seller_id)
@@ -172,23 +167,17 @@ func (client *CSClient) OnlineSend(cs *CustomerMessage) error {
 	}
 
 	//判断上次会话的客服人员是否还在线
-	if !client.sellers.IsMember(cs.seller_id) {
-		is_on := customer_service.IsOnline(cs.store_id, cs.seller_id)
-		if is_on {
-			log.Infof("seller:%d is online", cs.seller_id)
-			client.sellers.Add(cs.seller_id)
-		} else {
-			log.Infof("seller:%d is offline", cs.seller_id)
-			//重新分配新的客服人员
-			seller_id := customer_service.GetOnlineSellerID(cs.store_id)
-			if seller_id == 0 {
-				log.Warning("can't get a online seller")
-				return errors.New("can't get a online seller")
-			}
-			client.sellers.Add(seller_id)
-			cs.seller_id = seller_id
-			log.Infof("new seller id:%d", seller_id)
+	is_on := customer_service.IsOnline(cs.store_id, cs.seller_id)
+	if !is_on {
+		log.Infof("seller:%d is offline", cs.seller_id)
+		//重新分配新的客服人员
+		seller_id := customer_service.GetOnlineSellerID(cs.store_id)
+		if seller_id == 0 {
+			log.Warning("can't get a online seller")
+			return errors.New("can't get a online seller")
 		}
+		cs.seller_id = seller_id
+		log.Infof("new seller id:%d", seller_id)
 	}
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
@@ -218,21 +207,16 @@ func (client *CSClient) OrderSend(cs *CustomerMessage) error {
 	}
 
 	//判断销售人员是否被删除
-	if !client.dialog_sellers.IsMember(cs.seller_id) {
-		is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
-		if is_exist {
-			client.dialog_sellers.Add(cs.seller_id)
-		} else {
-			seller_id := customer_service.GetOrderSellerID(cs.store_id)
-			if seller_id == 0 {
-				log.Warning("customer service has not staffs")
-				return errors.New("customer service has not staffs")
-			}
-			customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
-			log.Infof("get new seller id:%d old:%d", seller_id, cs.seller_id)
-			client.dialog_sellers.Add(seller_id)
-			cs.seller_id = seller_id
+	is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
+	if !is_exist {
+		seller_id := customer_service.GetOrderSellerID(cs.store_id)
+		if seller_id == 0 {
+			log.Warning("customer service has not staffs")
+			return errors.New("customer service has not staffs")
 		}
+		customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
+		log.Infof("get new seller id:%d old:%d", seller_id, cs.seller_id)
+		cs.seller_id = seller_id
 	}
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
@@ -262,21 +246,16 @@ func (client *CSClient) FixSend(cs *CustomerMessage) error {
 	}
 
 	//判断销售人员是否被删除
-	if !client.dialog_sellers.IsMember(cs.seller_id) {
-		is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
-		if is_exist {
-			client.dialog_sellers.Add(cs.seller_id)
-		} else {
-			seller_id := customer_service.GetSellerID(cs.store_id)
-			if seller_id == 0 {
-				log.Warning("customer service has not staffs")
-				return errors.New("customer service has not staffs")
-			}
-			customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
-			log.Infof("get new seller id:%d old:%d", seller_id, cs.seller_id)
-			client.dialog_sellers.Add(seller_id)
-			cs.seller_id = seller_id
+	is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
+	if !is_exist {
+		seller_id := customer_service.GetSellerID(cs.store_id)
+		if seller_id == 0 {
+			log.Warning("customer service has not staffs")
+			return errors.New("customer service has not staffs")
 		}
+		customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
+		log.Infof("get new seller id:%d old:%d", seller_id, cs.seller_id)
+		cs.seller_id = seller_id
 	}
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
