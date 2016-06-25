@@ -321,9 +321,9 @@ func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IM
 	b, _ := json.Marshal(v)
 	var queue_name string
 	if client.IsROMApp(appid) {
-		queue_name = fmt.Sprintf("push_queue_%d", appid)
+		queue_name = fmt.Sprintf("group_push_queue_%d", appid)
 	} else {
-		queue_name = "push_queue"
+		queue_name = "group_push_queue"
 	}
 	_, err := conn.Do("RPUSH", queue_name, b)
 	if err != nil {
