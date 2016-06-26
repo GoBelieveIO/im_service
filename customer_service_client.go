@@ -148,28 +148,17 @@ func (client *CSClient) HandleCustomerMessage(msg *Message) {
 
 func (client *CSClient) OnlineSend(cs *CustomerMessage) error {
 	m := &Message{cmd:MSG_CUSTOMER, body:cs}
-	//普通用户发送的消息
-
-	if cs.seller_id == 0 {
-		seller_id := customer_service.GetLastSellerID(client.appid, client.uid, cs.store_id)
-		if seller_id == 0 {
-			//重新分配新的客服人员
-			seller_id := customer_service.GetOnlineSellerID(cs.store_id)
-			if seller_id == 0 {
-				log.Warning("can't get a online seller")
-				return errors.New("can't get a online seller")
-			}
-			log.Infof("new seller id:%d", seller_id)
-		} else {
-			log.Infof("last seller id:%d", seller_id)
-		}
-		cs.seller_id = seller_id
-	}
 
 	//判断上次会话的客服人员是否还在线
-	is_on := customer_service.IsOnline(cs.store_id, cs.seller_id)
+	is_on := cs.seller_id != 0 && customer_service.IsOnline(cs.store_id, cs.seller_id)
 	if !is_on {
-		log.Infof("seller:%d is offline", cs.seller_id)
+		last_seller_id := customer_service.GetLastSellerID(client.appid, client.uid, cs.store_id)
+		log.Infof("get last seller id:%d", last_seller_id)
+		is_on = last_seller_id != 0 && last_seller_id != cs.seller_id && customer_service.IsOnline(cs.store_id, last_seller_id)
+		cs.seller_id = last_seller_id
+	}
+
+	if !is_on {
 		//重新分配新的客服人员
 		seller_id := customer_service.GetOnlineSellerID(cs.store_id)
 		if seller_id == 0 {
@@ -177,7 +166,7 @@ func (client *CSClient) OnlineSend(cs *CustomerMessage) error {
 			return errors.New("can't get a online seller")
 		}
 		cs.seller_id = seller_id
-		log.Infof("new seller id:%d", seller_id)
+		log.Infof("get new seller id:%d old:%d", seller_id, cs.seller_id)
 	}
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
@@ -188,26 +177,16 @@ func (client *CSClient) OnlineSend(cs *CustomerMessage) error {
 
 func (client *CSClient) OrderSend(cs *CustomerMessage) error {
 	m := &Message{cmd:MSG_CUSTOMER, body:cs}
-	if cs.seller_id == 0 {
-		seller_id := customer_service.GetLastSellerID(client.appid, client.uid, cs.store_id)
-		if seller_id == 0 {
-			seller_id = customer_service.GetOrderSellerID(cs.store_id)
-			if seller_id == 0 {
-				log.Warning("customer service has not staffs")
-				return errors.New("customer service has not staffs")
-			}
-			customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
-			log.Infof("get seller id:%d", seller_id)
-		} else {
-			log.Infof("get last seller id:%d", seller_id)
-		}
-		cs.seller_id = seller_id
-	} else {
-		log.Infof("customer message seller id:%d", cs.seller_id)
-	}
 
 	//判断销售人员是否被删除
-	is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
+	is_exist := cs.seller_id != 0 && customer_service.IsExist(cs.store_id, cs.seller_id)
+	if !is_exist {
+		last_seller_id := customer_service.GetLastSellerID(client.appid, client.uid, cs.store_id)
+		log.Infof("get last seller id:%d", last_seller_id)
+		is_exist = last_seller_id != 0 && last_seller_id != cs.seller_id && customer_service.IsExist(cs.store_id, last_seller_id)
+		cs.seller_id = last_seller_id
+	}
+
 	if !is_exist {
 		seller_id := customer_service.GetOrderSellerID(cs.store_id)
 		if seller_id == 0 {
@@ -227,26 +206,16 @@ func (client *CSClient) OrderSend(cs *CustomerMessage) error {
 
 func (client *CSClient) FixSend(cs *CustomerMessage) error {
 	m := &Message{cmd:MSG_CUSTOMER, body:cs}
-	if cs.seller_id == 0 {
-		seller_id := customer_service.GetLastSellerID(client.appid, client.uid, cs.store_id)
-		if seller_id == 0 {
-			seller_id = customer_service.GetSellerID(cs.store_id)
-			if seller_id == 0 {
-				log.Warning("customer service has not staffs")
-				return errors.New("customer service has not staffs")
-			}
-			customer_service.SetLastSellerID(client.appid, client.uid, cs.store_id, seller_id)
-			log.Infof("get seller id:%d", seller_id)
-		} else {
-			log.Infof("get last seller id:%d", seller_id)
-		}
-		cs.seller_id = seller_id
-	} else {
-		log.Infof("customer message seller id:%d", cs.seller_id)
-	}
 
 	//判断销售人员是否被删除
-	is_exist := customer_service.IsExist(cs.store_id, cs.seller_id)
+	is_exist := cs.seller_id != 0 && customer_service.IsExist(cs.store_id, cs.seller_id)
+	if !is_exist {
+		last_seller_id := customer_service.GetLastSellerID(client.appid, client.uid, cs.store_id)
+		log.Infof("get last seller id:%d", last_seller_id)
+		is_exist = last_seller_id != 0 && last_seller_id != cs.seller_id && customer_service.IsExist(cs.store_id, last_seller_id)
+		cs.seller_id = last_seller_id
+	}
+
 	if !is_exist {
 		seller_id := customer_service.GetSellerID(cs.store_id)
 		if seller_id == 0 {

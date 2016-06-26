@@ -119,8 +119,7 @@ func (cs *CustomerService) SetLastSellerID(appid, uid, store_id, seller_id int64
 
 	key := fmt.Sprintf("users_%d_%d_%d", appid, uid, store_id)
 
-	//24hour expire
-	_, err := conn.Do("SET", key, seller_id, "EX", 3600*24)
+	_, err := conn.Do("SET", key, seller_id)
 	if err != nil {
 		log.Error("get last seller id err:", err)
 		return
