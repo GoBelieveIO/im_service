@@ -3,6 +3,7 @@ package main
 import "net/http"
 import "encoding/json"
 import "os"
+import "runtime"
 import "runtime/pprof"
 import log "github.com/golang/glog"
 
@@ -21,6 +22,7 @@ func NewServerSummary() *ServerSummary {
 
 func Summary(rw http.ResponseWriter, req *http.Request) {
 	obj := make(map[string]interface{})
+	obj["goroutine_count"] = runtime.NumGoroutine()
 	obj["connection_count"] = server_summary.nconnections
 	obj["client_count"] = server_summary.nclients
 	obj["in_message_count"] = server_summary.in_message_count
