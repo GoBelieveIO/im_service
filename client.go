@@ -63,9 +63,35 @@ func NewClient(conn interface{}) *Client {
 }
 
 func (client *Client) Read() {
+	c := make(chan int)
+	ticker := time.NewTicker(60*6*time.Second)
+	ts := time.Now().Unix()
+
+	go func () {
+		for {
+			select {
+			case _, ok := <-c:
+				if !ok {
+					log.Info("check socket routine exit")
+					return
+				}
+			case _, ok := <-ticker.C:
+				if !ok {
+					return
+				}
+				now := time.Now().Unix()
+				if now - ts > 60*6 {
+					log.Error("client:%d read is blocked:%d %d", client.uid, ts, now)
+				}
+			}
+		}
+	}()
 	for {
+		ts = time.Now().Unix()
 		msg := client.read()
 		if msg == nil {
+			ticker.Stop()
+			close(c)
 			client.HandleRemoveClient()
 			break
 		}
