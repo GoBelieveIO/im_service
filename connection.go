@@ -56,7 +56,7 @@ func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 // 根据连接类型获取消息
 func (client *Connection) read() *Message {
 	if conn, ok := client.conn.(net.Conn); ok {
-		conn.SetDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
+		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
 		return ReceiveMessage(conn)
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		return ReadEngineIOMessage(conn)
