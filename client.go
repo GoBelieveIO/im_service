@@ -297,6 +297,22 @@ func (client *Client) Write() {
 			client.send(msg)
 		}
 	}
+
+	//等待200ms,避免在发送者阻塞
+	t := time.After(200 * time.Millisecond)
+	running = true
+	for running {
+		select {
+		case <- t:
+			running = false
+		case <- client.wt:
+			log.Warning("msg is dropped")
+		case <- client.ewt:
+			log.Warning("emsg is dropped")
+		}
+	}
+
+	log.Info("write goroutine exit")
 }
 
 func (client *Client) Run() {
