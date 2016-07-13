@@ -72,7 +72,7 @@ func (client *Client) Read() {
 			select {
 			case _, ok := <-c:
 				if !ok {
-					log.Info("check socket routine exit")
+					log.Infof("client:%d check socket routine exit", client.uid)
 					return
 				}
 			case _, ok := <-ticker.C:
@@ -81,7 +81,7 @@ func (client *Client) Read() {
 				}
 				now := time.Now().Unix()
 				if now - ts > 60*6 {
-					log.Error("client:%d read is blocked:%d %d", client.uid, ts, now)
+					log.Errorf("client:%d read is blocked:%d %d", client.uid, ts, now)
 				}
 			}
 		}
@@ -89,13 +89,22 @@ func (client *Client) Read() {
 	for {
 		ts = time.Now().Unix()
 		msg := client.read()
+		t2 := time.Now().Unix()
+		if t2 - ts > 6*60 {
+			log.Infof("client:%d socket read timeout:%d %d", client.uid, ts, t2)
+		}
 		if msg == nil {
 			ticker.Stop()
 			close(c)
 			client.HandleRemoveClient()
 			break
 		}
+
 		client.HandleMessage(msg)
+		t3 := time.Now().Unix()
+		if t3 - t2 > 2 {
+			log.Infof("client:%d handle message is too slow:%d %d", client.uid, t2, t3)
+		}
 	}
 }
 
