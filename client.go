@@ -99,6 +99,7 @@ func (client *Client) Read() {
 			ticker.Stop()
 			close(c)
 			client.HandleRemoveClient()
+			client.wt <- nil
 			break
 		}
 
@@ -111,7 +112,6 @@ func (client *Client) Read() {
 }
 
 func (client *Client) HandleRemoveClient() {
-	client.wt <- nil
 	route := app_route.FindRoute(client.appid)
 	if route == nil {
 		log.Warning("can't find app route")
