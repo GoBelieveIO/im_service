@@ -189,7 +189,17 @@ func SendAppMessage(amsg *AppMessage, uid int64) bool {
 			if amsg.msgid > 0 {
 				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
 			} else {
-				c.wt <- amsg.msg
+				timeout := false
+				select {
+				case c.wt <- amsg.msg:
+					break
+				case <- time.After(10*time.Second):
+					timeout = true
+					log.Infof("send message to wt timed out:%d", uid)
+				}
+				if timeout {
+					c.wt <- amsg.msg
+				}
 			}
 		}
 	}
