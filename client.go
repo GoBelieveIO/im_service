@@ -79,19 +79,21 @@ func (client *Client) Read() {
 				if !ok {
 					return
 				}
+				t := atomic.LoadInt64(&ts)
 				now := time.Now().Unix()
-				if now - ts > 60*6 {
-					log.Errorf("client:%d read is blocked:%d %d", client.uid, ts, now)
+				if now - t > 60*6 {
+					log.Errorf("client:%d read is blocked:%d %d", client.uid, t, now)
 				}
 			}
 		}
 	}()
 	for {
-		ts = time.Now().Unix()
+		t1 := time.Now().Unix()
+		atomic.StoreInt64(&ts, t1)
 		msg := client.read()
 		t2 := time.Now().Unix()
-		if t2 - ts > 6*60 {
-			log.Infof("client:%d socket read timeout:%d %d", client.uid, ts, t2)
+		if t2 - t1 > 6*60 {
+			log.Infof("client:%d socket read timeout:%d %d", client.uid, t1, t2)
 		}
 		if msg == nil {
 			ticker.Stop()
