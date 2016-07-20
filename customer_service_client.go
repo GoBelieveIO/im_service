@@ -92,7 +92,8 @@ func (client *CSClient) HandleCustomerSupportMessage(msg *Message) {
 		return
 	}
 
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+	client.EnqueueMessage(ack)
 }
 
 //顾客->客服
@@ -141,8 +142,9 @@ func (client *CSClient) HandleCustomerMessage(msg *Message) {
 	if err != nil {
 		return
 	}
-
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+	
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+	client.EnqueueMessage(ack)
 }
 
 

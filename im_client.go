@@ -78,7 +78,7 @@ func (client *IMClient) LoadGroupOffline() {
 		}
 
 		for _, emsg := range messages {
-			client.owt <- emsg
+			client.EnqueueOfflineMessage(emsg)
 		}
 	}
 }
@@ -101,7 +101,7 @@ func (client *IMClient) LoadOffline() {
 		return
 	}
 	for _, emsg := range messages {
-		client.owt <- emsg
+		client.EnqueueOfflineMessage(emsg)
 	}
 }
 
@@ -135,7 +135,8 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
 	SaveMessage(client.appid, msg.sender, client.device_ID, m)
 
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	client.EnqueueMessage(ack)
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
@@ -169,8 +170,9 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 			}
 		}
 	}
-	
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	client.EnqueueMessage(ack)
+
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("group message sender:%d group id:%d", msg.sender, msg.receiver)
 }
@@ -212,16 +214,7 @@ func (client *IMClient) HandleACK(ack *MessageACK) {
 
 
 func (client *IMClient) HandleSubsribe(msg *MessageSubscribeState) {
-	if client.uid == 0 {
-		return
-	}
-
-	//todo 获取在线状态
-	for _, uid := range msg.uids {
-		state := &MessageOnlineState{uid, 0}
-		m := &Message{cmd: MSG_ONLINE_STATE, body: state}
-		client.wt <- m
-	}
+	log.Info("unsupport subscribe message")
 }
 
 func (client *IMClient) HandleRTMessage(msg *Message) {

@@ -208,19 +208,6 @@ def recv_rst(uid):
             task += 1
             break
 
-def recv_login_point(uid):
-    global task
-    sock1, seq1 = connect_server(uid, 23000)
-
-    time.sleep(1)
-    sock2, seq2 = connect_server(uid, 23000)
-
-    while True:
-        cmd, s, msg = recv_message(sock1)
-        if cmd == MSG_LOGIN_POINT:
-            print "up timestamp:", msg[0], " platform id:", msg[1], " device_id", msg[2]
-            break
-
 
 count = 1
 
@@ -593,9 +580,6 @@ def TestInputing():
 
     print "test inputting completed"
 
-def TestLoginPoint():
-    recv_login_point(13635273142)
-    print "test login point completed"
 
 def TestTimeout():
     sock, seq = connect_server(13635273142, 23000)
@@ -908,47 +892,12 @@ def TestSystemMessage():
     print "test system message completed"
     
 
-def add_customer_service_staff(staff_uid):
-    secret = md5.new(APP_SECRET).digest().encode("hex")
-    basic = base64.b64encode(str(APP_ID) + ":" + secret)
-    headers = {'Content-Type': 'application/json; charset=UTF-8',
-               'Authorization': 'Basic ' + basic}
-
-    url = URL + "/applications/%s"%APP_ID
-
-    obj = {"customer_service":True}
-    r = requests.patch(url, data=json.dumps(obj), headers=headers)
-    assert(r.status_code == 200)
-    print "enable customer service success"
-
-    obj = {"customer_service_mode":3}
-    r = requests.patch(url, data=json.dumps(obj), headers=headers)
-    assert(r.status_code == 200)
-    print "set customer service mode:3 success"
-
-    url = URL + "/staffs"
-    obj = {"staff_uid":staff_uid, "staff_name":"客服"}
-    r = requests.post(url, data=json.dumps(obj), headers=headers)
-    assert(r.status_code == 200)
-    print "add customer service staff success"
-    
-    url = URL + "/staffs/%d"%staff_uid
-    obj = {"state":"online"}
-    r = requests.patch(url, data=json.dumps(obj), headers=headers)
-    assert(r.status_code == 200)
-    print "user online"
-
-    
-
 def TestCustomerServiceMessage():
     global task
     task = 0
     t3 = threading.Thread(target=recv_customer_service_message_client, args=(100, ))
     t3.setDaemon(True)
     t3.start()
-    
-
-    add_customer_service_staff(100)
     
     time.sleep(1)
 
@@ -1027,11 +976,6 @@ def main():
     TestSystemMessage()
     time.sleep(1)
 
-    TestCustomerServiceMessage()
-    time.sleep(1)
-
-    TestLoginPoint()
-    time.sleep(1)
     TestPingPong()
     time.sleep(1)
     TestTimeout()

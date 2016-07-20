@@ -27,9 +27,8 @@ type RoomClient struct {
 	room_id int64
 }
 
-func (client *RoomClient) Logout(route *Route) {
+func (client *RoomClient) Logout() {
 	if client.room_id > 0 {
-		route.RemoveRoomClient(client.room_id, client.Client())
 		channel := GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
 	}

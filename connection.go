@@ -22,6 +22,7 @@ package main
 import "net"
 import "time"
 import "sync"
+import "sync/atomic"
 import log "github.com/golang/glog"
 import "github.com/googollee/go-engine.io"
 
@@ -30,6 +31,7 @@ const CLIENT_TIMEOUT = (60 * 6)
 type Connection struct {
 	conn   interface{}
 
+	tc     int32 //write channel timeout count
 	wt     chan *Message
 	ewt    chan *EMessage //在线消息
 	owt    chan *EMessage //离线消息
@@ -53,6 +55,56 @@ func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 	return Send0Message(client.appid, uid, msg)
 }
 
+func (client *Connection) EnqueueMessage(msg *Message) {
+	tc := atomic.LoadInt32(&client.tc)
+	if tc > 0 {
+		log.Infof("can't send message to blocked connection:%d", client.uid)
+		atomic.AddInt32(&client.tc, 1)
+		return
+	}
+	select {
+	case client.wt <- msg:
+		break
+	case <- time.After(20*time.Second):
+		atomic.AddInt32(&client.tc, 1)
+		log.Infof("send message to wt timed out:%d", client.uid)
+	}
+}
+
+func (client *Connection) EnqueueEMessage(emsg *EMessage) {
+	tc := atomic.LoadInt32(&client.tc)
+	if tc > 0 {
+		log.Infof("can't send message to blocked connection:%d", client.uid)
+		atomic.AddInt32(&client.tc, 1)
+		return
+	}
+	select {
+	case client.ewt <- emsg:
+		break
+	case <- time.After(20*time.Second):
+		atomic.AddInt32(&client.tc, 1)
+		log.Infof("send message to ewt timed out:%d", client.uid)
+	}
+}
+
+
+func (client *Connection) EnqueueOfflineMessage(emsg *EMessage) {
+	tc := atomic.LoadInt32(&client.tc)
+	if tc > 0 {
+		log.Infof("can't send message to blocked connection:%d", client.uid)
+		atomic.AddInt32(&client.tc, 1)
+		return
+	}
+	select {
+	case client.owt <- emsg:
+		break
+	case <- time.After(20*time.Second):
+		atomic.AddInt32(&client.tc, 1)
+		log.Infof("send message to owt timed out:%d", client.uid)
+	}
+}
+
+
 // 根据连接类型获取消息
 func (client *Connection) read() *Message {
 	if conn, ok := client.conn.(net.Conn); ok {
@@ -67,8 +119,15 @@ func (client *Connection) read() *Message {
 // 根据连接类型发送消息
 func (client *Connection) send(msg *Message) {
 	if conn, ok := client.conn.(net.Conn); ok {
+		tc := atomic.LoadInt32(&client.tc)
+		if tc > 0 {
+			log.Info("can't write data to blocked socket")
+			return
+		}
+		conn.SetWriteDeadline(time.Now().Add(20 * time.Second))
 		err := SendMessage(conn, msg)
 		if err != nil {
+			atomic.AddInt32(&client.tc, 1)
 			log.Info("send msg:", Command(msg.cmd),  " tcp err:", err)
 		}
 	} else if conn, ok := client.conn.(engineio.Conn); ok {

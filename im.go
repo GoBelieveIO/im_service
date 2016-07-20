@@ -184,25 +184,15 @@ func SendAppMessage(amsg *AppMessage, uid int64) bool {
 		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return false
 	}
-	if clients != nil {
-		for c, _ := range(clients) {
-			if amsg.msgid > 0 {
-				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
-			} else {
-				timeout := false
-				select {
-				case c.wt <- amsg.msg:
-					break
-				case <- time.After(10*time.Second):
-					timeout = true
-					log.Infof("send message to wt timed out:%d", uid)
-				}
-				if timeout {
-					c.wt <- amsg.msg
-				}
-			}
+
+	for c, _ := range(clients) {
+		if amsg.msgid > 0 {
+			c.EnqueueEMessage(&EMessage{msgid:amsg.msgid, msg:amsg.msg})
+		} else {
+			c.EnqueueMessage(amsg.msg)
 		}
 	}
+
 	return true
 }
 
@@ -244,9 +234,9 @@ func DispatchAppMessage(amsg *AppMessage) {
 		}
 
 		if amsg.msgid > 0 {
-			c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
+			c.EnqueueEMessage(&EMessage{msgid:amsg.msgid, msg:amsg.msg})
 		} else {
-			c.wt <- amsg.msg
+			c.EnqueueMessage(amsg.msg)
 		}
 	}
 }
@@ -262,7 +252,7 @@ func DispatchRoomMessage(amsg *AppMessage) {
 		return
 	}
 	for c, _ := range(clients) {
-		c.wt <- amsg.msg
+		c.EnqueueMessage(amsg.msg)
 	}	
 }
 
@@ -286,19 +276,17 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		if len(clients) == 0 {
 			continue
 		}
-		 
-		if clients != nil {
-			for c, _ := range(clients) {
-				if amsg.msg.cmd == MSG_GROUP_IM {
-					im := amsg.msg.body.(*IMMessage)
-					
-					//不再发送给发送者所在的设备
-					if c.uid == im.sender && c.device_ID == amsg.device_id {
-						continue
-					}
+
+		for c, _ := range(clients) {
+			if amsg.msg.cmd == MSG_GROUP_IM {
+				im := amsg.msg.body.(*IMMessage)
+				
+				//不再发送给发送者所在的设备
+				if c.uid == im.sender && c.device_ID == amsg.device_id {
+					continue
 				}
-				c.ewt <- &EMessage{msgid:amsg.msgid, msg:amsg.msg}
 			}
+			c.EnqueueEMessage(&EMessage{msgid:amsg.msgid, msg:amsg.msg})
 		}
 	}
 }

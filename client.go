@@ -88,6 +88,15 @@ func (client *Client) Read() {
 		}
 	}()
 	for {
+		tc := atomic.LoadInt32(&client.tc)
+		if tc > 0 {
+			log.Infof("quit read goroutine, client:%d write goroutine blocked", client.uid)
+			ticker.Stop()
+			close(c)
+			client.HandleClientClosed()
+			break
+		}
+
 		t1 := time.Now().Unix()
 		atomic.StoreInt64(&ts, t1)
 		msg := client.read()
@@ -98,8 +107,7 @@ func (client *Client) Read() {
 		if msg == nil {
 			ticker.Stop()
 			close(c)
-			client.HandleRemoveClient()
-			client.wt <- nil
+			client.HandleClientClosed()
 			break
 		}
 
@@ -111,7 +119,7 @@ func (client *Client) Read() {
 	}
 }
 
-func (client *Client) HandleRemoveClient() {
+func (client *Client) RemoveClient() {
 	route := app_route.FindRoute(client.appid)
 	if route == nil {
 		log.Warning("can't find app route")
@@ -119,7 +127,22 @@ func (client *Client) HandleRemoveClient() {
 	}
 	route.RemoveClient(client)
 
-	client.RoomClient.Logout(route)
+	if client.room_id > 0 {
+		route.RemoveRoomClient(client.room_id, client)
+	}
+}
+
+func (client *Client) HandleClientClosed() {
+	atomic.AddInt64(&server_summary.nconnections, -1)
+	if client.uid > 0 {
+		atomic.AddInt64(&server_summary.nclients, -1)
+	}
+	client.RemoveClient()
+
+	//quit when write goroutine received
+	client.wt <- nil
+
+	client.RoomClient.Logout()
 	client.IMClient.Logout()
 }
 
@@ -141,15 +164,6 @@ func (client *Client) HandleMessage(msg *Message) {
 }
 
 
-func (client *Client) SendLoginPoint() {
-	point := &LoginPoint{}
-	point.up_timestamp = int32(client.tm.Unix())
-	point.platform_id = client.platform_id
-	point.device_id = client.device_id
-	msg := &Message{cmd:MSG_LOGIN_POINT, body:point}
-	client.SendMessage(client.uid, msg)
-}
-
 func (client *Client) AuthToken(token string) (int64, int64, error) {
 	appid, uid, _, err := LoadUserAccessToken(token)
 	return appid, uid, err
@@ -163,17 +177,17 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	}
 
 	var err error
-	client.appid, client.uid, err = client.AuthToken(login.token)
+	appid, uid, err := client.AuthToken(login.token)
 	if err != nil {
 		log.Infof("auth token:%s err:%s", login.token, err)
 		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
-		client.wt <- msg
+		client.EnqueueMessage(msg)
 		return
 	}
-	if  client.uid == 0 {
+	if  uid == 0 {
 		log.Info("auth token uid==0")
 		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
-		client.wt <- msg
+		client.EnqueueMessage(msg)
 		return
 	}
 
@@ -182,11 +196,13 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		if err != nil {
 			log.Info("auth token uid==0")
 			msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
-			client.wt <- msg
+			client.EnqueueMessage(msg)
 			return
 		}
 	}
 
+	client.appid = appid
+	client.uid = uid
 	client.version = version
 	client.device_id = login.device_id
 	client.platform_id = login.platform_id
@@ -195,9 +211,8 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		login.token, client.appid, client.uid, client.device_id, client.device_ID)
 
 	msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{0, client.public_ip}}
-	client.wt <- msg
+	client.EnqueueMessage(msg)
 
-	client.SendLoginPoint()
 	client.AddClient()
 
 	client.IMClient.Login()
@@ -217,7 +232,7 @@ func (client *Client) AddClient() {
 
 func (client *Client) HandlePing() {
 	m := &Message{cmd: MSG_PONG}
-	client.wt <- m
+	client.EnqueueMessage(m)
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -236,10 +251,6 @@ func (client *Client) Write() {
 		case msg := <-client.wt:
 			if msg == nil {
 				client.close()
-				atomic.AddInt64(&server_summary.nconnections, -1)
-				if client.uid > 0 {
-					atomic.AddInt64(&server_summary.nclients, -1)
-				}
 				running = false
 				log.Infof("client:%d socket closed", client.uid)
 				break
@@ -278,10 +289,6 @@ func (client *Client) Write() {
 		case msg := <-client.wt:
 			if msg == nil {
 				client.close()
-				atomic.AddInt64(&server_summary.nconnections, -1)
-				if client.uid > 0 {
-					atomic.AddInt64(&server_summary.nclients, -1)
-				}
 				running = false
 				log.Infof("client:%d socket closed", client.uid)
 				break
@@ -309,7 +316,7 @@ func (client *Client) Write() {
 		}
 	}
 
-	//等待200ms,避免在发送者阻塞
+	//等待200ms,避免发送者阻塞
 	t := time.After(200 * time.Millisecond)
 	running = true
 	for running {
