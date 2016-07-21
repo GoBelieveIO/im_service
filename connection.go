@@ -30,7 +30,8 @@ const CLIENT_TIMEOUT = (60 * 6)
 
 type Connection struct {
 	conn   interface{}
-
+	closed int32
+	
 	tc     int32 //write channel timeout count
 	wt     chan *Message
 	ewt    chan *EMessage //在线消息
@@ -56,6 +57,12 @@ func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 }
 
 func (client *Connection) EnqueueMessage(msg *Message) {
+	closed := atomic.LoadInt32(&client.closed)
+	if closed > 0 {
+		log.Infof("can't send message to closed connection:%d", client.uid)
+		return
+	}
+
 	tc := atomic.LoadInt32(&client.tc)
 	if tc > 0 {
 		log.Infof("can't send message to blocked connection:%d", client.uid)
@@ -72,6 +79,12 @@ func (client *Connection) EnqueueMessage(msg *Message) {
 }
 
 func (client *Connection) EnqueueEMessage(emsg *EMessage) {
+	closed := atomic.LoadInt32(&client.closed)
+	if closed > 0 {
+		log.Infof("can't send message to closed connection:%d", client.uid)
+		return
+	}
+
 	tc := atomic.LoadInt32(&client.tc)
 	if tc > 0 {
 		log.Infof("can't send message to blocked connection:%d", client.uid)
@@ -86,7 +99,6 @@ func (client *Connection) EnqueueEMessage(emsg *EMessage) {
 		log.Infof("send message to ewt timed out:%d", client.uid)
 	}
 }
-
 
 func (client *Connection) EnqueueOfflineMessage(emsg *EMessage) {
 	tc := atomic.LoadInt32(&client.tc)

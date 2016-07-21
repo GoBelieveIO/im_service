@@ -137,6 +137,8 @@ func (client *Client) HandleClientClosed() {
 	if client.uid > 0 {
 		atomic.AddInt64(&server_summary.nclients, -1)
 	}
+	atomic.StoreInt32(&client.closed, 1)
+
 	client.RemoveClient()
 
 	//quit when write goroutine received
