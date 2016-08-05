@@ -47,9 +47,9 @@ func NewClient(conn interface{}) *Client {
 		}
 	}
 
-	client.wt = make(chan *Message, 10)
-	client.ewt = make(chan *EMessage, 10)
-	client.owt = make(chan *EMessage, 10)
+	client.wt = make(chan *Message, 100)
+	client.ewt = make(chan *EMessage, 100)
+	client.owt = make(chan *EMessage, 100)
 
 	client.unacks = make(map[int]int64)
 	client.unackMessages = make(map[int]*EMessage)
