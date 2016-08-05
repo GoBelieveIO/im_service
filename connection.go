@@ -72,7 +72,7 @@ func (client *Connection) EnqueueMessage(msg *Message) {
 	select {
 	case client.wt <- msg:
 		break
-	case <- time.After(20*time.Second):
+	case <- time.After(60*time.Second):
 		atomic.AddInt32(&client.tc, 1)
 		log.Infof("send message to wt timed out:%d", client.uid)
 	}
@@ -94,7 +94,7 @@ func (client *Connection) EnqueueEMessage(emsg *EMessage) {
 	select {
 	case client.ewt <- emsg:
 		break
-	case <- time.After(20*time.Second):
+	case <- time.After(60*time.Second):
 		atomic.AddInt32(&client.tc, 1)
 		log.Infof("send message to ewt timed out:%d", client.uid)
 	}
@@ -110,7 +110,7 @@ func (client *Connection) EnqueueOfflineMessage(emsg *EMessage) {
 	select {
 	case client.owt <- emsg:
 		break
-	case <- time.After(20*time.Second):
+	case <- time.After(60*time.Second):
 		atomic.AddInt32(&client.tc, 1)
 		log.Infof("send message to owt timed out:%d", client.uid)
 	}
@@ -136,7 +136,7 @@ func (client *Connection) send(msg *Message) {
 			log.Info("can't write data to blocked socket")
 			return
 		}
-		conn.SetWriteDeadline(time.Now().Add(20 * time.Second))
+		conn.SetWriteDeadline(time.Now().Add(60 * time.Second))
 		err := SendMessage(conn, msg)
 		if err != nil {
 			atomic.AddInt32(&client.tc, 1)
