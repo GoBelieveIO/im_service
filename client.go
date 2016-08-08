@@ -63,50 +63,21 @@ func NewClient(conn interface{}) *Client {
 }
 
 func (client *Client) Read() {
-	c := make(chan int)
-	ticker := time.NewTicker(60*6*time.Second)
-	ts := time.Now().Unix()
-
-	go func () {
-		for {
-			select {
-			case _, ok := <-c:
-				if !ok {
-					log.Infof("client:%d check socket routine exit", client.uid)
-					return
-				}
-			case _, ok := <-ticker.C:
-				if !ok {
-					return
-				}
-				t := atomic.LoadInt64(&ts)
-				now := time.Now().Unix()
-				if now - t > 60*6 {
-					log.Errorf("client:%d read is blocked:%d %d", client.uid, t, now)
-				}
-			}
-		}
-	}()
 	for {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {
 			log.Infof("quit read goroutine, client:%d write goroutine blocked", client.uid)
-			ticker.Stop()
-			close(c)
 			client.HandleClientClosed()
 			break
 		}
 
 		t1 := time.Now().Unix()
-		atomic.StoreInt64(&ts, t1)
 		msg := client.read()
 		t2 := time.Now().Unix()
 		if t2 - t1 > 6*60 {
 			log.Infof("client:%d socket read timeout:%d %d", client.uid, t1, t2)
 		}
 		if msg == nil {
-			ticker.Stop()
-			close(c)
 			client.HandleClientClosed()
 			break
 		}
