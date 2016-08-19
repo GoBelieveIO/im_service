@@ -25,35 +25,49 @@ import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 import "errors"
 
-func LoadUserAccessToken(token string) (int64, int64, string, error) {
+func GetUserForbidden(appid int64, uid int64) (int, error) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	key := fmt.Sprintf("users_%d_%d", appid, uid)
+
+	forbidden, err := redis.Int(conn.Do("HGET", key, "forbidden"))
+	if err != nil {
+		log.Info("hget error:", err)
+		return 0,  err
+	}
+
+	return forbidden, nil
+}
+
+func LoadUserAccessToken(token string) (int64, int64, error) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("access_token_%s", token)
 	var uid int64
 	var appid int64
-	var uname string
 
 	exists, err := redis.Bool(conn.Do("EXISTS", key))
 	if err != nil {
-		return 0, 0, "", err
+		return 0, 0, err
 	}
 	if !exists {
-		return 0, 0, "", errors.New("token non exists")
+		return 0, 0,  errors.New("token non exists")
 	}
 
-	reply, err := redis.Values(conn.Do("HMGET", key, "user_id", "app_id", "user_name"))
+	reply, err := redis.Values(conn.Do("HMGET", key, "user_id", "app_id"))
 	if err != nil {
 		log.Info("hmget error:", err)
-		return 0, 0, "", err
+		return 0, 0, err
 	}
 
-	_, err = redis.Scan(reply, &uid, &appid, &uname)
+	_, err = redis.Scan(reply, &uid, &appid)
 	if err != nil {
 		log.Warning("scan error:", err)
-		return 0, 0, "", err
+		return 0, 0, err
 	}
-	return appid, uid, uname, nil	
+	return appid, uid, nil	
 }
 
 func CountUser(appid int64, uid int64) {

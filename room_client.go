@@ -21,6 +21,7 @@ package main
 
 import log "github.com/golang/glog"
 import "unsafe"
+import "sync/atomic"
 
 type RoomClient struct {
 	*Connection
@@ -105,6 +106,12 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 	room_id := room_im.receiver
 	if room_id != client.room_id {
 		log.Warningf("room id:%d is't client's room id:%d\n", room_id, client.room_id)
+		return
+	}
+
+	fb := atomic.LoadInt32(&client.forbidden) 
+	if (fb == 1) {
+		log.Infof("room id:%d client:%d, %d is forbidden", room_id, client.appid, client.uid)
 		return
 	}
 
