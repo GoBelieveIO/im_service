@@ -412,7 +412,8 @@ func ListenClient() {
 	Listen(handle_client, config.listen)
 }
 
-func NewRedisPool(server, password string) *redis.Pool {
+
+func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
 		MaxActive:   500,
@@ -424,6 +425,12 @@ func NewRedisPool(server, password string) *redis.Pool {
 			}
 			if len(password) > 0 {
 				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+			if db > 0 && db < 16 {
+				if _, err := c.Do("SELECT", db); err != nil {
 					c.Close()
 					return nil, err
 				}
@@ -442,9 +449,13 @@ func main() {
 	}
 
 	config = read_route_cfg(flag.Args()[0])
-	log.Infof("listen:%s redis:%s\n", config.listen, config.redis_address)
+	log.Infof("listen:%s\n", config.listen)
 
-	redis_pool = NewRedisPool(config.redis_address, "")
+	log.Infof("redis address:%s password:%s db:%d\n", 
+		config.redis_address, config.redis_password, config.redis_db)
+
+	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
+		config.redis_db)
 
 	ListenClient()
 }

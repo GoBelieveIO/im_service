@@ -214,6 +214,15 @@ func (group_manager *GroupManager) RunOnce() bool {
 		log.Info("dial redis error:", err)
 		return false
 	}
+
+	password := config.redis_password
+	if len(password) > 0 {
+		if _, err := c.Do("AUTH", password); err != nil {
+			c.Close()
+			return false
+		}
+	}
+
 	psc := redis.PubSubConn{c}
 	psc.Subscribe("group_create", "group_disband", "group_member_add", "group_member_remove")
 	group_manager.Reload()

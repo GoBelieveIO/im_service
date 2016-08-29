@@ -69,7 +69,7 @@ func ListenClient() {
 	Listen(handle_client, config.port)
 }
 
-func NewRedisPool(server, password string) *redis.Pool {
+func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
 		MaxActive:   500,
@@ -81,6 +81,12 @@ func NewRedisPool(server, password string) *redis.Pool {
 			}
 			if len(password) > 0 {
 				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+			if db > 0 && db < 16 {
+				if _, err := c.Do("SELECT", db); err != nil {
 					c.Close()
 					return nil, err
 				}
@@ -390,6 +396,15 @@ func SubscribeRedis() bool {
 		log.Info("dial redis error:", err)
 		return false
 	}
+
+	password := config.redis_password
+	if len(password) > 0 {
+		if _, err := c.Do("AUTH", password); err != nil {
+			c.Close()
+			return false
+		}
+	}
+
 	psc := redis.PubSubConn{c}
 	psc.Subscribe("store_update", "speak_forbidden")
 
@@ -442,13 +457,17 @@ func main() {
 	log.Infof("port:%d redis address:%s\n",
 		config.port,  config.redis_address)
 
+	log.Infof("redis address:%s password:%s db:%d\n", 
+		config.redis_address, config.redis_password, config.redis_db)
+
 	log.Info("storage addresses:", config.storage_addrs)
 	log.Info("route addressed:", config.route_addrs)
 	log.Info("kefu appid:", config.kefu_appid)
 	
 	customer_service = NewCustomerService()
 
-	redis_pool = NewRedisPool(config.redis_address, "")
+	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
+		config.redis_db)
 
 	storage_pools = make([]*StorageConnPool, 0)
 	for _, addr := range(config.storage_addrs) {

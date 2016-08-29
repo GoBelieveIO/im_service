@@ -837,7 +837,7 @@ func FlushLoop() {
 	}
 }
 
-func NewRedisPool(server, password string) *redis.Pool {
+func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
 		MaxActive:   500,
@@ -849,6 +849,12 @@ func NewRedisPool(server, password string) *redis.Pool {
 			}
 			if len(password) > 0 {
 				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+			if db > 0 && db < 16 {
+				if _, err := c.Do("SELECT", db); err != nil {
 					c.Close()
 					return nil, err
 				}
@@ -870,7 +876,11 @@ func main() {
 	log.Infof("listen:%s storage root:%s sync listen:%s master address:%s is push system:%d\n", 
 		config.listen, config.storage_root, config.sync_listen, config.master_address, config.is_push_system)
 
-	redis_pool = NewRedisPool(config.redis_address, "")
+	log.Infof("redis address:%s password:%s db:%d\n", 
+		config.redis_address, config.redis_password, config.redis_db)
+
+	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
+		config.redis_db)
 	storage = NewStorage(config.storage_root)
 	
 	master = NewMaster()
