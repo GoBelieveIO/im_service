@@ -843,7 +843,8 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		MaxActive:   500,
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", server)
+			timeout := time.Duration(2)*time.Second
+			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
 			if err != nil {
 				return nil, err
 			}
