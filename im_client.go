@@ -129,6 +129,7 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 
 	msgid, err := SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
+		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
 		return
 	}
 
@@ -136,7 +137,10 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 	SaveMessage(client.appid, msg.sender, client.device_ID, m)
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
-	client.EnqueueMessage(ack)
+	r := client.EnqueueMessage(ack)
+	if !r {
+		log.Warning("send peer message ack error")
+	}
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
@@ -159,6 +163,7 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	if group.super {
 		_, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 		if err != nil {
+			log.Errorf("save group message:%d %d err:%s", err, msg.sender, msg.receiver)
 			return
 		}
 	} else {
@@ -166,12 +171,16 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		for member := range members {
 			_, err := SaveMessage(client.appid, member, client.device_ID, m)
 			if err != nil {
+				log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
 				continue
 			}
 		}
 	}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
-	client.EnqueueMessage(ack)
+	r := client.EnqueueMessage(ack)
+	if !r {
+		log.Warning("send group message ack error")
+	}
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("group message sender:%d group id:%d", msg.sender, msg.receiver)

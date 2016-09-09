@@ -57,25 +57,26 @@ func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 	return Send0Message(client.appid, uid, msg)
 }
 
-func (client *Connection) EnqueueMessage(msg *Message) {
+func (client *Connection) EnqueueMessage(msg *Message) bool {
 	closed := atomic.LoadInt32(&client.closed)
 	if closed > 0 {
 		log.Infof("can't send message to closed connection:%d", client.uid)
-		return
+		return false
 	}
 
 	tc := atomic.LoadInt32(&client.tc)
 	if tc > 0 {
 		log.Infof("can't send message to blocked connection:%d", client.uid)
 		atomic.AddInt32(&client.tc, 1)
-		return
+		return false
 	}
 	select {
 	case client.wt <- msg:
-		break
+		return true
 	case <- time.After(60*time.Second):
 		atomic.AddInt32(&client.tc, 1)
 		log.Infof("send message to wt timed out:%d", client.uid)
+		return false
 	}
 }
 
