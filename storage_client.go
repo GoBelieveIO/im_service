@@ -199,6 +199,36 @@ func (client *StorageConn) LoadOfflineMessage(appid int64, uid int64, device_id 
 	return client.ReceiveMessages()
 }
 
+
+func (client *StorageConn) GetOfflineCount(appid int64, uid int64, device_id int64) (int, error) {
+	id := &LoadOffline{appid:appid, uid:uid, device_id:device_id}
+	msg := &Message{cmd:MSG_GET_OFFLINE_COUNT, body:id}
+	SendMessage(client.conn, msg)
+
+	r := ReceiveMessage(client.conn)
+	if r == nil {
+		client.e = true
+		return 0, errors.New("error connection")
+	}
+	if r.cmd != MSG_RESULT {
+		return 0, errors.New("error cmd")
+	}
+	result := r.body.(*MessageResult)
+	if result.status != 0 {
+		return 0, errors.New("error status")
+	}
+
+	buffer := bytes.NewBuffer(result.content)
+	if buffer.Len() < 4 {
+		return 0, errors.New("error length")
+	}
+
+	var count int32
+	binary.Read(buffer, binary.BigEndian, &count)
+
+	return int(count), nil
+}
+
 func (client *StorageConn) LoadLatestMessage(appid int64, uid int64, limit int32) ([]*EMessage, error) {
 	lh := &LoadLatest{}
 	lh.limit = limit

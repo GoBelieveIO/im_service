@@ -386,6 +386,57 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
 	log.Info("load history message success")
 }
 
+func GetOfflineCount(w http.ResponseWriter, req *http.Request){
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	uid, err := strconv.ParseInt(m.Get("uid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	var did int64
+	device_id := m.Get("device_id")
+	platform_id, _ := strconv.ParseInt(m.Get("platform_id"), 10, 64)
+	if len(device_id) > 0 && (platform_id == 1 || platform_id == 2 || platform_id == 3) {
+		did, err = GetDeviceID(device_id, int(platform_id))
+		if err != nil {
+			log.Error("get device id err:", err)
+			WriteHttpError(500, "server internal error", w)
+			return
+		}
+	}
+	
+	storage_pool := GetStorageConnPool(uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		WriteHttpError(500, "server internal error", w)
+		return
+	}
+	defer storage_pool.Release(storage)
+
+
+	count, err := storage.GetOfflineCount(appid, uid, did)
+	if err != nil {
+		log.Error("get offline count err:", err)
+		WriteHttpError(500, "server internal error", w)
+		return
+	}
+	log.Infof("get offline %d %d %d count:%d", appid, uid, did, count)
+	obj := make(map[string]interface{})
+	obj["count"] = count
+	WriteHttpObj(obj, w)
+}
+
 func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {

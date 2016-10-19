@@ -280,6 +280,42 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 	return messages
 }
 
+func (storage *PeerStorage) GetOfflineCount(appid int64, uid int64, did int64) int {
+	last_id, err := storage.GetLastMessageID(appid, uid)
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	last_received_id, _ := storage.GetLastReceivedID(appid, uid, did)
+
+	log.Infof("last id:%d last received id:%d", last_id, last_received_id)
+
+	msgid := last_id
+	for ; msgid > 0; {
+		msg := storage.LoadMessage(msgid)
+		if msg == nil {
+			log.Warningf("load message:%d error\n", msgid)
+			break
+		}
+		if msg.cmd != MSG_OFFLINE {
+			log.Warning("invalid message cmd:", Command(msg.cmd))
+			break
+		}
+		off := msg.body.(*OfflineMessage)
+
+		if off.msgid == 0 || off.msgid <= last_received_id {
+			break
+		}
+
+		count += 1
+		
+		msgid = off.prev_msgid
+	}
+
+	return count
+}
+
 
 func (storage *PeerStorage) LoadOfflineMessage(appid int64, uid int64, did int64) []*EMessage {
 	last_id, err := storage.GetLastMessageID(appid, uid)

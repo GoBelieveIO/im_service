@@ -37,6 +37,8 @@ const MSG_LOAD_HISTORY = 208
 //初始化last received id
 const MSG_INIT_QUEUE = 209
 const MSG_INIT_GROUP_QUEUE = 210
+const MSG_GET_OFFLINE_COUNT = 211
+const MSG_GET_GROUP_OFFLINE_COUNT = 212
 
 
 //主从同步消息
@@ -64,7 +66,10 @@ func init() {
 	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(DQGroupMessage)}
 	message_creators[MSG_INIT_QUEUE] = func()IMessage{return new(InitQueue)}
 	message_creators[MSG_INIT_GROUP_QUEUE] = func()IMessage{return new(InitGroupQueue)}
+	message_creators[MSG_GET_OFFLINE_COUNT] = func()IMessage{return new(LoadOffline)}
+	message_creators[MSG_GET_GROUP_OFFLINE_COUNT] = func()IMessage{return new(LoadGroupOffline)}
 
+	
 
 	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
