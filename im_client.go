@@ -277,10 +277,6 @@ func (client *IMClient) DequeueGroupMessage(msgid int64, gid int64) {
 }
 
 func (client *IMClient) DequeueMessage(msgid int64) {
-	if client.device_ID == 0 {
-		return
-	}
-	
 	storage_pool := GetStorageConnPool(client.uid)
 	storage, err := storage_pool.Get()
 	if err != nil {

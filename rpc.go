@@ -406,7 +406,7 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request){
 	var did int64
 	device_id := m.Get("device_id")
 	platform_id, _ := strconv.ParseInt(m.Get("platform_id"), 10, 64)
-	if len(device_id) > 0 && (platform_id == 1 || platform_id == 2 || platform_id == 3) {
+	if len(device_id) > 0 && (platform_id == 1 || platform_id == 2) {
 		did, err = GetDeviceID(device_id, int(platform_id))
 		if err != nil {
 			log.Error("get device id err:", err)

@@ -435,9 +435,7 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 }
 
 func (client *Client) HandleDQGroupMessage(dq *DQGroupMessage) {
-	if dq.device_id > 0 {
-		storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.gid, dq.receiver, dq.device_id)
-	}
+	storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.gid, dq.receiver, dq.device_id)
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
@@ -516,9 +514,7 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 }
 
 func (client *Client) HandleDQMessage(dq *DQMessage) {
-	if dq.device_id != 0 {
-		storage.DequeueOffline(dq.msgid, dq.appid, dq.receiver, dq.device_id)
-	}
+	storage.DequeueOffline(dq.msgid, dq.appid, dq.receiver, dq.device_id)
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
