@@ -348,6 +348,7 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
 	http.HandleFunc("/init_message_queue", InitMessageQueue)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
+	http.HandleFunc("/dequeue_message", DequeueMessage)
 
 	handler := loggingHandler{http.DefaultServeMux}
 	HTTPService(addr, handler)

@@ -845,3 +845,60 @@ func InitMessageQueue(w http.ResponseWriter, req *http.Request) {
 	}
 	w.WriteHeader(200)
 }
+
+
+func DequeueMessage(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	obj, err := simplejson.NewJson(body)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	appid, err := obj.Get("appid").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	uid, err := obj.Get("uid").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	msgid, err := obj.Get("msgid").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	dq := &DQMessage{msgid:msgid, appid:appid, receiver:uid, device_id:0}
+
+	storage_pool := GetStorageConnPool(uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		WriteHttpError(500, "server internal error", w)
+	}
+	defer storage_pool.Release(storage)
+
+	err = storage.DequeueMessage(dq)
+
+	if err != nil {
+		log.Error("init queue err:", err)
+		WriteHttpError(500, "server internal error", w)
+		return
+	}
+
+	w.WriteHeader(200)
+}
