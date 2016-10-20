@@ -153,7 +153,7 @@ func (client *Connection) send(msg *Message) {
 func (client *Connection) close() {
 	if conn, ok := client.conn.(net.Conn); ok {
 		conn.Close()
-	} else if conn, ok := client.conn.(engineio.Conn); ok {
+	} else if _, ok := client.conn.(engineio.Conn); ok {
 		//bug:https://github.com/googollee/go-engine.io/issues/34
 		//conn.Close()
 	}
