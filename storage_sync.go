@@ -199,7 +199,7 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 	SendMessage(conn, msg)
 
 	for {
-		msg := ReceiveMessage(conn)
+		msg := ReceiveLimitMessage(conn, 32*1024*1024)
 		if msg == nil {
 			return
 		}

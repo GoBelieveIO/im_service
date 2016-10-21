@@ -845,7 +845,7 @@ func SendMessage(conn io.Writer, msg *Message) error {
 	return nil
 }
 
-func ReceiveMessage(conn io.Reader) *Message {
+func ReceiveLimitMessage(conn io.Reader, limit_size int) *Message {
 	buff := make([]byte, 12)
 	_, err := io.ReadFull(conn, buff)
 	if err != nil {
@@ -854,7 +854,7 @@ func ReceiveMessage(conn io.Reader) *Message {
 	}
 
 	length, seq, cmd, version := ReadHeader(buff)
-	if length < 0 || length >= 32*1024 {
+	if length < 0 || length >= limit_size {
 		log.Info("invalid len:", length)
 		return nil
 	}
@@ -874,36 +874,16 @@ func ReceiveMessage(conn io.Reader) *Message {
 		return nil
 	}
 	return message
+}
+
+
+func ReceiveMessage(conn io.Reader) *Message {
+	return ReceiveLimitMessage(conn, 32*1024)
 }
 
 //消息大小限制在1M
 func ReceiveStorageMessage(conn io.Reader) *Message {
-	buff := make([]byte, 12)
-	_, err := io.ReadFull(conn, buff)
-	if err != nil {
-		log.Info("sock read error:", err)
-		return nil
-	}
-
-	length, seq, cmd, version := ReadHeader(buff)
-	if length < 0 || length >= 1024*1024 {
-		log.Info("invalid len:", length)
-		return nil
-	}
-	buff = make([]byte, length)
-	_, err = io.ReadFull(conn, buff)
-	if err != nil {
-		log.Info("sock read error:", err)
-		return nil
-	}
-
-	message := new(Message)
-	message.cmd = cmd
-	message.seq = seq
-	message.version = version
-	if !message.FromData(buff) {
-		log.Warning("parse error")
-		return nil
-	}
-	return message
+	return ReceiveLimitMessage(conn, 1024*1024)
 }
+
+
