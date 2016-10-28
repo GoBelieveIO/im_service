@@ -492,18 +492,21 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 	} else if sae.msg.cmd == MSG_CUSTOMER {
 		cs := sae.msg.body.(*CustomerMessage)
 
-		if appid != cs.customer_appid && !IsUserOnline(appid, uid) {
+		if (appid != cs.customer_appid || uid != cs.customer_id) && !IsUserOnline(appid, uid) {
 			client.PublishCustomerMessage(appid, uid, cs, sae.msg.cmd)
 		}
 	} else if sae.msg.cmd == MSG_CUSTOMER_SUPPORT {
 		cs := sae.msg.body.(*CustomerMessage)
-		if appid == cs.customer_appid && !IsUserOnline(appid, uid) {
-			client.PublishCustomerMessage(appid, uid, cs, sae.msg.cmd)			
-		} 
-		//客服发出的消息群发到其它客服人员
-		if appid != cs.customer_appid && cs.seller_id != uid && 
-			!IsUserOnline(appid, uid) {
-			client.PublishCustomerMessage(appid, uid, cs,sae.msg.cmd)
+
+		if cs.customer_appid == appid && cs.customer_id == uid {
+			if !IsUserOnline(appid, uid) {
+				client.PublishCustomerMessage(appid, uid, cs, sae.msg.cmd)
+			}
+		} else {
+			//客服发出的消息群发到其它客服人员
+			if cs.seller_id != uid && !IsUserOnline(appid, uid) {
+				client.PublishCustomerMessage(appid, uid, cs, sae.msg.cmd)
+			}
 		}
 	} else if sae.msg.cmd == MSG_SYSTEM {
 		sys := sae.msg.body.(*SystemMessage)

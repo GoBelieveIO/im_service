@@ -238,7 +238,9 @@ func DispatchAppMessage(amsg *AppMessage) {
 
 		if amsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
 			m := amsg.msg.body.(*CustomerMessage)
-			if m.customer_appid != c.appid && m.seller_id == amsg.receiver && amsg.device_id == c.device_ID {
+
+			if (m.customer_appid != amsg.appid || m.customer_id != amsg.receiver) && 
+				m.seller_id == amsg.receiver && amsg.device_id == c.device_ID {
 				continue
 			}
 		}
