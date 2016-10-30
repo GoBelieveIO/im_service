@@ -3,10 +3,9 @@
 .idea
 bin
 *.cfg
-im
-ims
-imr
-im_api
+im/im
+ims/ims
+imr/imr
 benchmark
 benchmark_group
 benchmark_connection
