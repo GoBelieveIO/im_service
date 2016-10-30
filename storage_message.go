@@ -42,9 +42,9 @@ const MSG_GET_GROUP_OFFLINE_COUNT = 212
 
 
 //主从同步消息
-const MSG_SYNC_BEGIN = 220
-const MSG_SYNC_MESSAGE = 221
-const MSG_SYNC_MESSAGE_BATCH = 222
+const MSG_STORAGE_SYNC_BEGIN = 220
+const MSG_STORAGE_SYNC_MESSAGE = 221
+const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
 //内部文件存储使用
 const MSG_GROUP_IM_LIST = 252
@@ -77,9 +77,9 @@ func init() {
 	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage)}
 	message_creators[MSG_ACK_IN] = func()IMessage{return new(MessageACKIn)}
 
-	message_creators[MSG_SYNC_BEGIN] = func()IMessage{return new(SyncCursor)}
-	message_creators[MSG_SYNC_MESSAGE] = func()IMessage{return new(EMessage)}
-	message_creators[MSG_SYNC_MESSAGE_BATCH] = func()IMessage{return new(MessageBatch)}
+	message_creators[MSG_STORAGE_SYNC_BEGIN] = func()IMessage{return new(SyncCursor)}
+	message_creators[MSG_STORAGE_SYNC_MESSAGE] = func()IMessage{return new(EMessage)}
+	message_creators[MSG_STORAGE_SYNC_MESSAGE_BATCH] = func()IMessage{return new(MessageBatch)}
 
 	message_descriptions[MSG_SAVE_AND_ENQUEUE] = "MSG_SAVE_AND_ENQUEUE"
 	message_descriptions[MSG_DEQUEUE] = "MSG_DEQUEUE"
@@ -93,9 +93,9 @@ func init() {
 	message_descriptions[MSG_SAVE_AND_ENQUEUE_GROUP] = "MSG_SAVE_AND_ENQUEUE_GROUP"
 	message_descriptions[MSG_DEQUEUE_GROUP] = "MSG_DEQUEUE_GROUP"
 
-	message_descriptions[MSG_SYNC_BEGIN] = "MSG_SYNC_BEGIN"
-	message_descriptions[MSG_SYNC_MESSAGE] = "MSG_SYNC_MESSAGE"
-	message_descriptions[MSG_SYNC_MESSAGE_BATCH] = "MSG_SYNC_MESSAGE_BATCH"
+	message_descriptions[MSG_STORAGE_SYNC_BEGIN] = "MSG_STORAGE_SYNC_BEGIN"
+	message_descriptions[MSG_STORAGE_SYNC_MESSAGE] = "MSG_STORAGE_SYNC_MESSAGE"
+	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
 
 }
 type SyncCursor struct {

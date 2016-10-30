@@ -222,10 +222,6 @@ func (client *IMClient) HandleACK(ack *MessageACK) {
 }
 
 
-func (client *IMClient) HandleSubsribe(msg *MessageSubscribeState) {
-	log.Info("unsupport subscribe message")
-}
-
 func (client *IMClient) HandleRTMessage(msg *Message) {
 	rt := msg.body.(*RTMessage)
 	if rt.sender != client.uid {
@@ -251,8 +247,6 @@ func (client *IMClient) HandleMessage(msg *Message) {
 		client.HandleACK(msg.body.(*MessageACK))
 	case MSG_INPUTING:
 		client.HandleInputing(msg.body.(*MessageInputing))
-	case MSG_SUBSCRIBE_ONLINE_STATE:
-		client.HandleSubsribe(msg.body.(*MessageSubscribeState))
 	case MSG_RT:
 		client.HandleRTMessage(msg)
 	case MSG_UNREAD_COUNT:

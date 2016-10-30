@@ -43,7 +43,7 @@ func (client *SyncClient) RunLoop() {
 	if msg == nil {
 		return
 	}
-	if msg.cmd != MSG_SYNC_BEGIN {
+	if msg.cmd != MSG_STORAGE_SYNC_BEGIN {
 		return
 	}
 
@@ -52,7 +52,7 @@ func (client *SyncClient) RunLoop() {
 	c := storage.LoadSyncMessagesInBackground(cursor.msgid)
 	
 	for batch := range(c) {
-		msg := &Message{cmd:MSG_SYNC_MESSAGE_BATCH, body:batch}
+		msg := &Message{cmd:MSG_STORAGE_SYNC_MESSAGE_BATCH, body:batch}
 		seq = seq + 1
 		msg.seq = seq
 		SendMessage(client.conn, msg)
@@ -128,7 +128,7 @@ func (master *Master) SendBatch(cache []*EMessage) {
 		batch.last_id = em.msgid
 		batch.msgs = append(batch.msgs, em.msg)
 	}
-	m := &Message{cmd:MSG_SYNC_MESSAGE_BATCH, body:batch}
+	m := &Message{cmd:MSG_STORAGE_SYNC_MESSAGE_BATCH, body:batch}
 	clients := master.CloneClientSet()
 	for c := range(clients) {
 		c.ewt <- m
@@ -193,7 +193,7 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 	cursor := &SyncCursor{msgid}
 	log.Info("cursor msgid:", msgid)
 
-	msg := &Message{cmd:MSG_SYNC_BEGIN, body:cursor}
+	msg := &Message{cmd:MSG_STORAGE_SYNC_BEGIN, body:cursor}
 	seq += 1
 	msg.seq = seq
 	SendMessage(conn, msg)
@@ -204,10 +204,10 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 			return
 		}
 
-		if msg.cmd == MSG_SYNC_MESSAGE {
+		if msg.cmd == MSG_STORAGE_SYNC_MESSAGE {
 			emsg := msg.body.(*EMessage)
 			storage.SaveSyncMessage(emsg)
-		} else if msg.cmd == MSG_SYNC_MESSAGE_BATCH {
+		} else if msg.cmd == MSG_STORAGE_SYNC_MESSAGE_BATCH {
 			mb := msg.body.(*MessageBatch)
 			storage.SaveSyncMessageBatch(mb)
 		} else {
