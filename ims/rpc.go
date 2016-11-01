@@ -59,6 +59,16 @@ func SavePeerMessage(addr string, m *PeerMessage) (int64, error) {
 	msg := &Message{cmd:int(m.Cmd), version:DEFAULT_VERSION}
 	msg.FromData(m.Raw)
 	msgid := storage.SavePeerMessage(m.AppID, m.Uid, m.DeviceID, msg)
+
+	//兼容版本1
+	id := &AppUserID{appid:m.AppID, uid:m.Uid}
+	s := FindClientSet(id)
+	for c := range s {
+		am := &AppMessage{appid:m.AppID, receiver:m.Uid, msgid:msgid, device_id:m.DeviceID, msg:msg}
+		m := &Message{cmd:MSG_PUBLISH, body:am}
+		c.wt <- m
+	}
+
 	return msgid, nil
 }
 
@@ -66,6 +76,15 @@ func SaveGroupMessage(addr string, m *GroupMessage) (int64, error) {
 	msg := &Message{cmd:int(m.Cmd), version:DEFAULT_VERSION}
 	msg.FromData(m.Raw)
 	msgid := storage.SaveGroupMessage(m.AppID, m.GroupID, m.DeviceID, msg)
+
+	//兼容版本1
+	s := FindGroupClientSet(m.AppID, m.GroupID)
+	for c := range s {
+		am := &AppMessage{appid:m.AppID, receiver:m.GroupID, msgid:msgid, device_id:m.DeviceID, msg:msg}
+		m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
+		c.wt <- m
+	}
+
 	return msgid, nil
 }
 
