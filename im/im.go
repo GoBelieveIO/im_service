@@ -309,22 +309,24 @@ func StartHttpServer(addr string) {
 
 
 func SyncKeyService() {
-	select {
-	case s := <- sync_c:
-		origin := GetSyncKey(s.AppID, s.Uid)
-		if s.LastMsgID > origin {
-			log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
-			SaveSyncKey(s.AppID, s.Uid, s.LastMsgID)
+	for {
+		select {
+		case s := <- sync_c:
+			origin := GetSyncKey(s.AppID, s.Uid)
+			if s.LastMsgID > origin {
+				log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
+				SaveSyncKey(s.AppID, s.Uid, s.LastMsgID)
+			}
+			break
+		case s := <- group_sync_c:
+			origin := GetGroupSyncKey(s.AppID, s.Uid, s.GroupID)
+			if s.LastMsgID > origin {
+				log.Infof("save group sync key:%d %d %d %d", 
+					s.AppID, s.Uid, s.GroupID, s.LastMsgID)
+				SaveGroupSyncKey(s.AppID, s.Uid, s.GroupID, s.LastMsgID)
+			}
+			break
 		}
-		break
-	case s := <- group_sync_c:
-		origin := GetGroupSyncKey(s.AppID, s.Uid, s.GroupID)
-		if s.LastMsgID > origin {
-			log.Infof("save group sync key:%d %d %d %d", 
-				s.AppID, s.Uid, s.GroupID, s.LastMsgID)
-			SaveGroupSyncKey(s.AppID, s.Uid, s.GroupID, s.LastMsgID)
-		}
-		break
 	}
 }
 

@@ -205,7 +205,7 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 
 	c := make([]*EMessage, 0, 10)
 
-	for ; msgid > 0; {
+	for ; last_id > 0; {
 		msg := storage.LoadMessage(last_id)
 		if msg == nil {
 			log.Warningf("load message:%d error\n", msgid)

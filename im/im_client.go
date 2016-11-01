@@ -100,6 +100,7 @@ func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		LastMsgID:last_id,
 	}
 
+	log.Info("sync group message...", group_sync_key.sync_key, last_id)
 	resp, err := rpc.Call("SyncGroupMessage", s)
 	if err != nil {
 		log.Warning("sync message err:", err)
@@ -108,7 +109,7 @@ func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 
 	messages := resp.([]*HistoryMessage)
 
-	sk := &GroupSyncKey{sync_key:group_sync_key.sync_key, group_id:group_id}
+	sk := &GroupSyncKey{sync_key:last_id, group_id:group_id}
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_BEGIN, body:sk})
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
@@ -178,6 +179,8 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 				continue
 			}
 		}
+
+		
 		client.EnqueueMessage(m)
 	}
 

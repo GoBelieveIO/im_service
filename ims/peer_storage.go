@@ -225,7 +225,8 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 			msg.cmd != MSG_GROUP_NOTIFICATION &&
 			msg.cmd != MSG_IM && 
 			msg.cmd != MSG_CUSTOMER && 
-			msg.cmd != MSG_CUSTOMER_SUPPORT {
+			msg.cmd != MSG_CUSTOMER_SUPPORT &&
+			msg.cmd != MSG_SYSTEM {
 			last_id = off.prev_msgid
 			continue
 		}

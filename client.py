@@ -31,7 +31,19 @@ MSG_LEAVE_ROOM = 19
 MSG_ROOM_IM = 20
 MSG_SYSTEM = 21
 MSG_UNREAD_COUNT = 22
-MSG_CUSTOMER_SERVICE = 23
+MSG_CUSTOMER_SERVICE_ = 23
+
+MSG_SYNC = 26
+MSG_SYNC_BEGIN = 27
+MSG_SYNC_END = 28
+MSG_SYNC_NOTIFY = 29
+
+MSG_SYNC_GROUP = 30
+MSG_SYNC_GROUP_BEGIN = 31
+MSG_SYNC_GROUP_END = 32
+MSG_SYNC_GROUP_NOTIFY = 33
+
+
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -53,19 +65,19 @@ class IMMessage:
         self.msgid = 0
         self.content = ""
 
-class CSMessage:
-    def __init__(self):
-        self.sender = 0
-        self.receiver = 0
-        self.timestamp = 0
-        self.content = ""
-    
+    def __str__(self):
+        return str((self.sender, self.receiver, self.timestamp, self.content))
+
+
 #RoomMessage
 class RTMessage:
     def __init__(self):
         self.sender = 0
         self.receiver = 0
         self.content = ""
+    def __str__(self):
+        return str((self.sender, self.receiver, self.content))
+
 
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
@@ -77,11 +89,6 @@ def send_message(cmd, seq, msg, sock):
         length = 24 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
-        sock.sendall(h+b+msg.content)
-    elif cmd == MSG_CUSTOMER_SERVICE:
-        length = 20 + len(msg.content)
-        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
-        b = struct.pack("!qqi", msg.sender, msg.receiver, msg.timestamp)
         sock.sendall(h+b+msg.content)
     elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         length = 16 + len(msg.content)
@@ -103,6 +110,15 @@ def send_message(cmd, seq, msg, sock):
     elif cmd == MSG_ENTER_ROOM or cmd == MSG_LEAVE_ROOM:
         h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!q", msg)
+        sock.sendall(h+b)
+    elif cmd == MSG_SYNC:
+        h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!q", msg)
+        sock.sendall(h+b)
+    elif cmd == MSG_SYNC_GROUP:
+        group_id, sync_key = msg
+        h = struct.pack("!iibbbb", 16, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!qq", group_id, sync_key)
         sock.sendall(h+b)
     else:
         print "eeeeee"
@@ -129,14 +145,9 @@ def recv_message(sock):
         return cmd, seq, (up_timestamp, platform_id, device_id)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         im = IMMessage()
-        im.sender, im.receiver, _, _ = struct.unpack("!qqii", content[:24])
+        im.sender, im.receiver, im.timestamp, _ = struct.unpack("!qqii", content[:24])
         im.content = content[24:]
         return cmd, seq, im
-    elif cmd == MSG_CUSTOMER_SERVICE:
-        cs = CSMessage()
-        cs.sender, cs.receiver, cs.timestamp = struct.unpack("!qqi", content[:20])
-        cs.content = content[20:]
-        return cmd, seq, cs
     elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         rt = RTMessage()
         rt.sender, rt.receiver, = struct.unpack("!qq", content[:16])
@@ -152,7 +163,20 @@ def recv_message(sock):
         return cmd, seq, (sender, receiver)
     elif cmd == MSG_PONG:
         return cmd, seq, None
+    elif cmd == MSG_SYNC_BEGIN or \
+         cmd == MSG_SYNC_END or \
+         cmd == MSG_SYNC_NOTIFY:
+        sync_key, = struct.unpack("!q", content)
+        return cmd, seq, sync_key
+    elif cmd == MSG_SYNC_GROUP_BEGIN or \
+         cmd == MSG_SYNC_GROUP_END or \
+         cmd == MSG_SYNC_GROUP_NOTIFY:
+        group_id, sync_key = struct.unpack("!qq", content)
+        return cmd, seq, (group_id, sync_key)
+    elif cmd == MSG_GROUP_NOTIFICATION:
+        return cmd, seq, content
     else:
+        print "unknow cmd:", cmd
         return cmd, seq, content
 
 APP_ID = 7
@@ -211,21 +235,79 @@ def recv_rst(uid):
 
 count = 1
 
+def recv_group_client(uid, group_id, port, handler):
+    recv_client_(uid, port, handler, group_id)
+
 def recv_client(uid, port, handler):
+    recv_client_(uid, port, handler, None)
+
+def recv_client_(uid, port, handler, group_id):
     global task
     sock, seq =  connect_server(uid, port)
+
+    group_sync_keys = {}
+    sync_key = 0
+
+    seq += 1
+    send_message(MSG_SYNC, seq, sync_key, sock)
+    if group_id:
+        group_sync_keys[group_id] = 0
+        seq += 1
+        send_message(MSG_SYNC_GROUP, seq, (group_id, sync_key), sock)
+    quit = False
+    begin = False
     while True:
         cmd, s, msg = recv_message(sock)
-        seq += 1
-        send_message(MSG_ACK, seq, s, sock)
-        if handler(cmd, s, msg):
-            break
+        print "cmd:", cmd, "msg:", msg
+        if cmd == MSG_SYNC_BEGIN:
+            begin = True
+        elif cmd == MSG_SYNC_END:
+            begin = False
+            new_sync_key = msg
+            if new_sync_key > sync_key:
+                sync_key = new_sync_key
+                seq += 1
+                send_message(MSG_SYNC, seq, sync_key, sock)
+            if quit:
+                break
+        elif cmd == MSG_SYNC_NOTIFY:
+            new_sync_key = msg
+            if new_sync_key > sync_key:
+                seq += 1
+                send_message(MSG_SYNC, seq, sync_key, sock)
+        elif cmd == MSG_SYNC_GROUP_NOTIFY:
+            group_id, new_sync_key = msg
+            skey = group_sync_keys.get(group_id, 0)
+            if new_sync_key > skey:
+                seq += 1
+                send_message(MSG_SYNC_GROUP, seq, (group_id, skey), sock)
+        elif cmd == MSG_SYNC_GROUP_BEGIN:
+            begin = True
+        elif cmd == MSG_SYNC_GROUP_END:
+            begin = False
+            group_id, new_sync_key = msg
+            skey = group_sync_keys.get(group_id, 0)
+            if new_sync_key > skey:
+                group_sync_keys[group_id] = new_sync_key
+                skey = group_sync_keys.get(group_id, 0)
+                seq += 1
+                send_message(MSG_SYNC_GROUP, seq, (group_id, skey), sock)
+
+            if quit:
+                break
+
+        elif handler(cmd, s, msg):
+            quit = True
+            if not begin:
+                break
+
+
+    
     task += 1
 
 def recv_inputing(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_INPUTING:
-            print "inputting cmd:", cmd, msg
             return True
         else:
             return False
@@ -236,58 +318,39 @@ def recv_inputing(uid, port=23000):
 def recv_message_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_IM:
-            print "cmd:", cmd, msg.content, msg.sender, msg.receiver
             return True
         else:
-            print "cmd:", cmd
             return False
 
     recv_client(uid, port, handle_message)
     print "recv message success"
 
-def recv_customer_service_message_client(uid, port=23000):
-    def handle_message(cmd, s, msg):
-        if cmd == MSG_CUSTOMER_SERVICE:
-            print "cmd:", cmd, msg.content, msg.sender, msg.receiver, msg.timestamp
-            return True
-        else:
-            print "cmd:", cmd
-            return False
-
-    recv_client(uid, port, handle_message)
-    print "recv customer service message success"
     
 def recv_rt_message_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_RT:
-            print "cmd:", cmd, msg.content, msg.sender, msg.receiver
             return True
         else:
-            print "cmd:", cmd
             return False
 
     recv_client(uid, port, handle_message)
     print "recv rt message success"
 
-def recv_group_message_client(uid, port=23000):
+def recv_group_message_client(uid, port=23000, group_id = 0):
     def handle_message(cmd, s, msg):
         if cmd == MSG_GROUP_IM:
-            print "cmd:", cmd, msg.content, msg.sender, msg.receiver
             return True
         elif cmd == MSG_IM:
-            print "cmd:", cmd, msg.content, msg.sender, msg.receiver
             return False
         else:
-            print "cmd:", cmd, "body:", msg
             return False
-    recv_client(uid, port, handle_message)
+    recv_group_client(uid, group_id, port, handle_message)
     print "recv group message success"
 
 def notification_recv_client(uid, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_GROUP_NOTIFICATION:
             notification = json.loads(msg)
-            print "cmd:", cmd, " ", msg
             if notification.has_key("create"):
                 return True
             else:
@@ -315,10 +378,8 @@ def recv_room_client(uid, port, room_id, handler):
 def recv_room_message_client(uid, room_id, port=23000):
     def handle_message(cmd, s, msg):
         if cmd == MSG_ROOM_IM:
-            print "cmd:", cmd, msg.content, msg.sender, msg.receiver
             return True
         else:
-            print "cmd:", cmd, msg
             return False
 
     recv_room_client(uid, port, room_id, handle_message)
@@ -341,18 +402,6 @@ def send_room_message_client(uid, room_id):
     task += 1
     print "send success"
 
-def send_customer_service_message_client(uid):
-    global task
-    sock, seq =  connect_server(uid, 23000)
-
-    cs = CSMessage()
-    cs.sender = uid
-    cs.receiver = 0
-    cs.content = "test customer service"
-    seq += 1
-    send_message(MSG_CUSTOMER_SERVICE, seq, cs, sock)
-    task += 1
-    print "send customer service success"
 
 def send_rt_client(uid, receiver):
     global task
@@ -365,7 +414,6 @@ def send_rt_client(uid, receiver):
     send_message(MSG_RT, seq, im, sock)
     task += 1
     print "send success"
-
 
 def send_client(uid, receiver, msg_type):
     global task
@@ -389,7 +437,7 @@ def send_client(uid, receiver, msg_type):
             seq += 1
             send_message(MSG_ACK, seq, s, sock)
         else:
-            print "cmd:", cmd, " ", msg
+            pass
     task += 1
     print "send success"
 
@@ -401,6 +449,7 @@ def send_inputing(uid, receiver):
     seq += 1
     send_message(MSG_INPUTING, seq, m, sock)
     task += 1
+    
     
 def send_http_peer_message(uid, receiver):
     global task
@@ -467,6 +516,8 @@ def recv_system_message_client(uid):
 
     recv_client(uid, 23000, handle_message)
     print "recv system message success"
+
+
 
     
 def TestCluster():
@@ -736,7 +787,7 @@ def _TestGroupOffline(is_super):
     
     time.sleep(1)
 
-    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143,23000))
+    t3 = threading.Thread(target=recv_group_message_client, args=(13635273143, 23000, group_id))
     t3.setDaemon(True)
     t3.start()
 
@@ -892,23 +943,6 @@ def TestSystemMessage():
     print "test system message completed"
     
 
-def TestCustomerServiceMessage():
-    global task
-    task = 0
-    t3 = threading.Thread(target=recv_customer_service_message_client, args=(100, ))
-    t3.setDaemon(True)
-    t3.start()
-    
-    time.sleep(1)
-
-    t2 = threading.Thread(target=send_customer_service_message_client, args=(13635273142, ))
-    t2.setDaemon(True)
-    t2.start()
-    
-    while task < 2:
-        time.sleep(1)
-
-    print "test customer service message completed"
 
 def main():
     cluster = True
@@ -936,14 +970,15 @@ def main():
      
     TestSuperGroupOffline()
     time.sleep(1)
-     
+
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)
      
         TestClusterSuperGroupMessage()
         time.sleep(1)
-     
+
+
     TestInputing()
     time.sleep(1)
      
@@ -985,3 +1020,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

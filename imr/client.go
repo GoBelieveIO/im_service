@@ -79,6 +79,8 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	case MSG_PUBLISH:
 		client.HandlePublish(msg.body.(*AppMessage))
+	case MSG_PUBLISH_GROUP:
+		client.HandlePublishGroup(msg.body.(*AppMessage))
 	case MSG_SUBSCRIBE_ROOM:
 		client.HandleSubscribeRoom(msg.body.(*AppRoomID))
 	case MSG_UNSUBSCRIBE_ROOM:
