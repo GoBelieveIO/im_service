@@ -71,14 +71,22 @@ const MSG_CUSTOMER_SUPPORT = 25 //客服->顾客
 
 //客户端->服务端
 const MSG_SYNC = 26 //同步消息
-const MSG_SYNC_GROUP = 27
- 
 //服务端->客服端
-const MSG_SYNC_BEGIN = 28
-const MSG_SYNC_END = 29
+const MSG_SYNC_BEGIN = 27
+const MSG_SYNC_END = 28
+//通知客户端有新消息
+const MSG_SYNC_NOTIFY = 29
 
-const MSG_SYNC_GROUP_BEGIN = 30
-const MSG_SYNC_GROUP_END = 31
+
+//客户端->服务端
+const MSG_SYNC_GROUP = 30//同步超级群消息
+//服务端->客服端
+const MSG_SYNC_GROUP_BEGIN = 31
+const MSG_SYNC_GROUP_END = 32
+//通知客户端有新消息
+const MSG_SYNC_GROUP_NOTIFY = 33
+
+
 
 
 const MSG_VOIP_CONTROL = 64
@@ -105,6 +113,18 @@ func init() {
 
 	message_creators[MSG_CUSTOMER] = func()IMessage{return new(CustomerMessage)}
 	message_creators[MSG_CUSTOMER_SUPPORT] = func()IMessage{return new(CustomerMessage)}
+
+
+	message_creators[MSG_SYNC] = func()IMessage{return new(SyncKey)}
+	message_creators[MSG_SYNC_BEGIN] = func()IMessage{return new(SyncKey)}
+	message_creators[MSG_SYNC_END] = func()IMessage{return new(SyncKey)}
+	message_creators[MSG_SYNC_NOTIFY] = func()IMessage{return new(SyncKey)}
+
+	message_creators[MSG_SYNC_GROUP] = func()IMessage{return new(GroupSyncKey)}
+	message_creators[MSG_SYNC_GROUP_BEGIN] = func()IMessage{return new(GroupSyncKey)}
+	message_creators[MSG_SYNC_GROUP_END] = func()IMessage{return new(GroupSyncKey)}
+	message_creators[MSG_SYNC_GROUP_NOTIFY] = func()IMessage{return new(GroupSyncKey)}
+
 
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
@@ -136,6 +156,17 @@ func init() {
 	message_descriptions[MSG_CUSTOMER_SERVICE_] = "MSG_CUSTOMER_SERVICE"
 	message_descriptions[MSG_CUSTOMER] = "MSG_CUSTOMER"
 	message_descriptions[MSG_CUSTOMER_SUPPORT] = "MSG_CUSTOMER_SUPPORT"
+
+	message_descriptions[MSG_SYNC] = "MSG_SYNC"
+	message_descriptions[MSG_SYNC_BEGIN] = "MSG_SYNC_BEGIN"
+	message_descriptions[MSG_SYNC_END] = "MSG_SYNC_END"
+	message_descriptions[MSG_SYNC_NOTIFY] = "MSG_SYNC_NOTIFY"
+
+	message_descriptions[MSG_SYNC_GROUP] = "MSG_SYNC_GROUP"
+	message_descriptions[MSG_SYNC_GROUP_BEGIN] = "MSG_SYNC_GROUP_BEGIN"
+	message_descriptions[MSG_SYNC_GROUP_END] = "MSG_SYNC_GROUP_END"
+	message_descriptions[MSG_SYNC_GROUP_NOTIFY] = "MSG_SYNC_GROUP_NOTIFY"
+
 	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 }
 
@@ -351,33 +382,10 @@ type IMMessage struct {
 	sender    int64
 	receiver  int64
 	timestamp int32
-	msgid     int32//v2服务器的消息id
+	msgid     int32
 	content   string
 }
 
-func (message *IMMessage) ToDataV2() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, message.sender)
-	binary.Write(buffer, binary.BigEndian, message.receiver)
-	binary.Write(buffer, binary.BigEndian, message.timestamp)
-	binary.Write(buffer, binary.BigEndian, message.msgid)
-	buffer.Write([]byte(message.content))
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (im *IMMessage) FromDataV2(buff []byte) bool {
-	if len(buff) < 28 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &im.sender)
-	binary.Read(buffer, binary.BigEndian, &im.receiver)
-	binary.Read(buffer, binary.BigEndian, &im.timestamp)
-	binary.Read(buffer, binary.BigEndian, &im.msgid)
-	im.content = string(buff[28:])
-	return true
-}
 
 
 func (message *IMMessage) ToDataV0() []byte {
@@ -431,20 +439,16 @@ func (im *IMMessage) FromDataV1(buff []byte) bool {
 func (im *IMMessage) ToData(version int) []byte {
 	if version == 0 {
 		return im.ToDataV0()
-	} else if version == 1 {
-		return im.ToDataV1()
 	} else {
-		return im.ToDataV2()
+		return im.ToDataV1()
 	}
 }
 
 func (im *IMMessage) FromData(version int, buff []byte) bool {
 	if version == 0 {
 		return im.FromDataV0(buff)
-	} else if version == 1 {
-		return im.FromDataV1(buff)
 	} else {
-		return im.FromDataV2(buff)
+		return im.FromDataV1(buff)
 	}
 }
 
@@ -523,47 +527,6 @@ func (sys *SystemMessage) FromData(buff []byte) bool {
 	return true
 }
 
-type CustomerServiceMessage struct {
-	customer_id    int64//普通用户id
-	sender    int64
-	receiver  int64
-	timestamp int32
-	content   string
-}
-
-func (cs *CustomerServiceMessage) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, cs.customer_id)
-	binary.Write(buffer, binary.BigEndian, cs.sender)
-	binary.Write(buffer, binary.BigEndian, cs.receiver)
-	binary.Write(buffer, binary.BigEndian, cs.timestamp)
-	buffer.Write([]byte(cs.content))
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (cs *CustomerServiceMessage) FromData(buff []byte) bool {
-	if len(buff) < 20 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-
-	if len(buff) >= 28 {
-		//兼容旧数据
-		binary.Read(buffer, binary.BigEndian, &cs.customer_id)
-	}
-
-	binary.Read(buffer, binary.BigEndian, &cs.sender)
-	binary.Read(buffer, binary.BigEndian, &cs.receiver)
-	binary.Read(buffer, binary.BigEndian, &cs.timestamp)
-
-	if len(buff) >= 28 {
-		cs.content = string(buff[28:])
-	} else {
-		cs.content = string(buff[20:])
-	}
-	return true
-}
 
 type CustomerMessage struct {
 	customer_appid int64//顾客id所在appid
@@ -748,3 +711,55 @@ func (id *AppGroupMemberID) FromData(buff []byte) bool {
 
 	return true
 }
+
+
+type SyncKey struct {
+	sync_key int64
+}
+
+
+func (id *SyncKey) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.sync_key)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *SyncKey) FromData(buff []byte) bool {
+	if len(buff) < 8 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.sync_key)
+	return true
+}
+
+
+
+type GroupSyncKey struct {
+	group_id int64
+	sync_key int64
+}
+
+
+func (id *GroupSyncKey) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.group_id)
+	binary.Write(buffer, binary.BigEndian, id.sync_key)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *GroupSyncKey) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &id.group_id)
+	binary.Read(buffer, binary.BigEndian, &id.sync_key)
+	return true
+}
+
+

@@ -30,7 +30,7 @@ const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
 
-const DEFAULT_VERSION = 2
+const DEFAULT_VERSION = 1
 
 var message_descriptions map[int]string = make(map[int]string)
 

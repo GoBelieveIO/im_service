@@ -39,6 +39,7 @@ type Config struct {
 	socket_io_address   string
 
 	storage_addrs       []string
+	storage_rpc_addrs   []string
 	route_addrs         []string
 }
 
@@ -128,6 +129,14 @@ func read_cfg(cfg_path string) *Config {
 	if len(config.storage_addrs) == 0 {
 		log.Fatal("storage pool config")
 	}
+
+	str = get_string(app_cfg, "storage_rpc_pool")
+    array = strings.Split(str, " ")
+	config.storage_rpc_addrs = array
+	if len(config.storage_rpc_addrs) == 0 {
+		log.Fatal("storage pool config")
+	}
+
 
 	str = get_string(app_cfg, "route_pool")
     array = strings.Split(str, " ")

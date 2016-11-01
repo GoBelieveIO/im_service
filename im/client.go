@@ -29,7 +29,7 @@ type Client struct {
 	*IMClient
 	*RoomClient
 	*VOIPClient
-	*CSClient
+	*CustomerClient
 	public_ip int32
 }
 
@@ -58,7 +58,7 @@ func NewClient(conn interface{}) *Client {
 	client.IMClient = &IMClient{&client.Connection}
 	client.RoomClient = &RoomClient{Connection:&client.Connection}
 	client.VOIPClient = &VOIPClient{Connection:&client.Connection}
-	client.CSClient = NewCSClient(&client.Connection)
+	client.CustomerClient = NewCustomerClient(&client.Connection)
 	return client
 }
 
@@ -124,6 +124,8 @@ func (client *Client) HandleMessage(msg *Message) {
 	switch msg.cmd {
 	case MSG_AUTH_TOKEN:
 		client.HandleAuthToken(msg.body.(*AuthenticationToken), msg.version)
+	case MSG_ACK:
+		client.HandleACK(msg.body.(*MessageACK))
 	case MSG_HEARTBEAT:
 		// nothing to do
 	case MSG_PING:
@@ -133,7 +135,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	client.IMClient.HandleMessage(msg)
 	client.RoomClient.HandleMessage(msg)
 	client.VOIPClient.HandleMessage(msg)
-	client.CSClient.HandleMessage(msg)
+	client.CustomerClient.HandleMessage(msg)
 }
 
 
@@ -202,7 +204,6 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.IMClient.Login()
 	
 	close(client.owt)
-	log.Infof("offline loaded:%d", client.uid)
 
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
@@ -221,6 +222,10 @@ func (client *Client) HandlePing() {
 		log.Warning("client has't been authenticated")
 		return
 	}
+}
+
+func (client *Client) HandleACK(ack *MessageACK) {
+	log.Info("ack:", ack.seq)
 }
 
 
@@ -256,7 +261,6 @@ func (client *Client) Write() {
 			seq++
 
 			emsg.msg.seq = seq
-			client.AddUnAckMessage(emsg)
 
 			//以当前客户端所用版本号发送消息
 			msg := &Message{emsg.msg.cmd, seq, client.version, emsg.msg.body}
@@ -289,7 +293,6 @@ func (client *Client) Write() {
 			seq++
 
 			emsg.msg.seq = seq
-			client.AddUnAckMessage(emsg)
 
 			//以当前客户端所用版本号发送消息
 			msg := &Message{cmd:emsg.msg.cmd, seq:seq, version:client.version, body:emsg.msg.body}

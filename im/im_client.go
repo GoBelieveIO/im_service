@@ -27,14 +27,8 @@ type IMClient struct {
 }
 
 func (client *IMClient) Login() {
-	client.SubscribeGroup()
-	channel := GetUserStorageChannel(client.uid)
+	channel := GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
-	channel = GetChannel(client.uid)
-	channel.Subscribe(client.appid, client.uid)
-
-	client.LoadOffline()
-	client.LoadGroupOffline()
 
 	SetUserUnreadCount(client.appid, client.uid, 0)
 }
@@ -43,74 +37,151 @@ func (client *IMClient) Logout() {
 	if client.uid > 0 {
 		channel := GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid)
-		channel = GetUserStorageChannel(client.uid)
-		channel.Unsubscribe(client.appid, client.uid)
-		client.UnsubscribeGroup()
 	}
 }
 
-func (client *IMClient) LoadGroupOfflineMessage(gid int64) ([]*EMessage, error) {
-	storage_pool := GetGroupStorageConnPool(gid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		return nil, err
-	}
-	defer storage_pool.Release(storage)
 
-	return storage.LoadGroupOfflineMessage(client.appid, gid, client.uid, client.device_ID)
-}
-
-func (client *IMClient) LoadGroupOffline() {
-	if client.device_ID == 0 {
-		return
-	}
-
-	groups := group_manager.FindUserGroups(client.appid, client.uid)
-	for _, group := range groups {
-		if !group.super {
-			continue
-		}
-		messages, err := client.LoadGroupOfflineMessage(group.gid)
-		if err != nil {
-			log.Errorf("load group offline message err:%d %s", group.gid, err)
-			continue
-		}
-
-		for _, emsg := range messages {
-			client.EnqueueOfflineMessage(emsg)
+//自己是否是发送者
+func (client *IMClient) isSender(msg *Message, device_id int64) bool {
+	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+		m := msg.body.(*IMMessage)
+		if m.sender == client.uid && device_id == client.device_ID {
+			return true
 		}
 	}
+
+	if msg.cmd == MSG_CUSTOMER {
+		m := msg.body.(*CustomerMessage)
+		if m.customer_appid == client.appid && 
+			m.customer_id == client.uid && 
+			device_id == client.device_ID {
+			return false
+		}
+	}
+
+	if msg.cmd == MSG_CUSTOMER_SUPPORT {
+		m := msg.body.(*CustomerMessage)
+		if config.kefu_appid == client.appid && 
+			m.seller_id == client.uid && 
+			device_id == client.device_ID {
+			return true
+		}
+	}
+	return false
 }
 
-func (client *IMClient) LoadOffline() {
-	if client.device_ID == 0 {
+
+func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
+	if client.uid == 0 {
 		return
 	}
-	storage_pool := GetStorageConnPool(client.uid)
-	storage, err := storage_pool.Get()
+
+	group_id := group_sync_key.group_id
+	rpc := GetGroupStorageRPCClient(group_id)
+
+	last_id := group_sync_key.sync_key
+	if last_id > 0 {
+		s := &SyncGroupHistory{
+			AppID:client.appid, 
+			Uid:client.uid, 
+			GroupID:group_id, 
+			LastMsgID:last_id,
+		}
+		group_sync_c <- s
+	} else {
+		last_id = GetGroupSyncKey(client.appid, client.uid, group_id)
+	}
+
+	s := &SyncGroupHistory{
+		AppID:client.appid, 
+		Uid:client.uid, 
+		DeviceID:client.device_ID, 
+		GroupID:group_sync_key.group_id, 
+		LastMsgID:last_id,
+	}
+
+	resp, err := rpc.Call("SyncGroupMessage", s)
 	if err != nil {
-		log.Error("connect storage err:", err)
+		log.Warning("sync message err:", err)
 		return
 	}
-	defer storage_pool.Release(storage)
 
-	messages, err := storage.LoadOfflineMessage(client.appid, client.uid, client.device_ID)
+	messages := resp.([]*HistoryMessage)
+
+	sk := &GroupSyncKey{sync_key:group_sync_key.sync_key, group_id:group_id}
+	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_BEGIN, body:sk})
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		log.Info("message:", msg.MsgID, Command(msg.Cmd))
+		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
+		m.FromData(msg.Raw)
+		sk.sync_key = msg.MsgID
+
+		if group_sync_key.sync_key > 0 {
+			//非首次同步,过滤掉所有自己在当前设备发出的消息
+			if client.isSender(m, msg.DeviceID) {
+				continue
+			}
+		}
+		client.EnqueueMessage(m)
+	}
+
+	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_END, body:sk})
+}
+
+func (client *IMClient) HandleSync(sync_key *SyncKey) {
+	if client.uid == 0 {
+		return
+	}
+	last_id := sync_key.sync_key
+
+	if last_id > 0 {
+		s := &SyncHistory{
+			AppID:client.appid, 
+			Uid:client.uid, 
+			LastMsgID:last_id,
+		}
+		sync_c <- s
+	} else {
+		last_id = GetSyncKey(client.appid, client.uid)
+	}
+
+	rpc := GetStorageRPCClient(client.uid)
+
+	s := &SyncHistory{
+		AppID:client.appid, 
+		Uid:client.uid, 
+		DeviceID:client.device_ID, 
+		LastMsgID:last_id,
+	}
+
+	resp, err := rpc.Call("SyncMessage", s)
 	if err != nil {
-		log.Errorf("load offline message err:%d %s", client.uid, err)
+		log.Warning("sync message err:", err)
 		return
 	}
-	for _, emsg := range messages {
-		client.EnqueueOfflineMessage(emsg)
+	
+	messages := resp.([]*HistoryMessage)
+
+	sk := &SyncKey{last_id}
+	client.EnqueueMessage(&Message{cmd:MSG_SYNC_BEGIN, body:sk})
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		log.Info("message:", msg.MsgID, Command(msg.Cmd))
+		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
+		m.FromData(msg.Raw)
+		sk.sync_key = msg.MsgID
+
+		if sync_key.sync_key > 0 {
+			//非首次同步,过滤掉所有自己在当前设备发出的消息
+			if client.isSender(m, msg.DeviceID) {
+				continue
+			}
+		}
+		client.EnqueueMessage(m)
 	}
-}
 
-func (client *IMClient) SubscribeGroup() {
-	group_center.SubscribeGroup(client.appid, client.uid)
-}
-
-func (client *IMClient) UnsubscribeGroup() {
-	group_center.UnsubscribeGroup(client.appid, client.uid)
+	client.EnqueueMessage(&Message{cmd:MSG_SYNC_END, body:sk})
 }
 
 
@@ -134,7 +205,23 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 	}
 
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
-	SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	msgid2, err := SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	if err != nil {
+		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
+		return
+	}
+
+	//推送外部通知
+	PushMessage(client.appid, msg.receiver, m)
+
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	client.SendMessage(msg.receiver, notify)
+
+	//发送给自己的其它登录点
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	client.SendMessage(client.uid, notify)
+	
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 	r := client.EnqueueMessage(ack)
@@ -144,6 +231,40 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
+}
+
+func (client *IMClient) HandleSuperGroupMessage(m *Message) {
+	msg := m.body.(*IMMessage)
+	msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
+	if err != nil {
+		log.Errorf("save group message:%d %d err:%s", err, msg.sender, msg.receiver)
+		return
+	}
+	
+	//推送外部通知
+	PushGroupMessage(client.appid, msg.receiver, m)
+
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:msg.receiver, sync_key:msgid}}
+	client.SendGroupMessage(msg.receiver, notify)
+}
+
+func (client *IMClient) HandleGroupMessage(m *Message, group *Group) {
+	msg := m.body.(*IMMessage)
+	members := group.Members()
+	for member := range members {
+		msgid, err := SaveMessage(client.appid, member, client.device_ID, m)
+		if err != nil {
+			log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
+			continue
+		}
+
+		if msg.sender != member {
+			PushMessage(client.appid, member, m)
+		}
+		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
+		client.SendMessage(member, notify)
+	}	
 }
 
 func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
@@ -161,20 +282,9 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		return
 	}
 	if group.super {
-		_, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
-		if err != nil {
-			log.Errorf("save group message:%d %d err:%s", err, msg.sender, msg.receiver)
-			return
-		}
+		client.HandleSuperGroupMessage(m)
 	} else {
-		members := group.Members()
-		for member := range members {
-			_, err := SaveMessage(client.appid, member, client.device_ID, m)
-			if err != nil {
-				log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
-				continue
-			}
-		}
+		client.HandleGroupMessage(m, group)
 	}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 	r := client.EnqueueMessage(ack)
@@ -195,32 +305,6 @@ func (client *IMClient) HandleInputing(inputing *MessageInputing) {
 func (client *IMClient) HandleUnreadCount(u *MessageUnreadCount) {
 	SetUserUnreadCount(client.appid, client.uid, u.count)
 }
-
-func (client *IMClient) HandleACK(ack *MessageACK) {
-	log.Info("ack:", ack)
-	emsg := client.RemoveUnAckMessage(ack)
-	if emsg == nil || emsg.msgid == 0 {
-		return
-	}
-
-	msg := emsg.msg
-	if msg != nil && msg.cmd == MSG_GROUP_IM {
-		im := emsg.msg.body.(*IMMessage)
-		group := group_manager.FindGroup(im.receiver)
-		if group != nil && group.super {
-			client.DequeueGroupMessage(emsg.msgid, im.receiver)
-		} else {
-			client.DequeueMessage(emsg.msgid)
-		}
-	} else {
-		client.DequeueMessage(emsg.msgid)
-	}
-
-	if msg == nil {
-		return
-	}
-}
-
 
 func (client *IMClient) HandleRTMessage(msg *Message) {
 	rt := msg.body.(*RTMessage)
@@ -243,46 +327,17 @@ func (client *IMClient) HandleMessage(msg *Message) {
 		client.HandleIMMessage(msg.body.(*IMMessage), msg.seq)
 	case MSG_GROUP_IM:
 		client.HandleGroupIMMessage(msg.body.(*IMMessage), msg.seq)
-	case MSG_ACK:
-		client.HandleACK(msg.body.(*MessageACK))
 	case MSG_INPUTING:
 		client.HandleInputing(msg.body.(*MessageInputing))
 	case MSG_RT:
 		client.HandleRTMessage(msg)
 	case MSG_UNREAD_COUNT:
 		client.HandleUnreadCount(msg.body.(*MessageUnreadCount))
+	case MSG_SYNC:
+		client.HandleSync(msg.body.(*SyncKey))
+	case MSG_SYNC_GROUP:
+		client.HandleGroupSync(msg.body.(*GroupSyncKey))
 	}
 }
 
-func (client *IMClient) DequeueGroupMessage(msgid int64, gid int64) {
-	storage_pool := GetGroupStorageConnPool(gid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		return
-	}
-	defer storage_pool.Release(storage)
-
-	dq := &DQGroupMessage{msgid:msgid, appid:client.appid, receiver:client.uid, gid:gid, device_id:client.device_ID}
-	err = storage.DequeueGroupMessage(dq)
-	if err != nil {
-		log.Error("dequeue message err:", err)
-	}
-}
-
-func (client *IMClient) DequeueMessage(msgid int64) {
-	storage_pool := GetStorageConnPool(client.uid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		return
-	}
-	defer storage_pool.Release(storage)
-
-	dq := &DQMessage{msgid:msgid, appid:client.appid, receiver:client.uid, device_id:client.device_ID}
-	err = storage.DequeueMessage(dq)
-	if err != nil {
-		log.Error("dequeue message err:", err)
-	}
-}
 

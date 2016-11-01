@@ -44,15 +44,18 @@ type Channel struct {
 	subscribers     map[int64]*Subscriber
 
 	dispatch        func(*AppMessage)
+	dispatch_group  func(*AppMessage)
 	dispatch_room   func(*AppMessage)
 
 }
 
-func NewChannel(addr string, f func(*AppMessage), f2 func(*AppMessage)) *Channel {
+func NewChannel(addr string, f func(*AppMessage), 
+	f2 func(*AppMessage), f3 func(*AppMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
-	channel.dispatch_room = f2
+	channel.dispatch_group = f2
+	channel.dispatch_room = f3
 	channel.addr = addr
 	channel.wt = make(chan *Message, 10)
 	return channel
@@ -129,6 +132,11 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64) {
 
 func (channel *Channel) Publish(amsg *AppMessage) {
 	msg := &Message{cmd: MSG_PUBLISH, body: amsg}
+	channel.wt <- msg
+}
+
+func (channel *Channel) PublishGroup(amsg *AppMessage) {
+	msg := &Message{cmd: MSG_PUBLISH_GROUP, body: amsg}
 	channel.wt <- msg
 }
 
@@ -253,6 +261,11 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 				amsg := msg.body.(*AppMessage)
 				if channel.dispatch_room != nil {
 					channel.dispatch_room(amsg)
+				}
+			} else if msg.cmd == MSG_PUBLISH_GROUP {
+				amsg := msg.body.(*AppMessage)
+				if channel.dispatch_group != nil {
+					channel.dispatch_group(amsg)
 				}
 			} else {
 				log.Error("unknown message cmd:", msg.cmd)

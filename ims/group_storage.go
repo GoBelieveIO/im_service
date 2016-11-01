@@ -193,6 +193,49 @@ func (storage *GroupStorage) DequeueGroupOffline(msg_id int64, appid int64, gid 
 	storage.group_received[*member] = msg_id
 }
 
+
+//获取所有消息id大于msgid的消息
+func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gid int64, msgid int64, limit int) []*EMessage {
+
+	last_id, err := storage.GetLastGroupMessageID(appid, gid)
+	if err != nil {
+		log.Info("get last group message id err:", err)
+		return nil
+	}
+
+	c := make([]*EMessage, 0, 10)
+
+	for ; msgid > 0; {
+		msg := storage.LoadMessage(last_id)
+		if msg == nil {
+			log.Warningf("load message:%d error\n", msgid)
+			break
+		}
+		if msg.cmd != MSG_GROUP_IM_LIST {
+			log.Warning("invalid message cmd:", Command(msg.cmd))
+			break
+		}
+		off := msg.body.(*GroupOfflineMessage)
+
+		if off.msgid == 0 || off.msgid <= msgid {
+			break
+		}
+
+		m := storage.LoadMessage(off.msgid)
+		c = append(c, &EMessage{msgid:off.msgid, device_id:off.device_id, msg:m})
+
+		last_id = off.prev_msgid
+
+		if len(c) >= limit {
+			break
+		}
+	}
+
+	log.Infof("load group history message appid:%d gid:%d uid:%d count:%d\n", appid, gid, uid, len(c))
+	return c
+}
+
+
 func (storage *GroupStorage) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, device_id int64, limit int) []*EMessage {
 	last_id, err := storage.GetLastGroupMessageID(appid, gid)
 	if err != nil {

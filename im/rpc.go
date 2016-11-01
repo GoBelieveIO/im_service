@@ -15,10 +15,14 @@ func SendGroupNotification(appid int64, gid int64,
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
 
 	for member := range(members) {
-		_, err := SaveMessage(appid, member, 0, msg)
+		msgid, err := SaveMessage(appid, member, 0, msg)
 		if err != nil {
 			break
 		}
+
+		//发送同步的通知消息
+		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+		SendAppMessage(appid, member, notify)
 	}
 }
 
@@ -99,17 +103,32 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 		return
 	}
 	if group.super {
-		_, err := SaveGroupMessage(appid, im.receiver, 0, m)
+		msgid, err := SaveGroupMessage(appid, im.receiver, 0, m)
 		if err != nil {
 			return
 		}
+
+		//推送外部通知
+		PushGroupMessage(appid, im.receiver, m)
+
+		//发送同步的通知消息
+		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:im.receiver, sync_key:msgid}}
+		SendAppGroupMessage(appid, im.receiver, notify)
+
 	} else {
 		members := group.Members()
 		for member := range members {
-			_, err := SaveMessage(appid, member, 0, m)
+			msgid, err := SaveMessage(appid, member, 0, m)
 			if err != nil {
 				continue
 			}
+
+			//推送外部通知
+			PushGroupMessage(appid, member, m)
+
+			//发送同步的通知消息
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
+			SendAppMessage(appid, member, notify)
 		}
 	}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
@@ -117,13 +136,28 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 
 func SendIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
-	_, err := SaveMessage(appid, im.receiver, 0, m)
+	msgid, err := SaveMessage(appid, im.receiver, 0, m)
 	if err != nil {
 		return
 	}
 
 	//保存到发送者自己的消息队列
-	SaveMessage(appid, im.sender, 0, m)
+	msgid2, err := SaveMessage(appid, im.sender, 0, m)
+	if err != nil {
+		return
+	}
+	
+	//推送外部通知
+	PushGroupMessage(appid, im.receiver, m)
+
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
+	SendAppMessage(appid, im.receiver, notify)
+
+	//发送同步的通知消息
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid2}}
+	SendAppMessage(appid, im.sender, notify)
+
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 }
 
@@ -462,12 +496,20 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
 	sys := &SystemMessage{string(body)}
 	msg := &Message{cmd:MSG_SYSTEM, body:sys}
 
-	_, err = SaveMessage(appid, uid, 0, msg)
+	msgid, err := SaveMessage(appid, uid, 0, msg)
 	if err != nil {
 		WriteHttpError(500, "internal server error", w)
-	} else {
-		w.WriteHeader(200)
+		return
 	}
+
+	//推送通知
+	PushMessage(appid, uid, msg)
+
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	SendAppMessage(appid, uid, notify)
+	
+	w.WriteHeader(200)
 }
 
 func SendRoomMessage(w http.ResponseWriter, req *http.Request) {
@@ -567,146 +609,46 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	store, err := customer_service.GetStore(store_id)
-	if err != nil {
-		log.Warning("get store err:", err)
+
+	cm := &CustomerMessage{}
+	cm.customer_appid = customer_appid
+	cm.customer_id = customer_id
+	cm.store_id = store_id
+	cm.seller_id = seller_id
+	cm.content = content
+	cm.timestamp = int32(time.Now().Unix())
+
+	m := &Message{cmd:MSG_CUSTOMER, body:cm}
+
+
+	msgid, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
+ 	if err != nil {
+		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
 		return
 	}
-
-	mode := store.mode
-	if (mode == CS_MODE_BROADCAST) {
-		cs := &CustomerMessage{}
-		cs.customer_appid = customer_appid
-		cs.customer_id = customer_id
-		cs.store_id = store_id
-		cs.seller_id = seller_id
-		cs.content = content
-		cs.timestamp = int32(time.Now().Unix())
-
-		m := &Message{cmd:MSG_CUSTOMER, body:cs}
-
-		group := group_manager.FindGroup(store.group_id)
-		if group == nil {
-			log.Warning("can't find group:", store.group_id)
-			WriteHttpError(500, "internal server error", w)
-			return
-		}
-
-		members := group.Members()
-		for member := range members {
-			_, err := SaveMessage(config.kefu_appid, member, 0, m)
-			if err != nil {
-				log.Error("save message err:", err)
-				WriteHttpError(500, "internal server error", w)
-				return
-			}
-		}
-		_, err := SaveMessage(cs.customer_appid, cs.customer_id, 0, m)
-
-		if err != nil {
-			log.Error("save message err:", err)
-			WriteHttpError(500, "internal server error", w)
-			return
-		}
-
-		obj := make(map[string]interface{})
-		obj["seller_id"] = 0
-		WriteHttpObj(obj, w)
-		return
-	} else if (mode == CS_MODE_ONLINE) {
-		if seller_id > 0 {
-			is_on := customer_service.IsOnline(store_id, seller_id)
-			if !is_on {
-				seller_id = customer_service.GetOnlineSellerID(store_id)
-				if seller_id == 0 {
-					WriteHttpError(400, "no seller online", w)
-					return
-				}
-			}
-		} else {
-			seller_id = customer_service.GetLastSellerID(customer_appid, customer_id, store_id)
-			if seller_id != 0 {
-				is_on := customer_service.IsOnline(store_id, seller_id)
-				if !is_on {
-					seller_id = customer_service.GetOnlineSellerID(store_id)
-				}
-			} else {
-				seller_id = customer_service.GetOnlineSellerID(store_id)
-			}
-			if seller_id == 0 {
-				WriteHttpError(400, "no seller online", w)
-				return
-			}
-		}
-	} else if (mode == CS_MODE_FIX) {
-		if seller_id == 0 {
-			seller_id = customer_service.GetLastSellerID(customer_appid, customer_id, store_id)
-			if seller_id == 0 {
-				seller_id = customer_service.GetSellerID(store_id)
-				if seller_id == 0 {
-					WriteHttpError(400, "no seller in store", w)
-					return
-				}
-				customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
-			}
-		}
-
-		is_exist := customer_service.IsExist(store_id, seller_id)
-		if !is_exist {
-			seller_id = customer_service.GetSellerID(store_id)
-			if seller_id == 0 {
-				WriteHttpError(400, "no seller in store", w)
-				return
-			}
-			customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
-		}
-	} else if (mode == CS_MODE_ORDER) {
-		if seller_id == 0 {
-			seller_id = customer_service.GetLastSellerID(customer_appid, customer_id, store_id)
-			if seller_id == 0 {
-				seller_id = customer_service.GetOrderSellerID(store_id)
-				if seller_id == 0 {
-					WriteHttpError(400, "no seller in store", w)
-					return
-				}
-				customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
-			}
-		}
-
-		is_exist := customer_service.IsExist(store_id, seller_id)
-		if !is_exist {
-			seller_id = customer_service.GetOrderSellerID(store_id)
-			if seller_id == 0 {
-				WriteHttpError(400, "no seller in store", w)
-				return
-			}
-			customer_service.SetLastSellerID(customer_appid, customer_id, store_id, seller_id)
-		}
-	}
-
-
-	//fix and online mode
-	cs := &CustomerMessage{}
-	cs.customer_appid = customer_appid
-	cs.customer_id = customer_id
-	cs.store_id = store_id
-	cs.seller_id = seller_id
-	cs.content = content
-	cs.timestamp = int32(time.Now().Unix())
-
-	m := &Message{cmd:MSG_CUSTOMER, body:cs}
-
-	SaveMessage(cs.customer_appid, cs.customer_id, 0, m)
-	_, err = SaveMessage(config.kefu_appid, cs.seller_id, 0, m)
-
-	if err != nil {
+	msgid2, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
+ 	if err != nil {
+		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
-	} else {
-		obj := make(map[string]interface{})
-		obj["seller_id"] = seller_id
-		WriteHttpObj(obj, w)
+		return
 	}
+	
+	PushMessage(config.kefu_appid, cm.seller_id, m)
+	
+	
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	SendAppMessage(config.kefu_appid, cm.seller_id, notify)
+
+
+	//发送给自己的其它登录点
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
+
+	resp := make(map[string]interface{})
+	resp["seller_id"] = seller_id
+	WriteHttpObj(resp, w)
 }
 
 
@@ -745,7 +687,7 @@ func SendRealtimeMessage(w http.ResponseWriter, req *http.Request) {
 	rt.content = string(body)
 
 	msg := &Message{cmd:MSG_RT, body:rt}
-	Send0Message(appid, receiver, msg)
+	SendAppMessage(appid, receiver, msg)
 	w.WriteHeader(200)
 }
 
@@ -848,57 +790,5 @@ func InitMessageQueue(w http.ResponseWriter, req *http.Request) {
 
 
 func DequeueMessage(w http.ResponseWriter, req *http.Request) {
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		WriteHttpError(400, err.Error(), w)
-		return
-	}
-
-	obj, err := simplejson.NewJson(body)
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	appid, err := obj.Get("appid").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	uid, err := obj.Get("uid").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	msgid, err := obj.Get("msgid").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	dq := &DQMessage{msgid:msgid, appid:appid, receiver:uid, device_id:0}
-
-	storage_pool := GetStorageConnPool(uid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		WriteHttpError(500, "server internal error", w)
-	}
-	defer storage_pool.Release(storage)
-
-	err = storage.DequeueMessage(dq)
-
-	if err != nil {
-		log.Error("init queue err:", err)
-		WriteHttpError(500, "server internal error", w)
-		return
-	}
-
 	w.WriteHeader(200)
 }

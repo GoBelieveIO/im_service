@@ -53,8 +53,65 @@ type Connection struct {
 	mutex  sync.Mutex
 }
 
+func (client *Connection) SendGroupMessage(group_id int64, msg *Message) {
+	appid := client.appid
+
+	PushGroupMessage(appid, group_id, msg)
+	group := group_manager.FindGroup(group_id)
+	if group == nil {
+		log.Warningf("can't send group message, appid:%d uid:%d cmd:%s", appid, group_id, Command(msg.cmd))
+		return
+	}
+
+	route := app_route.FindRoute(appid)
+	if route == nil {
+		log.Warningf("can't send group message, appid:%d uid:%d cmd:%s", appid, group_id, Command(msg.cmd))
+		return
+	}
+
+	members := group.Members()
+	for member := range members {
+	    clients := route.FindClientSet(member)
+		if len(clients) == 0 {
+			continue
+		}
+
+		for c, _ := range(clients) {
+			if &c.Connection == client {
+				continue
+			}
+			c.EnqueueMessage(msg)
+		}
+	}
+}
+
+
 func (client *Connection) SendMessage(uid int64, msg *Message) bool {
-	return Send0Message(client.appid, uid, msg)
+	appid := client.appid
+
+	PushMessage(appid, uid, msg)
+
+	route := app_route.FindRoute(appid)
+	if route == nil {
+		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
+		return false
+	}
+	clients := route.FindClientSet(uid)
+	if len(clients) == 0 {
+		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
+		return false
+	}
+
+	for c, _ := range(clients) {
+		//不再发送给自己
+		if &c.Connection == client {
+			continue
+		}
+	
+		c.EnqueueMessage(msg)
+	}
+
+	return true
 }
 
 func (client *Connection) EnqueueMessage(msg *Message) bool {
@@ -156,37 +213,5 @@ func (client *Connection) close() {
 	} else if _, ok := client.conn.(engineio.Conn); ok {
 		//bug:https://github.com/googollee/go-engine.io/issues/34
 		//conn.Close()
-	}
-}
-
-func (client *Connection) RemoveUnAckMessage(ack *MessageACK) *EMessage {
-	client.mutex.Lock()
-	defer client.mutex.Unlock()
-	var msgid int64
-	var msg *Message
-	var ok bool
-
-	seq := int(ack.seq)
-	if msgid, ok = client.unacks[seq]; ok {
-		log.Infof("dequeue offline msgid:%d uid:%d\n", msgid, client.uid)
-		delete(client.unacks, seq)
-	} else {
-		log.Warning("can't find msgid with seq:", seq)
-	}
-	if emsg, ok := client.unackMessages[seq]; ok {
-		msg = emsg.msg
-		delete(client.unackMessages, seq)
-	}
-
-	return &EMessage{msgid:msgid, msg:msg}
-}
-
-func (client *Connection) AddUnAckMessage(emsg *EMessage) {
-	client.mutex.Lock()
-	defer client.mutex.Unlock()
-	seq := emsg.msg.seq
-	client.unacks[seq] = emsg.msgid
-	if emsg.msg.cmd == MSG_IM || emsg.msg.cmd == MSG_GROUP_IM {
-		client.unackMessages[seq] = emsg
 	}
 }

@@ -222,6 +222,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 			break
 		}
 		if msg.cmd != MSG_GROUP_IM && 
+			msg.cmd != MSG_GROUP_NOTIFICATION &&
 			msg.cmd != MSG_IM && 
 			msg.cmd != MSG_CUSTOMER && 
 			msg.cmd != MSG_CUSTOMER_SUPPORT {
@@ -263,6 +264,7 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 			break
 		}
 		if msg.cmd != MSG_GROUP_IM && 
+			msg.cmd != MSG_GROUP_NOTIFICATION &&
 			msg.cmd != MSG_IM && 
 			msg.cmd != MSG_CUSTOMER && 
 			msg.cmd != MSG_CUSTOMER_SUPPORT {

@@ -24,35 +24,34 @@ import "flag"
 import "time"
 import "runtime"
 import "net/http"
-import "strings"
-import "strconv"
-import "sync/atomic"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
+import "github.com/valyala/gorpc"
+
+var storage_pools []*StorageConnPool
 
 //group storage server
-var storage_channels []*StorageChannel
+var rpc_clients []*gorpc.DispatcherClient
 
 //route server
 var route_channels []*Channel
 
-//storage server
-var channels []*Channel
-
-var group_center *GroupCenter
-
 var app_route *AppRoute
 var group_manager *GroupManager
 var redis_pool *redis.Pool
-var storage_pools []*StorageConnPool
+
 var config *Config
 var server_summary *ServerSummary
-var customer_service *CustomerService
+
+var sync_c chan *SyncHistory
+var group_sync_c chan *SyncGroupHistory
+
 
 func init() {
 	app_route = NewAppRoute()
 	server_summary = NewServerSummary()
-	group_center = NewGroupCenter()
+	sync_c = make(chan *SyncHistory, 100)
+	group_sync_c = make(chan *SyncGroupHistory, 100)
 }
 
 func handle_client(conn net.Conn) {
@@ -97,6 +96,18 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
+//个人消息／普通群消息／客服消息
+func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
+	index := uid%int64(len(rpc_clients))
+	return rpc_clients[index]
+}
+
+//超级群消息
+func GetGroupStorageRPCClient(group_id int64) *gorpc.DispatcherClient {
+	index := group_id%int64(len(rpc_clients))
+	return rpc_clients[index]
+}
+
 func GetStorageConnPool(uid int64) *StorageConnPool {
 	index := uid%int64(len(storage_pools))
 	return storage_pools[index]
@@ -107,13 +118,14 @@ func GetGroupStorageConnPool(gid int64) *StorageConnPool {
 	return storage_pools[index]
 }
 
-func GetGroupStorageChannel(gid int64) *StorageChannel {
-	index := gid%int64(len(storage_channels))
-	return storage_channels[index]
-}
 
 func GetChannel(uid int64) *Channel{
 	index := uid%int64(len(route_channels))
+	return route_channels[index]
+}
+
+func GetGroupChannel(group_id int64) *Channel{
+	index := group_id%int64(len(route_channels))
 	return route_channels[index]
 }
 
@@ -122,88 +134,73 @@ func GetRoomChannel(room_id int64) *Channel {
 	return route_channels[index]
 }
 
-func GetUserStorageChannel(uid int64) *Channel {
-	index := uid%int64(len(channels))
-	return channels[index]
-}
-
-func SaveGroupMessage(appid int64, gid int64, device_id int64, m *Message) (int64, error) {
-	log.Infof("save group message:%d %d\n", appid, gid)
-	storage_pool := GetGroupStorageConnPool(gid)
-	storage, err := storage_pool.Get()
+func SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (int64, error) {
+	dc := GetGroupStorageRPCClient(gid)
+	
+	gm := &GroupMessage{
+		AppID:appid,
+		GroupID:gid,
+		DeviceID:device_id,
+		Cmd:int32(msg.cmd),
+		Raw:msg.ToData(),
+	}
+	resp, err := dc.Call("SaveGroupMessage", gm)
 	if err != nil {
-		log.Error("connect storage err:", err)
+		log.Warning("save group message err:", err)
 		return 0, err
 	}
-	defer storage_pool.Release(storage)
-
-	sae := &SAEMessage{}
-	sae.msg = m
-	sae.appid = appid
-	sae.receiver = gid
-	sae.device_id = device_id
-
-	msgid, err := storage.SaveAndEnqueueGroupMessage(sae)
-	if err != nil {
-		log.Error("saveandequeue message err:", err)
-		return 0, err
-	}
+	msgid := resp.(int64)
+	log.Infof("save group message:%d %d %d\n", appid, gid, msgid)
 	return msgid, nil
 }
 
 func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, error) {
-	storage_pool := GetStorageConnPool(uid)
-	storage, err := storage_pool.Get()
+	dc := GetStorageRPCClient(uid)
+	
+	pm := &PeerMessage{
+		AppID:appid,
+		Uid:uid,
+		DeviceID:device_id,
+		Cmd:int32(m.cmd),
+		Raw:m.ToData(),
+	}
+
+	resp, err := dc.Call("SavePeerMessage", pm)
 	if err != nil {
-		log.Error("connect storage err:", err)
+		log.Error("save peer message err:", err)
 		return 0, err
 	}
-	defer storage_pool.Release(storage)
 
-	sae := &SAEMessage{}
-	sae.msg = m
-	sae.appid = appid
-	sae.receiver = uid
-	sae.device_id = device_id
-
-	msgid, err := storage.SaveAndEnqueueMessage(sae)
-	if err != nil {
-		log.Error("saveandequeue message err:", err)
-		return 0, err
-	}
+	msgid := resp.(int64)
+	log.Infof("save peer message:%d %d %d\n", appid, uid, msgid)
 	return msgid, nil
 }
 
-func Send0Message(appid int64, uid int64, msg *Message) bool {
-	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:msg}
-	SendAppMessage(amsg, uid)
-	return true
+func PushGroupMessage(appid int64, group_id int64, m *Message) {
+	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, msg:m}
+	channel := GetGroupChannel(group_id)
+	channel.PublishGroup(amsg)
 }
 
-func SendAppMessage(amsg *AppMessage, uid int64) bool {
+func PushMessage(appid int64, uid int64, m *Message) {
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:m}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
+}
 
-	route := app_route.FindRoute(amsg.appid)
-	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return false
-	}
-	clients := route.FindClientSet(uid)
-	if len(clients) == 0 {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return false
-	}
 
-	for c, _ := range(clients) {
-		if amsg.msgid > 0 {
-			c.EnqueueEMessage(&EMessage{msgid:amsg.msgid, msg:amsg.msg})
-		} else {
-			c.EnqueueMessage(amsg.msg)
-		}
-	}
+func SendAppGroupMessage(appid int64, group_id int64, msg *Message) {
+	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, msg:msg}
+	channel := GetGroupChannel(group_id)
+	channel.PublishGroup(amsg)
+	DispatchGroupMessage(amsg)
+}
 
-	return true
+func SendAppMessage(appid int64, uid int64, msg *Message) {
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:msg}
+	channel := GetChannel(uid)
+	channel.Publish(amsg)
+	DispatchAppMessage(amsg)
 }
 
 func DispatchAppMessage(amsg *AppMessage) {
@@ -220,34 +217,7 @@ func DispatchAppMessage(amsg *AppMessage) {
 		return
 	}
 	for c, _ := range(clients) {
-		//自己在同一台设备上发出的消息，不再发送回去
-		if amsg.msg.cmd == MSG_IM || amsg.msg.cmd == MSG_GROUP_IM {
-			m := amsg.msg.body.(*IMMessage)
-			if m.sender == amsg.receiver && amsg.device_id == c.device_ID {
-				continue
-			}
-		}
-
-		if amsg.msg.cmd == MSG_CUSTOMER {
-			m := amsg.msg.body.(*CustomerMessage)
-
-			if m.customer_appid == c.appid && m.customer_id == amsg.receiver && amsg.device_id == c.device_ID {
-				continue
-			}
-		}
-
-		if amsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
-			m := amsg.msg.body.(*CustomerMessage)
-			if m.customer_appid != c.appid && m.seller_id == amsg.receiver && amsg.device_id == c.device_ID {
-				continue
-			}
-		}
-
-		if amsg.msgid > 0 {
-			c.EnqueueEMessage(&EMessage{msgid:amsg.msgid, msg:amsg.msg})
-		} else {
-			c.EnqueueMessage(amsg.msg)
-		}
+		c.EnqueueMessage(amsg.msg)
 	}
 }
 
@@ -288,15 +258,7 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		}
 
 		for c, _ := range(clients) {
-			if amsg.msg.cmd == MSG_GROUP_IM {
-				im := amsg.msg.body.(*IMMessage)
-				
-				//不再发送给发送者所在的设备
-				if c.uid == im.sender && c.device_ID == amsg.device_id {
-					continue
-				}
-			}
-			c.EnqueueEMessage(&EMessage{msgid:amsg.msgid, msg:amsg.msg})
+			c.EnqueueMessage(amsg.msg)
 		}
 	}
 }
@@ -312,15 +274,6 @@ func DialStorageFun(addr string) func()(*StorageConn, error) {
 		return storage, nil
 	}
 	return f
-}
-
-type IMGroupObserver int
-func (ob IMGroupObserver) OnGroupMemberAdd(group *Group, uid int64) {
-	group_center.SubscribeGroupMember(group.appid, group.gid, uid)
-}
-
-func (ob IMGroupObserver) OnGroupMemberRemove(group *Group, uid int64) {
-	group_center.UnsubscribeGroupMember(group.appid, group.gid, uid)
 }
 
 
@@ -354,99 +307,26 @@ func StartHttpServer(addr string) {
 	HTTPService(addr, handler)
 }
 
-func HandleForbidden(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 3 {
-		log.Info("message error:", data)
-		return
-	}
-	appid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	uid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	fb, err := strconv.ParseInt(arr[2], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
 
-	route := app_route.FindRoute(appid)
-	if route == nil {
-		log.Warningf("can't find appid:%d route", appid)
-		return
-	}
-	clients := route.FindClientSet(uid)
-	if len(clients) == 0 {
-		return
-	}
-
-	log.Infof("forbidden:%d %d %d client count:%d", 
-		appid, uid, fb, len(clients))
-	for c, _ := range(clients) {
-		atomic.StoreInt32(&c.forbidden, int32(fb))
+func SyncKeyService() {
+	select {
+	case s := <- sync_c:
+		origin := GetSyncKey(s.AppID, s.Uid)
+		if s.LastMsgID > origin {
+			log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
+			SaveSyncKey(s.AppID, s.Uid, s.LastMsgID)
+		}
+		break
+	case s := <- group_sync_c:
+		origin := GetGroupSyncKey(s.AppID, s.Uid, s.GroupID)
+		if s.LastMsgID > origin {
+			log.Infof("save group sync key:%d %d %d %d", 
+				s.AppID, s.Uid, s.GroupID, s.LastMsgID)
+			SaveGroupSyncKey(s.AppID, s.Uid, s.GroupID, s.LastMsgID)
+		}
+		break
 	}
 }
-
-func SubscribeRedis() bool {
-	c, err := redis.Dial("tcp", config.redis_address)
-	if err != nil {
-		log.Info("dial redis error:", err)
-		return false
-	}
-
-	password := config.redis_password
-	if len(password) > 0 {
-		if _, err := c.Do("AUTH", password); err != nil {
-			c.Close()
-			return false
-		}
-	}
-
-	psc := redis.PubSubConn{c}
-	psc.Subscribe("store_update", "speak_forbidden")
-
-	customer_service.Clear()
-	for {
-		switch v := psc.Receive().(type) {
-		case redis.Message:
-			log.Infof("%s: message: %s\n", v.Channel, v.Data)
-			if v.Channel == "store_update" {
-				customer_service.HandleMessage(&v)
-			} else if v.Channel == "speak_forbidden" {
-				HandleForbidden(string(v.Data))
-			}
-		case redis.Subscription:
-			log.Infof("%s: %s %d\n", v.Channel, v.Kind, v.Count)
-		case error:
-			log.Info("error:", v)
-			return true
-		}
-	}
-}
-
-func ListenRedis() {
-	nsleep := 1
-	for {
-		connected := SubscribeRedis()
-		if !connected {
-			nsleep *= 2
-			if nsleep > 60 {
-				nsleep = 60
-			}
-		} else {
-			nsleep = 1
-		}
-		time.Sleep(time.Duration(nsleep) * time.Second)
-	}
-}
-
-
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -467,8 +347,6 @@ func main() {
 	log.Info("route addressed:", config.route_addrs)
 	log.Info("kefu appid:", config.kefu_appid)
 	
-	customer_service = NewCustomerService()
-
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
 
@@ -479,30 +357,35 @@ func main() {
 		storage_pools = append(storage_pools, pool)
 	}
 
-	storage_channels = make([]*StorageChannel, 0)
 
-	for _, addr := range(config.storage_addrs) {
-		sc := NewStorageChannel(addr, DispatchGroupMessage)
-		sc.Start()
-		storage_channels = append(storage_channels, sc)
+	rpc_clients = make([]*gorpc.DispatcherClient, 0)
+	for _, addr := range(config.storage_rpc_addrs) {
+		c := &gorpc.Client{
+			Conns: 4,
+			Addr: addr,
+		}
+		c.Start()
+
+		dispatcher := gorpc.NewDispatcher()
+		dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
+		dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
+		dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
+		dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
+
+		dc := dispatcher.NewFuncClient(c)
+
+		rpc_clients = append(rpc_clients, dc)
 	}
 
-	channels = make([]*Channel, 0)
-	for _, addr := range(config.storage_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, nil)
-		channel.Start()
-		channels = append(channels, channel)
-	}
 
 	route_channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, DispatchRoomMessage)
+		channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
 	
 	group_manager = NewGroupManager()
-	group_manager.observer = IMGroupObserver(0)
 	group_manager.Start()
 
 	go ListenRedis()
@@ -510,6 +393,8 @@ func main() {
 	StartHttpServer(config.http_listen_address)
 
 	go StartSocketIO(config.socket_io_address)
+	go SyncKeyService()
+
 	ListenClient()
 	Wait()
 }
