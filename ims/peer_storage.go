@@ -231,7 +231,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 			continue
 		}
 
-		emsg := &EMessage{msgid:off.msgid, msg:msg}
+		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
 		messages = append(messages, emsg)
 
 		last_id = off.prev_msgid

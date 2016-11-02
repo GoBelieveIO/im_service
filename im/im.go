@@ -172,7 +172,7 @@ func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, er
 	}
 
 	msgid := resp.(int64)
-	log.Infof("save peer message:%d %d %d\n", appid, uid, msgid)
+	log.Infof("save peer message:%d %d %d %d\n", appid, uid, device_id, msgid)
 	return msgid, nil
 }
 

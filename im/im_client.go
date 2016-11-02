@@ -156,6 +156,8 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 		LastMsgID:last_id,
 	}
 
+	log.Infof("syncing message:%d %d %d %d", client.appid, client.uid, client.device_ID, last_id)
+
 	resp, err := rpc.Call("SyncMessage", s)
 	if err != nil {
 		log.Warning("sync message err:", err)
@@ -174,6 +176,7 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 		sk.sync_key = msg.MsgID
 
 		if sync_key.sync_key > 0 {
+
 			//非首次同步,过滤掉所有自己在当前设备发出的消息
 			if client.isSender(m, msg.DeviceID) {
 				continue
