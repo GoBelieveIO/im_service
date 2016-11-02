@@ -174,6 +174,12 @@ func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, er
 	return msgid, nil
 }
 
+func PushMessage(appid int64, uid int64, m *Message) {
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:m}
+	channel := GetChannel(uid)
+	channel.Publish(amsg)
+}
+
 func Send0Message(appid int64, uid int64, msg *Message) bool {
 	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:msg}
 	SendAppMessage(amsg, uid)

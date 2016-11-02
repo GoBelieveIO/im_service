@@ -75,14 +75,17 @@ func (client *CSClient) HandleCustomerSupportMessage(msg *Message) {
 		m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
 		SaveMessage(client.appid, cm.seller_id, client.device_ID, m)
 		_, err = SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, m)
+		PushMessage(cm.customer_appid, cm.customer_id, m)
 	} else if (mode == CS_MODE_FIX) {
 		m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
 		SaveMessage(client.appid, cm.seller_id, client.device_ID, m)
 		_, err = SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, m)
+		PushMessage(cm.customer_appid, cm.customer_id, m)
 	} else if (mode == CS_MODE_ORDER) {
 		m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
 		SaveMessage(client.appid, cm.seller_id, client.device_ID, m)
 		_, err = SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, m)
+		PushMessage(cm.customer_appid, cm.customer_id, m)
 	} else {
 		log.Warning("do not support customer service mode:", mode)
 		return
@@ -173,6 +176,7 @@ func (client *CSClient) OnlineSend(cs *CustomerMessage) error {
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
 	_, err := SaveMessage(config.kefu_appid, cs.seller_id, client.device_ID, m)
+	PushMessage(config.kefu_appid, cs.seller_id, m)
 	return err
 }
 
@@ -202,6 +206,7 @@ func (client *CSClient) OrderSend(cs *CustomerMessage) error {
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
 	_, err := SaveMessage(config.kefu_appid, cs.seller_id, client.device_ID, m)
+	PushMessage(config.kefu_appid, cs.seller_id, m)
 	return err
 }
 
@@ -231,6 +236,7 @@ func (client *CSClient) FixSend(cs *CustomerMessage) error {
 
 	SaveMessage(cs.customer_appid, cs.customer_id, client.device_ID, m)
 	_, err := SaveMessage(config.kefu_appid, cs.seller_id, client.device_ID, m)
+	PushMessage(config.kefu_appid, cs.seller_id, m)
 	return err
 }
 

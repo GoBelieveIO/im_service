@@ -136,6 +136,8 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
 	SaveMessage(client.appid, msg.sender, client.device_ID, m)
 
+	PushMessage(client.appid, msg.receiver, m)
+
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 	r := client.EnqueueMessage(ack)
 	if !r {
@@ -174,6 +176,7 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 				log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
 				continue
 			}
+			PushMessage(client.appid, member, m)
 		}
 	}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
