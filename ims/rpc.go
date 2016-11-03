@@ -21,6 +21,12 @@
 package main
 
 func SyncMessage(addr string, sync_key *SyncHistory) []*HistoryMessage {
+
+	if sync_key.LastMsgID == 0 {
+		//兼容v1的数据
+		sync_key.LastMsgID = storage.GetLastMsgID(sync_key.AppID, sync_key.Uid)
+	}
+
 	messages := storage.LoadHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID)
  
 	historyMessages := make([]*HistoryMessage, 0, 10)
@@ -38,6 +44,9 @@ func SyncMessage(addr string, sync_key *SyncHistory) []*HistoryMessage {
 }
 
 func SyncGroupMessage(addr string , sync_key *SyncGroupHistory) []*HistoryMessage {
+	if sync_key.LastMsgID == 0 {
+		sync_key.LastMsgID = storage.GetLastGroupMsgID(sync_key.AppID, sync_key.GroupID, sync_key.Uid)
+	}
 	messages := storage.LoadGroupHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.GroupID, sync_key.LastMsgID, GROUP_OFFLINE_LIMIT)
  
 	historyMessages := make([]*HistoryMessage, 0, 10)

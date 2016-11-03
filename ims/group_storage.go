@@ -43,6 +43,43 @@ func NewGroupStorage(f *StorageFile) *GroupStorage {
 	return storage
 }
 
+//获取最后被接收到的消息id
+func (storage *Storage) GetLastGroupMsgID(appid int64, gid int64, uid int64) int64 {
+	start := fmt.Sprintf("g_%d_%d_%d_", appid, gid, uid)
+	max_id := int64(0)
+
+	//遍历"g_appid_gid_uid_%did%",找出最大的值
+	iter := storage.db.NewIterator(nil, nil)
+	for ok := iter.Seek([]byte(start)); ok; ok = iter.Next() {
+		k := string(iter.Key())
+		v := string(iter.Value())
+
+		if !strings.HasPrefix(k, start) {
+			break
+		}
+
+		received_id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			log.Error("parse int err:", err)
+			break
+		}
+
+		if received_id > max_id {
+			max_id = received_id
+		}
+	}
+	iter.Release()
+	err := iter.Error()
+	if err != nil {
+		log.Error("iter error:", err)
+	}
+
+	log.Infof("appid:%d gid:%d uid:%d max received id:%d",
+		appid, gid, uid, max_id)
+
+	return max_id
+}
+
 func (storage *Storage) InitGroupQueue(appid int64, gid int64, uid int64, did int64) {
 	member := &AppGroupMemberLoginID{appid:appid, gid:gid, uid:uid, device_id:did}
 	id, _ := storage.GetLastGroupReceivedID(member)
