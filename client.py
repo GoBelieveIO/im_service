@@ -183,8 +183,7 @@ APP_ID = 7
 APP_KEY = "sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44"
 APP_SECRET = '0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1'
 HOST = "127.0.0.1"
-#URL = "http://127.0.0.1:23002"
-URL = "http://192.168.33.10"
+URL = "http://dev.api.gobelieve.io"
 
 def login(uid):
     url = URL + "/auth/grant"
