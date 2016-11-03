@@ -55,7 +55,7 @@ func (client *IMClient) isSender(msg *Message, device_id int64) bool {
 		if m.customer_appid == client.appid && 
 			m.customer_id == client.uid && 
 			device_id == client.device_ID {
-			return false
+			return true
 		}
 	}
 
