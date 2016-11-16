@@ -67,11 +67,13 @@ func StartSocketIO(address string, tls_address string,
 	log.Infof("EngineIO Serving at %s...", address)
 
 	if tls_address != "" && cert_file != "" && key_file != "" {
-		log.Infof("EngineIO Serving TLS at %s...", tls_address)
-		err = http.ListenAndServeTLS(tls_address, cert_file, key_file, mux)
-		if err != nil {
-			log.Fatalf("listen err:%s", err)
-		}
+		go func() {
+			log.Infof("EngineIO Serving TLS at %s...", tls_address)
+			err = http.ListenAndServeTLS(tls_address, cert_file, key_file, mux)
+			if err != nil {
+				log.Fatalf("listen err:%s", err)
+			}
+		}()
 	}
 	err = http.ListenAndServe(address, mux)
 	if err != nil {
