@@ -97,3 +97,13 @@ func SaveGroupMessage(addr string, m *GroupMessage) (int64, error) {
 	return msgid, nil
 }
 
+func GetNewCount(addr string, sync_key *SyncHistory) (int64, error) {
+	if sync_key.LastMsgID == 0 {
+		//兼容v1的数据
+		sync_key.LastMsgID = storage.GetLastMsgID(sync_key.AppID, sync_key.Uid)
+	}
+
+	count := storage.GetNewCount(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID)
+	return int64(count), nil
+}
+

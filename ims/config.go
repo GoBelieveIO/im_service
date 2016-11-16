@@ -31,13 +31,14 @@ type StorageConfig struct {
 	redis_address       string
 	redis_password      string
 	redis_db            int
+	kefu_appid          int64
 
 	sync_listen         string
 	master_address      string
 	is_push_system      bool
 }
 
-func get_int(app_cfg map[string]string, key string) int {
+func get_int(app_cfg map[string]string, key string) int64 {
 	concurrency, present := app_cfg[key]
 	if !present {
 		log.Fatalf("key:%s non exist", key)
@@ -46,7 +47,7 @@ func get_int(app_cfg map[string]string, key string) int {
 	if err != nil {
 		log.Fatalf("key:%s is't integer", key)
 	}
-	return int(n)
+	return n
 }
 
 func get_opt_int(app_cfg map[string]string, key string) int64 {
@@ -93,6 +94,8 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.redis_password = get_opt_string(app_cfg, "redis_password")
 	db := get_opt_int(app_cfg, "redis_db")
 	config.redis_db = int(db)
+
+	config.kefu_appid = get_int(app_cfg, "kefu_appid")
 
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.sync_listen = get_string(app_cfg, "sync_listen")

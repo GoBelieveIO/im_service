@@ -437,35 +437,21 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request){
 		return
 	}
 
-	var did int64
-	device_id := m.Get("device_id")
-	platform_id, _ := strconv.ParseInt(m.Get("platform_id"), 10, 64)
-	if len(device_id) > 0 && (platform_id == 1 || platform_id == 2) {
-		did, err = GetDeviceID(device_id, int(platform_id))
-		if err != nil {
-			log.Error("get device id err:", err)
-			WriteHttpError(500, "server internal error", w)
-			return
-		}
-	}
+	last_id := GetSyncKey(appid, uid)
+	sync_key := SyncHistory{AppID:appid, Uid:uid, LastMsgID:last_id}
 	
-	storage_pool := GetStorageConnPool(uid)
-	storage, err := storage_pool.Get()
+	dc := GetStorageRPCClient(uid)
+
+	resp, err := dc.Call("GetNewCount", sync_key)
+
 	if err != nil {
-		log.Error("connect storage err:", err)
+		log.Warning("get new count err:", err)
 		WriteHttpError(500, "server internal error", w)
 		return
 	}
-	defer storage_pool.Release(storage)
+	count := resp.(int64)
 
-
-	count, err := storage.GetOfflineCount(appid, uid, did)
-	if err != nil {
-		log.Error("get offline count err:", err)
-		WriteHttpError(500, "server internal error", w)
-		return
-	}
-	log.Infof("get offline %d %d %d count:%d", appid, uid, did, count)
+	log.Infof("get offline appid:%d uid:%d count:%d", appid, uid, count)
 	obj := make(map[string]interface{})
 	obj["count"] = count
 	WriteHttpObj(obj, w)

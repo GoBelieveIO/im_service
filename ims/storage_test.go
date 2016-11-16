@@ -7,9 +7,13 @@ var storage = NewStorage("/tmp")
 var appid int64 = 0
 var device_id int64 = 0
 var master *Master
+var config *StorageConfig
+
 func init() {
 	master = NewMaster()
 	master.Start()
+
+	config = &StorageConfig{}
 }
 
 func Test_Storage(t *testing.T) {

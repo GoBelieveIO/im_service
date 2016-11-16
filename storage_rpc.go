@@ -73,3 +73,8 @@ func SavePeerMessageInterface(addr string, m *PeerMessage) (int64, error) {
 func SaveGroupMessageInterface(addr string, m *GroupMessage) (int64, error) {
 	return 0, nil
 }
+
+//获取是否接收到新消息,只会返回0/1
+func GetNewCountInterface(addr string, s *SyncHistory) (int64, error) {
+	return 0, nil
+}

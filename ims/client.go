@@ -233,21 +233,6 @@ func (client *Client) filterMessages(messages []*EMessage, id *LoadOffline) []*E
 	return c
 }
 
-func (client *Client) HandleGetOfflineCount(id *LoadOffline) {
-	count := storage.GetOfflineCount(id.appid, id.uid, id.device_id)
-
-	result := &MessageResult{status:0}
-
-	buffer := new(bytes.Buffer)
-
-	binary.Write(buffer, binary.BigEndian, int32(count))
-
-	result.content = buffer.Bytes()
-	msg := &Message{cmd:MSG_RESULT, body:result}
-	SendMessage(client.conn, msg)
-}
-
-
 func (client *Client) HandleLoadOffline(id *LoadOffline) {
 	messages := storage.LoadOfflineMessage(id.appid, id.uid, id.device_id)
 	result := &MessageResult{status:0}
@@ -416,8 +401,6 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleInitQueue(msg.body.(*InitQueue))
 	case MSG_INIT_GROUP_QUEUE:
 		client.HandleInitGroupQueue(msg.body.(*InitGroupQueue))
-	case MSG_GET_OFFLINE_COUNT:
-		client.HandleGetOfflineCount(msg.body.(*LoadOffline))
 	default:
 		log.Warning("unknown msg:", msg.cmd)
 	}

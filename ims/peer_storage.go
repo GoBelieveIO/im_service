@@ -325,6 +325,76 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 	return messages
 }
 
+
+func (client *PeerStorage) isSender(msg *Message, appid int64, uid int64) bool {
+	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+		m := msg.body.(*IMMessage)
+		if m.sender == uid {
+			return true
+		}
+	}
+
+	if msg.cmd == MSG_CUSTOMER {
+		m := msg.body.(*CustomerMessage)
+		if m.customer_appid == appid && 
+			m.customer_id == uid {
+			return true
+		}
+	}
+
+	if msg.cmd == MSG_CUSTOMER_SUPPORT {
+		m := msg.body.(*CustomerMessage)
+		if config.kefu_appid == appid && 
+			m.seller_id == uid {
+			return true
+		}
+	}
+	return false
+}
+
+
+func (storage *PeerStorage) GetNewCount(appid int64, uid int64, last_received_id int64) int {
+	last_id, err := storage.GetLastMessageID(appid, uid)
+	if err != nil {
+		return 0
+	}
+
+	count := 0
+	log.Infof("last id:%d last received id:%d", last_id, last_received_id)
+
+	msgid := last_id
+	for ; msgid > 0; {
+		msg := storage.LoadMessage(msgid)
+		if msg == nil {
+			log.Warningf("load message:%d error\n", msgid)
+			break
+		}
+		if msg.cmd != MSG_OFFLINE {
+			log.Warning("invalid message cmd:", Command(msg.cmd))
+			break
+		}
+		off := msg.body.(*OfflineMessage)
+
+		if off.msgid == 0 || off.msgid <= last_received_id {
+			break
+		}
+
+		msg = storage.LoadMessage(off.msgid)
+		if msg == nil {
+			break
+		}
+
+		if !storage.isSender(msg, appid, uid) {
+			count += 1
+			break
+		}
+		msgid = off.prev_msgid
+	}
+
+	return count
+}
+
+
 func (storage *PeerStorage) GetOfflineCount(appid int64, uid int64, did int64) int {
 	last_id, err := storage.GetLastMessageID(appid, uid)
 	if err != nil {
