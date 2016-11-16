@@ -80,15 +80,7 @@ func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 	rpc := GetGroupStorageRPCClient(group_id)
 
 	last_id := group_sync_key.sync_key
-	if last_id > 0 {
-		s := &SyncGroupHistory{
-			AppID:client.appid, 
-			Uid:client.uid, 
-			GroupID:group_id, 
-			LastMsgID:last_id,
-		}
-		group_sync_c <- s
-	} else {
+	if last_id == 0 {
 		last_id = GetGroupSyncKey(client.appid, client.uid, group_id)
 	}
 
@@ -130,20 +122,35 @@ func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_END, body:sk})
 }
 
+
+func (client *IMClient) HandleGroupSyncKey(group_sync_key *GroupSyncKey) {
+	if client.uid == 0 {
+		return
+	}
+
+	group_id := group_sync_key.group_id
+	last_id := group_sync_key.sync_key
+
+	log.Info("group sync key:", group_sync_key.sync_key, last_id)
+	if last_id > 0 {
+		s := &SyncGroupHistory{
+			AppID:client.appid, 
+			Uid:client.uid, 
+			GroupID:group_id, 
+			LastMsgID:last_id,
+		}
+		group_sync_c <- s
+	}
+}
+
+
 func (client *IMClient) HandleSync(sync_key *SyncKey) {
 	if client.uid == 0 {
 		return
 	}
 	last_id := sync_key.sync_key
 
-	if last_id > 0 {
-		s := &SyncHistory{
-			AppID:client.appid, 
-			Uid:client.uid, 
-			LastMsgID:last_id,
-		}
-		sync_c <- s
-	} else {
+	if last_id == 0 {
 		last_id = GetSyncKey(client.appid, client.uid)
 	}
 
@@ -190,6 +197,22 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_END, body:sk})
 }
 
+func (client *IMClient) HandleSyncKey(sync_key *SyncKey) {
+	if client.uid == 0 {
+		return
+	}
+
+	last_id := sync_key.sync_key
+	log.Infof("sync key:%d %d %d %d", client.appid, client.uid, client.device_ID, last_id)
+	if last_id > 0 {
+		s := &SyncHistory{
+			AppID:client.appid, 
+			Uid:client.uid, 
+			LastMsgID:last_id,
+		}
+		sync_c <- s
+	}
+}
 
 func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 	if client.uid == 0 {
@@ -341,8 +364,12 @@ func (client *IMClient) HandleMessage(msg *Message) {
 		client.HandleUnreadCount(msg.body.(*MessageUnreadCount))
 	case MSG_SYNC:
 		client.HandleSync(msg.body.(*SyncKey))
+	case MSG_SYNC_KEY:
+		client.HandleSyncKey(msg.body.(*SyncKey))
 	case MSG_SYNC_GROUP:
 		client.HandleGroupSync(msg.body.(*GroupSyncKey))
+	case MSG_GROUP_SYNC_KEY:
+		client.HandleGroupSyncKey(msg.body.(*GroupSyncKey))
 	}
 }
 

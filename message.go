@@ -87,6 +87,9 @@ const MSG_SYNC_GROUP_END = 32
 const MSG_SYNC_GROUP_NOTIFY = 33
 
 
+//客服端->服务端,更新服务器的synckey
+const MSG_SYNC_KEY = 34
+const MSG_GROUP_SYNC_KEY = 35
 
 
 const MSG_VOIP_CONTROL = 64
@@ -119,11 +122,13 @@ func init() {
 	message_creators[MSG_SYNC_BEGIN] = func()IMessage{return new(SyncKey)}
 	message_creators[MSG_SYNC_END] = func()IMessage{return new(SyncKey)}
 	message_creators[MSG_SYNC_NOTIFY] = func()IMessage{return new(SyncKey)}
+	message_creators[MSG_SYNC_KEY] = func()IMessage{return new(SyncKey)}
 
 	message_creators[MSG_SYNC_GROUP] = func()IMessage{return new(GroupSyncKey)}
 	message_creators[MSG_SYNC_GROUP_BEGIN] = func()IMessage{return new(GroupSyncKey)}
 	message_creators[MSG_SYNC_GROUP_END] = func()IMessage{return new(GroupSyncKey)}
 	message_creators[MSG_SYNC_GROUP_NOTIFY] = func()IMessage{return new(GroupSyncKey)}
+	message_creators[MSG_GROUP_SYNC_KEY] = func()IMessage{return new(GroupSyncKey)}
 
 
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
