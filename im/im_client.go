@@ -110,12 +110,11 @@ func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
 
-		if group_sync_key.sync_key > 0 {
-			//非首次同步,过滤掉所有自己在当前设备发出的消息
-			if client.isSender(m, msg.DeviceID) {
-				continue
-			}
+		//过滤掉所有自己在当前设备发出的消息
+		if client.isSender(m, msg.DeviceID) {
+			continue
 		}
+
 		client.EnqueueMessage(m)
 	}
 
@@ -182,14 +181,10 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
 
-		if sync_key.sync_key > 0 {
-
-			//非首次同步,过滤掉所有自己在当前设备发出的消息
-			if client.isSender(m, msg.DeviceID) {
-				continue
-			}
+		//过滤掉所有自己在当前设备发出的消息
+		if client.isSender(m, msg.DeviceID) {
+			continue
 		}
-
 		
 		client.EnqueueMessage(m)
 	}
