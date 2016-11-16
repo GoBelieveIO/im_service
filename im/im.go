@@ -348,6 +348,9 @@ func main() {
 	log.Info("storage addresses:", config.storage_addrs)
 	log.Info("route addressed:", config.route_addrs)
 	log.Info("kefu appid:", config.kefu_appid)
+
+	log.Infof("socket io address:%s tls_address:%s cert file:%s key file:%s",
+		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
@@ -394,7 +397,8 @@ func main() {
 
 	StartHttpServer(config.http_listen_address)
 
-	go StartSocketIO(config.socket_io_address)
+	go StartSocketIO(config.socket_io_address, config.tls_address, 
+		config.cert_file, config.key_file)
 	go SyncKeyService()
 
 	ListenClient()

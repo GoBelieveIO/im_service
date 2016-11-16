@@ -36,31 +36,17 @@ type Config struct {
 	redis_db            int
 
 	http_listen_address string
+	
+	//engine io
 	socket_io_address   string
+	
+	tls_address         string
+	cert_file           string
+	key_file            string
 
 	storage_addrs       []string
 	storage_rpc_addrs   []string
 	route_addrs         []string
-}
-
-type StorageConfig struct {
-	listen              string
-	storage_root        string
-	mysqldb_datasource  string
-	redis_address       string
-	redis_password      string
-	redis_db            int
-
-	sync_listen         string
-	master_address      string
-	is_push_system      bool
-}
-
-type RouteConfig struct {
-	listen string
-	redis_address       string
-	redis_password      string
-	redis_db            int
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -121,6 +107,10 @@ func read_cfg(cfg_path string) *Config {
 
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.socket_io_address = get_string(app_cfg, "socket_io_address")
+	config.tls_address = get_opt_string(app_cfg, "tls_address")
+	config.cert_file = get_opt_string(app_cfg, "cert_file")
+	config.key_file = get_opt_string(app_cfg, "key_file")
+	
 	config.kefu_appid = get_opt_int(app_cfg, "kefu_appid")
 
 	str := get_string(app_cfg, "storage_pool")
@@ -144,45 +134,6 @@ func read_cfg(cfg_path string) *Config {
 	if len(config.route_addrs) == 0 {
 		log.Fatal("route pool config")
 	}
-
-	return config
-}
-
-func read_storage_cfg(cfg_path string) *StorageConfig {
-	config := new(StorageConfig)
-	app_cfg := make(map[string]string)
-	err := cfg.Load(cfg_path, app_cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	config.listen = get_string(app_cfg, "listen")
-	config.storage_root = get_string(app_cfg, "storage_root")
-	config.redis_address = get_string(app_cfg, "redis_address")
-	config.redis_password = get_opt_string(app_cfg, "redis_password")
-	db := get_opt_int(app_cfg, "redis_db")
-	config.redis_db = int(db)
-
-	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
-	config.sync_listen = get_string(app_cfg, "sync_listen")
-	config.master_address = get_opt_string(app_cfg, "master_address")
-	config.is_push_system = get_opt_int(app_cfg, "is_push_system") == 1
-	return config
-}
-
-func read_route_cfg(cfg_path string) *RouteConfig {
-	config := new(RouteConfig)
-	app_cfg := make(map[string]string)
-	err := cfg.Load(cfg_path, app_cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	config.listen = get_string(app_cfg, "listen")
-	config.redis_address = get_string(app_cfg, "redis_address")
-	config.redis_password = get_opt_string(app_cfg, "redis_password")
-	db := get_opt_int(app_cfg, "redis_db")
-	config.redis_db = int(db)
 
 	return config
 }

@@ -45,7 +45,8 @@ func (s *SIOServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.server.ServeHTTP(w, req)
 }
 
-func StartSocketIO(socket_io_address string) {
+func StartSocketIO(address string, tls_address string, 
+	cert_file string, key_file string) {
 	server, err := engineio.NewServer(nil)
 	if err != nil {
 		log.Fatal(err)
@@ -63,9 +64,19 @@ func StartSocketIO(socket_io_address string) {
 
 	mux := http.NewServeMux()
 	mux.Handle("/engine.io/", &SIOServer{server})
-	log.Infof("EngineIO Serving at %s...", socket_io_address)
-	HTTPService(socket_io_address, mux)
+	log.Infof("EngineIO Serving at %s...", address)
 
+	if tls_address != "" && cert_file != "" && key_file != "" {
+		log.Infof("EngineIO Serving TLS at %s...", tls_address)
+		err = http.ListenAndServeTLS(tls_address, cert_file, key_file, mux)
+		if err != nil {
+			log.Fatalf("listen err:%s", err)
+		}
+	}
+	err = http.ListenAndServe(address, mux)
+	if err != nil {
+		log.Fatalf("listen err:%s", err)
+	}
 }
 
 func handlerEngineIOClient(conn engineio.Conn) {
