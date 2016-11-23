@@ -1,0 +1,114 @@
+
+syntax = "proto3";
+
+package rpc;
+
+
+service IM {
+    rpc PostGroupNotification(GroupNotification) returns(Reply) {}
+    rpc PostGroupMessage(GroupMessage) returns(Reply) {}
+    rpc PostPeerMessage(PeerMessage) returns(Reply) {}
+    rpc PostSystemMessage(SystemMessage) returns(Reply) {}
+
+    rpc GetNewCount(NewCountRequest) returns(NewCount) {}
+    
+    rpc LoadLatestMessage(LoadLatestRequest) returns(HistoryMessage) {}
+    rpc LoadHistoryMessage(LoadHistoryRequest) returns(HistoryMessage) {}
+}
+
+
+//0 成功, 1 失败
+message Reply {
+    int32 result = 1;
+}
+
+
+message GroupNotification {
+    int64 appid = 1;
+    int64 group_id = 2;
+    string content = 3;
+    repeated  int64 members = 4;
+}
+
+message GroupMessage {
+    int64 appid = 1;
+    int64 sender = 2;
+    int64 group_id = 3;
+    string content = 4;
+}
+
+message PeerMessage {
+    int64 appid = 1;
+    int64 sender = 2;
+    int64 receiver = 3;
+    string content = 4;
+}
+
+message SystemMessage {
+    int64 appid = 1;
+    int64 uid = 2;
+    string content = 3;
+}
+
+
+message RoomMessage {
+    int64 appid = 1;
+    int64 uid = 2;
+    int64 room_id = 3;
+    string content = 4;
+}
+
+message CustomerMessage {
+    int64 customer_appid = 1;
+    int64 customer_id = 2;
+    int64 store_id = 3;
+    int64 seller_id = 4;
+    string content = 5;
+}
+
+message RealTimeMessage {
+    int64 appid = 1;
+    int64 sender = 2;
+    int64 receiver = 3;
+    string content = 4;
+}
+
+
+
+message NewCountRequest {
+    int64 appid = 1;
+    int64 uid = 2;
+}
+
+message NewCount {
+    int32 count = 1;
+}
+
+message LoadLatestRequest {
+    int64 appid = 1;
+    int64 uid = 2;
+    int32 limit = 3;
+}
+
+message LoadHistoryRequest {
+    int64 appid = 1;
+    int64 uid = 2;
+    int64 last_id = 3;
+}
+
+message Message {
+
+    int64 id = 1;
+    int32 timestamp = 2;
+    oneof m {
+        PeerMessage       peer = 3;
+        GroupMessage      group = 4;
+        GroupNotification group_notification = 5;
+        CustomerMessage   customer = 6;
+        CustomerMessage   customer_support = 7;
+    }
+}
+
+message HistoryMessage {
+    repeated Message messages = 1;
+}

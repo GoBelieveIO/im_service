@@ -36,6 +36,7 @@ type Config struct {
 	redis_db            int
 
 	http_listen_address string
+	rpc_listen_address  string
 	
 	//engine io
 	socket_io_address   string
@@ -100,6 +101,7 @@ func read_cfg(cfg_path string) *Config {
 
 	config.port = get_int(app_cfg, "port")
 	config.http_listen_address = get_string(app_cfg, "http_listen_address")
+	config.rpc_listen_address = get_string(app_cfg, "rpc_listen_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.redis_password = get_opt_string(app_cfg, "redis_password")
 	db := get_opt_int(app_cfg, "redis_db")

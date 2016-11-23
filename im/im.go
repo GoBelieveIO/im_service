@@ -27,6 +27,8 @@ import "net/http"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
+import "google.golang.org/grpc"
+import pb "github.com/GoBelieveIO/im_service/rpc"
 
 var storage_pools []*StorageConnPool
 
@@ -307,6 +309,19 @@ func StartHttpServer(addr string) {
 	HTTPService(addr, handler)
 }
 
+func StartRPCServer(addr string) {
+	go func() {
+		lis, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+		s := grpc.NewServer()
+		pb.RegisterIMServer(s, &RPCServer{})
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
+}
 
 func SyncKeyService() {
 	for {
@@ -396,6 +411,7 @@ func main() {
 	go ListenRedis()
 
 	StartHttpServer(config.http_listen_address)
+	StartRPCServer(config.rpc_listen_address)
 
 	go StartSocketIO(config.socket_io_address, config.tls_address, 
 		config.cert_file, config.key_file)

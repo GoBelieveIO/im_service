@@ -8,6 +8,10 @@ import "sync/atomic"
 import log "github.com/golang/glog"
 import "io/ioutil"
 import "github.com/bitly/go-simplejson"
+import pb "github.com/GoBelieveIO/im_service/rpc"
+import "golang.org/x/net/context"
+
+
 
 func SendGroupNotification(appid int64, gid int64, 
 	notification string, members IntSet) {
@@ -26,6 +30,406 @@ func SendGroupNotification(appid int64, gid int64,
 	}
 }
 
+
+func SendGroupIMMessage(im *IMMessage, appid int64) {
+	m := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, body:im}
+	group := group_manager.FindGroup(im.receiver)
+	if group == nil {
+		log.Warning("can't find group:", im.receiver)
+		return
+	}
+	if group.super {
+		msgid, err := SaveGroupMessage(appid, im.receiver, 0, m)
+		if err != nil {
+			return
+		}
+
+		//推送外部通知
+		PushGroupMessage(appid, im.receiver, m)
+
+		//发送同步的通知消息
+		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:im.receiver, sync_key:msgid}}
+		SendAppGroupMessage(appid, im.receiver, notify)
+
+	} else {
+		members := group.Members()
+		for member := range members {
+			msgid, err := SaveMessage(appid, member, 0, m)
+			if err != nil {
+				continue
+			}
+
+			//推送外部通知
+			PushGroupMessage(appid, member, m)
+
+			//发送同步的通知消息
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
+			SendAppMessage(appid, member, notify)
+		}
+	}
+	atomic.AddInt64(&server_summary.in_message_count, 1)
+}
+
+func SendIMMessage(im *IMMessage, appid int64) {
+	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
+	msgid, err := SaveMessage(appid, im.receiver, 0, m)
+	if err != nil {
+		return
+	}
+
+	//保存到发送者自己的消息队列
+	msgid2, err := SaveMessage(appid, im.sender, 0, m)
+	if err != nil {
+		return
+	}
+	
+	//推送外部通知
+	PushGroupMessage(appid, im.receiver, m)
+
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
+	SendAppMessage(appid, im.receiver, notify)
+
+	//发送同步的通知消息
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid2}}
+	SendAppMessage(appid, im.sender, notify)
+
+	atomic.AddInt64(&server_summary.in_message_count, 1)
+}
+
+//grpc
+type RPCServer struct {}
+
+func (s *RPCServer) PostGroupNotification(ctx context.Context, n *pb.GroupNotification) (*pb.Reply, error){
+	members := NewIntSet()
+	for _, m := range n.Members {
+		members.Add(m)
+	}
+
+	group := group_manager.FindGroup(n.GroupId)
+	if group != nil {
+		ms := group.Members()
+		for m, _ := range ms {
+			members.Add(m)
+		}
+	}
+
+	if len(members) == 0 {
+		return &pb.Reply{1}, nil
+	}
+
+	SendGroupNotification(n.Appid, n.GroupId, n.Content, members)
+
+	log.Info("post group notification success:", members)
+	return &pb.Reply{0}, nil
+}
+
+func (s *RPCServer) PostPeerMessage(ctx context.Context, p *pb.PeerMessage) (*pb.Reply, error) {
+	im := &IMMessage{}
+	im.sender = p.Sender
+	im.receiver = p.Receiver
+	im.msgid = 0
+	im.timestamp = int32(time.Now().Unix())
+	im.content = p.Content
+
+	SendIMMessage(im, p.Appid)
+	log.Info("post peer message success")
+	return &pb.Reply{0}, nil
+}
+
+
+func (s *RPCServer) PostGroupMessage(ctx context.Context, p *pb.GroupMessage) (*pb.Reply, error) {
+	im := &IMMessage{}
+	im.sender = p.Sender
+	im.receiver = p.GroupId
+	im.msgid = 0
+	im.timestamp = int32(time.Now().Unix())
+	im.content = p.Content
+
+	SendGroupIMMessage(im, p.Appid)
+	log.Info("post group message success")
+	return &pb.Reply{0}, nil
+}
+
+
+func (s *RPCServer) PostSystemMessage(ctx context.Context, sm *pb.SystemMessage) (*pb.Reply, error) {
+	sys := &SystemMessage{string(sm.Content)}
+	msg := &Message{cmd:MSG_SYSTEM, body:sys}
+
+	msgid, err := SaveMessage(sm.Appid, sm.Uid, 0, msg)
+	if err != nil {
+		return &pb.Reply{1}, nil
+	}
+
+	//推送通知
+	PushMessage(sm.Appid, sm.Uid, msg)
+
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	SendAppMessage(sm.Appid, sm.Uid, notify)
+
+	log.Info("post system message success")
+
+	return &pb.Reply{0}, nil
+}
+
+
+
+func (s *RPCServer) PostRealTimeMessage(ctx context.Context, rm *pb.RealTimeMessage) (*pb.Reply, error) {
+
+	rt := &RTMessage{}
+	rt.sender = rm.Sender
+	rt.receiver = rm.Receiver
+	rt.content = string(rm.Content)
+
+	msg := &Message{cmd:MSG_RT, body:rt}
+	SendAppMessage(rm.Appid, rm.Receiver, msg)
+	log.Info("post realtime message success")
+	return &pb.Reply{0}, nil
+}
+
+
+func (s *RPCServer) PostRoomMessage(ctx context.Context, rm *pb.RoomMessage) (*pb.Reply, error) {
+
+	room_im := &RoomMessage{new(RTMessage)}
+	room_im.sender = rm.Uid
+	room_im.receiver = rm.RoomId
+	room_im.content = string(rm.Content)
+
+	msg := &Message{cmd:MSG_ROOM_IM, body:room_im}
+	route := app_route.FindOrAddRoute(rm.Appid)
+	clients := route.FindRoomClientSet(rm.RoomId)
+	for c, _ := range(clients) {
+		c.wt <- msg
+	}
+
+	amsg := &AppMessage{appid:rm.Appid, receiver:rm.RoomId, msg:msg}
+	channel := GetRoomChannel(rm.RoomId)
+	channel.PublishRoom(amsg)
+
+	log.Info("post room message success")
+	return &pb.Reply{0}, nil
+}
+
+
+func (s *RPCServer) PostCustomerMessage(ctx context.Context, cm *pb.CustomerMessage) (*pb.Reply, error) {
+
+	c := &CustomerMessage{}
+	c.customer_appid = cm.CustomerAppid
+	c.customer_id = cm.CustomerId
+	c.store_id = cm.StoreId
+	c.seller_id = cm.SellerId
+	c.content = cm.Content
+	c.timestamp = int32(time.Now().Unix())
+
+	m := &Message{cmd:MSG_CUSTOMER, body:c}
+
+
+	msgid, err := SaveMessage(config.kefu_appid, cm.SellerId, 0, m)
+ 	if err != nil {
+		log.Warning("save message error:", err)
+		return &pb.Reply{1}, nil
+	}
+	msgid2, err := SaveMessage(cm.CustomerAppid, cm.CustomerId, 0, m)
+ 	if err != nil {
+		log.Warning("save message error:", err)
+		return &pb.Reply{1}, nil
+	}
+	
+	PushMessage(config.kefu_appid, cm.SellerId, m)
+	
+	//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	SendAppMessage(config.kefu_appid, cm.SellerId, notify)
+
+	//发送给自己的其它登录点
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	SendAppMessage(cm.CustomerAppid, cm.CustomerId, notify)
+
+	log.Info("post customer message success")
+	return &pb.Reply{0}, nil
+}
+
+
+func (s *RPCServer) GetNewCount(ctx context.Context, nc *pb.NewCountRequest) (*pb.NewCount, error) {
+	appid := nc.Appid
+	uid := nc.Uid
+
+	last_id := GetSyncKey(appid, uid)
+	sync_key := SyncHistory{AppID:appid, Uid:uid, LastMsgID:last_id}
+	
+	dc := GetStorageRPCClient(uid)
+
+	resp, err := dc.Call("GetNewCount", sync_key)
+
+	if err != nil {
+		log.Warning("get new count err:", err)
+		return &pb.NewCount{0}, nil
+	}
+	count := resp.(int64)
+
+	log.Infof("get offline appid:%d uid:%d count:%d", appid, uid, count)
+	return &pb.NewCount{int32(count)}, nil
+}
+
+
+
+func (s *RPCServer) LoadLatestMessage(ctx context.Context, r *pb.LoadLatestRequest) (*pb.HistoryMessage, error) {
+	appid := r.Appid
+	uid := r.Uid
+	limit := r.Limit
+
+	storage_pool := GetStorageConnPool(uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return &pb.HistoryMessage{}, nil
+	}
+	defer storage_pool.Release(storage)
+
+	messages, err := storage.LoadLatestMessage(appid, uid, int32(limit))
+	if err != nil {
+		log.Error("load latest message err:", err)
+		return &pb.HistoryMessage{}, nil
+	}
+
+	if len(messages) > 0 {
+		//reverse
+		size := len(messages)
+		for i := 0; i < size/2; i++ {
+			t := messages[i]
+			messages[i] = messages[size-i-1]
+			messages[size-i-1] = t
+		}
+	}
+
+	hm := &pb.HistoryMessage{}
+	hm.Messages = make([]*pb.Message, 0)
+
+	for _, emsg := range messages {
+		if emsg.msg.cmd == MSG_IM {
+			im := emsg.msg.body.(*IMMessage)
+			p := &pb.PeerMessage{}
+			p.Sender = im.sender
+			p.Receiver = im.receiver
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_Peer{p}}
+			hm.Messages = append(hm.Messages, m)
+		} else if emsg.msg.cmd == MSG_GROUP_IM {
+			im := emsg.msg.body.(*IMMessage)
+			p := &pb.GroupMessage{}
+			p.Sender = im.sender
+			p.GroupId = im.receiver
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_Group{p}}
+			hm.Messages = append(hm.Messages, m)
+		} else if emsg.msg.cmd == MSG_CUSTOMER {
+			im := emsg.msg.body.(*CustomerMessage)
+			p := &pb.CustomerMessage{}
+			p.CustomerAppid = im.customer_appid
+			p.CustomerId = im.customer_id
+			p.StoreId = im.store_id
+			p.SellerId = im.seller_id
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_Customer{p}}
+			hm.Messages = append(hm.Messages, m)
+		} else if emsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
+			im := emsg.msg.body.(*CustomerMessage)
+			p := &pb.CustomerMessage{}
+			p.CustomerAppid = im.customer_appid
+			p.CustomerId = im.customer_id
+			p.StoreId = im.store_id
+			p.SellerId = im.seller_id
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_CustomerSupport{p}}
+			hm.Messages = append(hm.Messages, m)
+		}
+	}
+
+	log.Info("load latest message success")
+	return hm, nil
+}
+
+
+func (s *RPCServer) LoadHistoryMessage(ctx context.Context, r *pb.LoadHistoryRequest) (*pb.HistoryMessage, error) {
+	appid := r.Appid
+	uid := r.Uid
+	msgid := r.LastId
+	
+	storage_pool := GetStorageConnPool(uid)
+	storage, err := storage_pool.Get()
+	if err != nil {
+		log.Error("connect storage err:", err)
+		return &pb.HistoryMessage{}, nil
+	}
+	defer storage_pool.Release(storage)
+
+	messages, err := storage.LoadHistoryMessage(appid, uid, msgid)
+	if err != nil {
+		log.Error("load latest message err:", err)
+		return &pb.HistoryMessage{}, nil
+	}
+
+	if len(messages) > 0 {
+		//reverse
+		size := len(messages)
+		for i := 0; i < size/2; i++ {
+			t := messages[i]
+			messages[i] = messages[size-i-1]
+			messages[size-i-1] = t
+		}
+	}
+
+	hm := &pb.HistoryMessage{}
+	hm.Messages = make([]*pb.Message, 0)
+
+
+	for _, emsg := range messages {
+		if emsg.msg.cmd == MSG_IM {
+			im := emsg.msg.body.(*IMMessage)
+			p := &pb.PeerMessage{}
+			p.Sender = im.sender
+			p.Receiver = im.receiver
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_Peer{p}}
+			hm.Messages = append(hm.Messages, m)
+		} else if emsg.msg.cmd == MSG_GROUP_IM {
+			im := emsg.msg.body.(*IMMessage)
+			p := &pb.GroupMessage{}
+			p.Sender = im.sender
+			p.GroupId = im.receiver
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_Group{p}}
+			hm.Messages = append(hm.Messages, m)
+		} else if emsg.msg.cmd == MSG_CUSTOMER {
+			im := emsg.msg.body.(*CustomerMessage)
+			p := &pb.CustomerMessage{}
+			p.CustomerAppid = im.customer_appid
+			p.CustomerId = im.customer_id
+			p.StoreId = im.store_id
+			p.SellerId = im.seller_id
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_Customer{p}}
+			hm.Messages = append(hm.Messages, m)
+		} else if emsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
+			im := emsg.msg.body.(*CustomerMessage)
+			p := &pb.CustomerMessage{}
+			p.CustomerAppid = im.customer_appid
+			p.CustomerId = im.customer_id
+			p.StoreId = im.store_id
+			p.SellerId = im.seller_id
+			p.Content = im.content
+			m := &pb.Message{emsg.msgid, im.timestamp, &pb.Message_CustomerSupport{p}}
+			hm.Messages = append(hm.Messages, m)
+		}
+	}
+
+	log.Info("load latest message success")
+	return hm, nil
+}
+
+
+//http
 func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 	log.Info("post group notification")
 	body, err := ioutil.ReadAll(req.Body)
@@ -95,71 +499,6 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 }
 
-func SendGroupIMMessage(im *IMMessage, appid int64) {
-	m := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, body:im}
-	group := group_manager.FindGroup(im.receiver)
-	if group == nil {
-		log.Warning("can't find group:", im.receiver)
-		return
-	}
-	if group.super {
-		msgid, err := SaveGroupMessage(appid, im.receiver, 0, m)
-		if err != nil {
-			return
-		}
-
-		//推送外部通知
-		PushGroupMessage(appid, im.receiver, m)
-
-		//发送同步的通知消息
-		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:im.receiver, sync_key:msgid}}
-		SendAppGroupMessage(appid, im.receiver, notify)
-
-	} else {
-		members := group.Members()
-		for member := range members {
-			msgid, err := SaveMessage(appid, member, 0, m)
-			if err != nil {
-				continue
-			}
-
-			//推送外部通知
-			PushGroupMessage(appid, member, m)
-
-			//发送同步的通知消息
-			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
-			SendAppMessage(appid, member, notify)
-		}
-	}
-	atomic.AddInt64(&server_summary.in_message_count, 1)
-}
-
-func SendIMMessage(im *IMMessage, appid int64) {
-	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
-	msgid, err := SaveMessage(appid, im.receiver, 0, m)
-	if err != nil {
-		return
-	}
-
-	//保存到发送者自己的消息队列
-	msgid2, err := SaveMessage(appid, im.sender, 0, m)
-	if err != nil {
-		return
-	}
-	
-	//推送外部通知
-	PushGroupMessage(appid, im.receiver, m)
-
-	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
-	SendAppMessage(appid, im.receiver, notify)
-
-	//发送同步的通知消息
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid2}}
-	SendAppMessage(appid, im.sender, notify)
-
-	atomic.AddInt64(&server_summary.in_message_count, 1)
-}
 
 func PostIMMessage(w http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(req.Body)
@@ -679,98 +1018,6 @@ func SendRealtimeMessage(w http.ResponseWriter, req *http.Request) {
 
 
 func InitMessageQueue(w http.ResponseWriter, req *http.Request) {
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		WriteHttpError(400, err.Error(), w)
-		return
-	}
-
-	obj, err := simplejson.NewJson(body)
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	appid, err := obj.Get("appid").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	uid, err := obj.Get("uid").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	platform_id, err := obj.Get("platform_id").Int()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	device_id, err := obj.Get("device_id").String()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	if platform_id == PLATFORM_WEB || len(device_id) == 0 {
-		WriteHttpError(400, "invalid platform/device id", w)
-		return
-	}
-	
-	did, err := GetDeviceID(device_id, platform_id)
-
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(500, "server internal error", w)
-		return
-	}
-
-	storage_pool := GetStorageConnPool(uid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		WriteHttpError(500, "server internal error", w)
-	}
-	defer storage_pool.Release(storage)
-
-	err = storage.InitQueue(appid, uid, did)
-
-	if err != nil {
-		log.Error("init queue err:", err)
-		WriteHttpError(500, "server internal error", w)
-		return
-	}
-
-	groups := group_manager.FindUserGroups(appid, uid)
-	for _, group := range groups {
-		if !group.super {
-			continue
-		}
-
-		storage_pool = GetGroupStorageConnPool(group.gid)
-		storage, err = storage_pool.Get()
-		if err != nil {
-			log.Error("connect storage err:", err)
-			WriteHttpError(500, "server internal error", w)
-			return
-		}
-		defer storage_pool.Release(storage)
-
-		err = storage.InitGroupQueue(appid, group.gid, uid, did)
-		if err != nil {
-			log.Error("init group queue err:", err)
-			WriteHttpError(500, "server internal error", w)
-			return
-		}
-	}
 	w.WriteHeader(200)
 }
 
