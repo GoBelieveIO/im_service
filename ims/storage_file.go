@@ -37,7 +37,7 @@ const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
 
-const BLOCK_SIZE = 64*1024*1024
+const BLOCK_SIZE = 128*1024*1024
 const LRU_SIZE = 128
 
 type StorageFile struct {
@@ -63,7 +63,7 @@ func NewStorageFile(root string) *StorageFile {
 	storage.files.OnEvicted = onFileEvicted
 
 	//find the last block file
-	pattern := fmt.Sprintf("%s/message_*", storage.root, "messages")
+	pattern := fmt.Sprintf("%s/message_*", storage.root)
 	files, _ := filepath.Glob(pattern)
 	block_NO := 0
 	for _, f := range files {
@@ -307,7 +307,7 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 		log.Fatal("file write size:", len(buf), " nwrite:", n)
 	}
 
-
+	msgid = int64(storage.block_NO)*BLOCK_SIZE + msgid
 	master.ewt <- &EMessage{msgid:msgid, msg:msg}
 	log.Info("save message:", Command(msg.cmd), " ", msgid)
 	return msgid
