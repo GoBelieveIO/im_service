@@ -24,3 +24,6 @@ protoc -Irpc/ rpc/rpc.proto --go_out=plugins=grpc:rpc
 
 2. python
 python -m grpc.tools.protoc -Irpc --python_out=rpc/ --grpc_python_out=rpc/ rpc/rpc.proto
+
+##官方QQ群
+1. 450359487
