@@ -153,10 +153,7 @@ func (client *Client) HandlePublish(amsg *AppMessage) {
 
 	if len(s) == 0 {
 		//用户不在线,推送消息到终端
-		if cmd == MSG_VOIP_CONTROL {
-			ctrl := amsg.msg.body.(*VOIPControl)
-			client.PublishVOIPMessage(amsg.appid, ctrl)
-		} else if cmd == MSG_IM {
+		if cmd == MSG_IM {
 			client.PublishPeerMessage(amsg.appid, amsg.msg.body.(*IMMessage))
 		} else if cmd == MSG_GROUP_IM {
 			client.PublishGroupMessage(amsg.appid, []int64{amsg.receiver},
@@ -176,6 +173,7 @@ func (client *Client) HandlePublish(amsg *AppMessage) {
 	if cmd == MSG_IM || cmd == MSG_GROUP_IM || 
 		cmd == MSG_CUSTOMER || cmd == MSG_CUSTOMER_SUPPORT || 
 		cmd == MSG_SYSTEM {
+		//持久化的消息不主动推送消息到客户端
 		return
 	}
 
