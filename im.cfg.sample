@@ -2,13 +2,33 @@
 port=23000
 #存储服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
 storage_pool=127.0.0.1:3333
+storage_rpc_pool=127.0.0.1:13333
+
 #路由服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
 route_pool=127.0.0.1:4444
+
 #websocket的监听地址 ip:port
 socket_io_address=:13890
+
+#wss监听地址 可选项
+tls_address=:14890
+#域名的证书文件路径(let's encrypt)
+cert_file=fullchain1.pem
+key_file=privkey1.pem
+
+
 #服务器状态信息和发送群组通知消息的接口监听地址 ip:port ip一般使用内网网卡地址
 http_listen_address=:6666
+#grpc监听地址
+rpc_listen_address=:6665
+
 #mysql的链接地址  用户名:密码@tcp(服务器地址:服务器端口)/数据库名称
 mysqldb_source=root:123456@tcp(127.0.0.1:3306)/im
 #redis服务器地址  服务器ip：服务器端口
 redis_address=127.0.0.1:6379
+redis_password=
+redis_db=0
+
+#客服的appid 可选项
+kefu_appid=0
+
