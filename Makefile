@@ -1,13 +1,13 @@
-all:im ims imr benchmark benchmark_group benchmark_connection benchmark_sender main.test benchmark_storage benchmark_route
+all:im1 ims1 imr1 benchmark benchmark_group benchmark_connection benchmark_sender main.test benchmark_storage benchmark_route
 
-im:im.go connection.go client.go im_client.go room_client.go voip_client.go customer_service_client.go route.go app_route.go customer_service.go protocol.go  group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go storage_message.go route_message.go user.go reload.go rpc.go storage_channel.go group_center.go device.go
-	go build im.go connection.go client.go im_client.go room_client.go voip_client.go customer_service_client.go route.go app_route.go customer_service.go protocol.go group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go storage_message.go route_message.go user.go reload.go rpc.go storage_channel.go group_center.go device.go
+im1:im.go connection.go client.go im_client.go room_client.go voip_client.go customer_service_client.go route.go app_route.go customer_service.go protocol.go  group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go storage_message.go route_message.go user.go reload.go rpc.go storage_channel.go group_center.go device.go
+	go build -o im1 im.go connection.go client.go im_client.go room_client.go voip_client.go customer_service_client.go route.go app_route.go customer_service.go protocol.go group_manager.go group.go set.go config.go monitoring.go sio.go storage_client.go channel.go storage_message.go route_message.go user.go reload.go rpc.go storage_channel.go group_center.go device.go
 
-ims:storage_server.go protocol.go storage.go storage_file.go peer_storage.go group_storage.go config.go storage_message.go storage_sync.go group_manager.go group.go set.go route_message.go app_route.go
-	go build -o ims storage_server.go protocol.go storage.go storage_file.go peer_storage.go group_storage.go config.go storage_message.go storage_sync.go group_manager.go group.go set.go route_message.go app_route.go
+ims1:storage_server.go protocol.go storage.go storage_file.go peer_storage.go group_storage.go config.go storage_message.go storage_sync.go group_manager.go group.go set.go route_message.go app_route.go
+	go build -o ims1 storage_server.go protocol.go storage.go storage_file.go peer_storage.go group_storage.go config.go storage_message.go storage_sync.go group_manager.go group.go set.go route_message.go app_route.go
 
-imr:route_server.go app_route.go protocol.go config.go set.go route_message.go
-	go build -o imr route_server.go app_route.go protocol.go config.go set.go route_message.go
+imr1:route_server.go app_route.go protocol.go config.go set.go route_message.go
+	go build -o imr1 route_server.go app_route.go protocol.go config.go set.go route_message.go
 
 benchmark:benchmark.go protocol.go
 	go build benchmark.go protocol.go
@@ -31,9 +31,9 @@ main.test:storage_test.go storage.go storage_file.go peer_storage.go group_stora
 	go test -c  storage.go storage_file.go peer_storage.go group_storage.go storage_test.go protocol.go storage_message.go storage_sync.go set.go route_message.go
 
 install:all
-	cp im ./bin
-	cp ims ./bin
-	cp imr ./bin
+	cp im1 ./bin/im
+	cp ims1 ./bin/ims
+	cp imr1 ./bin/imr
 
 clean:
-	rm -f im ims imr benchmark benchmark_connection benchmark_sender benchmark_storage benchmark_route main.test
+	rm -f im1 ims1 imr1 benchmark benchmark_connection benchmark_sender benchmark_storage benchmark_route main.test

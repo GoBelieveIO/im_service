@@ -134,9 +134,22 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 	}
 
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
-	SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	msgid2, err := SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	if err != nil {
+		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
+		return
+	}
 
 	PushMessage(client.appid, msg.receiver, m)
+
+		//发送同步的通知消息
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	client.SendMessage(msg.receiver, notify)
+
+	//发送给自己的其它登录点
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	client.SendMessage(client.uid, notify)
+	
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 	r := client.EnqueueMessage(ack)
@@ -171,12 +184,17 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	} else {
 		members := group.Members()
 		for member := range members {
-			_, err := SaveMessage(client.appid, member, client.device_ID, m)
+			msgid, err := SaveMessage(client.appid, member, client.device_ID, m)
 			if err != nil {
 				log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
 				continue
 			}
-			PushMessage(client.appid, member, m)
+
+			if msg.sender != member {
+				PushMessage(client.appid, member, m)
+			}
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
+			client.SendMessage(member, notify)
 		}
 	}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}

@@ -54,7 +54,31 @@ type Connection struct {
 }
 
 func (client *Connection) SendMessage(uid int64, msg *Message) bool {
-	return Send0Message(client.appid, uid, msg)
+	appid := client.appid
+
+	PushMessage(appid, uid, msg)
+
+	route := app_route.FindRoute(appid)
+	if route == nil {
+		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
+		return false
+	}
+	clients := route.FindClientSet(uid)
+	if len(clients) == 0 {
+		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
+		return false
+	}
+
+	for c, _ := range(clients) {
+		//不再发送给自己
+		if &c.Connection == client {
+			continue
+		}
+	
+		c.EnqueueMessage(msg)
+	}
+
+	return true
 }
 
 func (client *Connection) EnqueueMessage(msg *Message) bool {

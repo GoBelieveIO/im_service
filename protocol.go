@@ -69,6 +69,13 @@ const MSG_CUSTOMER = 24 //顾客->客服
 const MSG_CUSTOMER_SUPPORT = 25 //客服->顾客
 
 
+//通知客户端有新消息
+const MSG_SYNC_NOTIFY = 29
+
+//通知客户端有新消息
+const MSG_SYNC_GROUP_NOTIFY = 33
+
+
 const MSG_VOIP_CONTROL = 64
 
 //平台号
@@ -110,6 +117,13 @@ func init() {
 	message_creators[MSG_CUSTOMER] = func()IMessage{return new(CustomerMessage)}
 	message_creators[MSG_CUSTOMER_SUPPORT] = func()IMessage{return new(CustomerMessage)}
 
+	
+
+	message_creators[MSG_SYNC_NOTIFY] = func()IMessage{return new(SyncKey)}
+	message_creators[MSG_SYNC_GROUP_NOTIFY] = func()IMessage{return new(GroupSyncKey)}
+
+
+	
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -140,6 +154,8 @@ func init() {
 	message_descriptions[MSG_CUSTOMER_SERVICE_] = "MSG_CUSTOMER_SERVICE"
 	message_descriptions[MSG_CUSTOMER] = "MSG_CUSTOMER"
 	message_descriptions[MSG_CUSTOMER_SUPPORT] = "MSG_CUSTOMER_SUPPORT"
+	message_descriptions[MSG_SYNC_NOTIFY] = "MSG_SYNC_NOTIFY"
+	message_descriptions[MSG_SYNC_GROUP_NOTIFY] = "MSG_SYNC_GROUP_NOTIFY"
 	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 }
 
@@ -694,6 +710,56 @@ func (sub *MessageSubscribeState) FromData(buff []byte) bool {
 	for i := 0; i < int(count); i++ {
 		binary.Read(buffer, binary.BigEndian, &sub.uids[i])
 	}
+	return true
+}
+
+
+type SyncKey struct {
+	sync_key int64
+}
+
+
+func (id *SyncKey) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.sync_key)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *SyncKey) FromData(buff []byte) bool {
+	if len(buff) < 8 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.sync_key)
+	return true
+}
+
+
+
+type GroupSyncKey struct {
+	group_id int64
+	sync_key int64
+}
+
+
+func (id *GroupSyncKey) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.group_id)
+	binary.Write(buffer, binary.BigEndian, id.sync_key)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *GroupSyncKey) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &id.group_id)
+	binary.Read(buffer, binary.BigEndian, &id.sync_key)
 	return true
 }
 
