@@ -297,12 +297,22 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		return
 	}
 
+	if msg.sender != client.uid {
+		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
+		return
+	}
+	
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 
 	group := group_manager.FindGroup(msg.receiver)
 	if group == nil {
 		log.Warning("can't find group:", msg.receiver)
+		return
+	}
+
+	if !group.IsMember(msg.sender) {
+		log.Warningf("sender:%d is not group member", msg.sender)
 		return
 	}
 	if group.super {
