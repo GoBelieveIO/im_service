@@ -10,43 +10,57 @@
 ##编译运行
 
 1. 安装go编译环境
-参考链接:https://golang.org/doc/install
 
+   参考链接:https://golang.org/doc/install
 
 2. 下载im_service代码
-  cd $GOPATH/src/github.com/GoBelieveIO
-  git clone https://github.com/GoBelieveIO/im_service.git
 
-  
-3  编译proto文件
-   cd im_service 
+   cd $GOPATH/src/github.com/GoBelieveIO
+   
+   git clone https://github.com/GoBelieveIO/im_service.git
+
+3. 编译proto文件
+
+   cd im_service
 
    //注意需要翻墙
+
    go get google.golang.org/grpc
+
    go get -u github.com/golang/protobuf/{proto,protoc-gen-go}
 
    export PATH=$PATH:$GOPATH/bin
 
-   * go
    protoc -Irpc/ rpc/rpc.proto --go_out=plugins=grpc:rpc
 
-   * python
    python -m grpc.tools.protoc -Irpc --python_out=rpc/ --grpc_python_out=rpc/ rpc/rpc.proto
 
 4. 编译
+
   cd im_service
+
   mkdir bin
 
   go get github.com/bitly/go-simplejson
+
   go get github.com/golang/glog
+
   go get github.com/go-sql-driver/mysql
+
   go get github.com/garyburd/redigo/redis
+
   go get github.com/googollee/go-engine.io
+
   go get github.com/richmonkey/cfg
+
   go get github.com/syndtr/goleveldb/leveldb/opt
+
   go get github.com/syndtr/goleveldb/leveldb
 
+  go get github.com/valyala/gorpc
+
   //注意需要翻墙
+
   go get google.golang.org/grpc
 
   make install
@@ -62,7 +76,7 @@
 7. 启动程序
 
     创建ims消息存放路径
-    
+
     创建日志文件路径
     mkdir /data/logs/ims
     mkdir /data/logs/imr
