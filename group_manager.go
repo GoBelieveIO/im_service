@@ -23,10 +23,15 @@ import "sync"
 import "strconv"
 import "strings"
 import "time"
+import "fmt"
+import "math/rand"
 import "database/sql"
 import "github.com/garyburd/redigo/redis"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
+
+//同redis的长链接保持5minute的心跳
+const SUBSCRIBE_HEATBEAT = 30
 
 type GroupObserver interface {
 	OnGroupMemberAdd(g *Group, uid int64)
@@ -37,11 +42,20 @@ type GroupManager struct {
 	mutex  sync.Mutex
 	groups map[int64]*Group
 	observer GroupObserver
+	ping     string
 }
 
 func NewGroupManager() *GroupManager {
+	now := time.Now().Unix()
+	r := fmt.Sprintf("ping_%d", now)
+	for i := 0; i < 4; i++ {
+		n := rand.Int31n(26)
+		r = r + string('a' + n)
+	}
+	
 	m := new(GroupManager)
 	m.groups = make(map[int64]*Group)
+	m.ping = r
 	return m
 }
 
@@ -223,7 +237,8 @@ func (group_manager *GroupManager) Reload() {
 }
 
 func (group_manager *GroupManager) RunOnce() bool {
-	c, err := redis.Dial("tcp", config.redis_address)
+	t := redis.DialReadTimeout(time.Second*SUBSCRIBE_HEATBEAT)
+	c, err := redis.Dial("tcp", config.redis_address, t)
 	if err != nil {
 		log.Info("dial redis error:", err)
 		return false
@@ -238,7 +253,7 @@ func (group_manager *GroupManager) RunOnce() bool {
 	}
 
 	psc := redis.PubSubConn{c}
-	psc.Subscribe("group_create", "group_disband", "group_member_add", "group_member_remove")
+	psc.Subscribe("group_create", "group_disband", "group_member_add", "group_member_remove", group_manager.ping)
 	group_manager.Reload()
 	for {
 		switch v := psc.Receive().(type) {
@@ -279,7 +294,26 @@ func (group_manager *GroupManager) Run() {
 	}
 }
 
+func (group_manager *GroupManager) Ping() {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("PUBLISH", group_manager.ping, "ping")
+	if err != nil {
+		log.Info("ping error:", err)
+	}
+}
+
+
+func (group_manager *GroupManager) PingLoop() {
+	for {
+		group_manager.Ping()
+		time.Sleep(time.Second*(SUBSCRIBE_HEATBEAT-10))
+	}
+}
+
 func (group_manager *GroupManager) Start() {
 	group_manager.Reload()
 	go group_manager.Run()
+	go group_manager.PingLoop()
 }

@@ -24,6 +24,7 @@ import "runtime"
 import "flag"
 import "fmt"
 import "time"
+import "math/rand"
 import log "github.com/golang/glog"
 import "github.com/garyburd/redigo/redis"
 
@@ -169,6 +170,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 	if len(flag.Args()) == 0 {

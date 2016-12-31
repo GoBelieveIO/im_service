@@ -24,6 +24,7 @@ import "time"
 import "sync"
 import "runtime"
 import "flag"
+import "math/rand"
 import log "github.com/golang/glog"
 import "os"
 import "os/signal"
@@ -259,6 +260,7 @@ func ListenRPCClient() {
 
 }
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 	if len(flag.Args()) == 0 {

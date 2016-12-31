@@ -23,6 +23,7 @@ import "fmt"
 import "flag"
 import "time"
 import "runtime"
+import "math/rand"
 import "net/http"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
@@ -346,6 +347,7 @@ func SyncKeyService() {
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 	if len(flag.Args()) == 0 {
