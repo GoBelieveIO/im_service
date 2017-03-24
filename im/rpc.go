@@ -796,6 +796,36 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request){
 	WriteHttpObj(obj, w)
 }
 
+func SendNotification(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+	uid, err := strconv.ParseInt(m.Get("uid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+	sys := &SystemMessage{string(body)}
+	msg := &Message{cmd:MSG_NOTIFICATION, body:sys}
+	SendAppMessage(appid, uid, msg)
+	
+	w.WriteHeader(200)
+}
+
+
 func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {

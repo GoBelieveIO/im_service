@@ -91,6 +91,8 @@ const MSG_SYNC_GROUP_NOTIFY = 33
 const MSG_SYNC_KEY = 34
 const MSG_GROUP_SYNC_KEY = 35
 
+//系统通知消息, unpersistent
+const MSG_NOTIFICATION = 36
 
 const MSG_VOIP_CONTROL = 64
 
@@ -130,7 +132,8 @@ func init() {
 	message_creators[MSG_SYNC_GROUP_NOTIFY] = func()IMessage{return new(GroupSyncKey)}
 	message_creators[MSG_GROUP_SYNC_KEY] = func()IMessage{return new(GroupSyncKey)}
 
-
+	message_creators[MSG_NOTIFICATION] = func()IMessage{return new(SystemMessage)}
+	
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -172,6 +175,7 @@ func init() {
 	message_descriptions[MSG_SYNC_GROUP_END] = "MSG_SYNC_GROUP_END"
 	message_descriptions[MSG_SYNC_GROUP_NOTIFY] = "MSG_SYNC_GROUP_NOTIFY"
 
+	message_descriptions[MSG_NOTIFICATION] = "MSG_NOTIFICATION"
 	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 }
 

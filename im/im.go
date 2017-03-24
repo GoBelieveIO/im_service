@@ -299,6 +299,7 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/load_latest_message", LoadLatestMessage)
 	http.HandleFunc("/load_history_message", LoadHistoryMessage)
 	http.HandleFunc("/post_system_message", SendSystemMessage)
+	http.HandleFunc("/post_notification", SendNotification)
 	http.HandleFunc("/post_room_message", SendRoomMessage)
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)

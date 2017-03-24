@@ -43,7 +43,7 @@ MSG_SYNC_GROUP_BEGIN = 31
 MSG_SYNC_GROUP_END = 32
 MSG_SYNC_GROUP_NOTIFY = 33
 
-
+MSG_NOTIFICATION = 36
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -157,6 +157,8 @@ def recv_message(sock):
         ack, = struct.unpack("!i", content)
         return cmd, seq, ack
     elif cmd == MSG_SYSTEM:
+        return cmd, seq, content
+    elif cmd == MSG_NOTIFICATION:
         return cmd, seq, content
     elif cmd == MSG_INPUTING:
         sender, receiver = struct.unpack("!qq", content)
@@ -517,7 +519,39 @@ def recv_system_message_client(uid):
     print "recv system message success"
 
 
+def send_notificaton(uid):
+    global task
+    url = URL + "/messages/notifications"
+    obj = {
+        "receiver":uid,
+        "content":"notification content"
+    }
+    secret = md5.new(APP_SECRET).digest().encode("hex")
+    basic = base64.b64encode(str(APP_ID) + ":" + secret)
+    headers = {'Content-Type': 'application/json; charset=UTF-8',
+               'Authorization': 'Basic ' + basic}
+     
+    res = requests.post(url, data=json.dumps(obj), headers=headers)
+    if res.status_code != 200:
+        print res.status_code, res.content
+        return
+    print "send notification:", res.status_code
+    task += 1
+    
+def recv_notification_client(uid):
+    def handle_message(cmd, s, msg):
+        if cmd == MSG_NOTIFICATION:
+            print "cmd:", cmd, msg
+            return True
+        else:
+            print "cmd:", cmd, msg
+            return False
 
+    recv_client(uid, 23000, handle_message)
+    print "recv notification success"
+
+
+    
     
 def TestCluster():
     global task
@@ -941,7 +975,25 @@ def TestSystemMessage():
 
     print "test system message completed"
     
+def TestNotification():
+    global task
+    task = 0
+ 
+    room_id = 1
+    t3 = threading.Thread(target=recv_notification_client, args=(13635273142, ))
+    t3.setDaemon(True)
+    t3.start()
 
+    time.sleep(1)
+    
+    t2 = threading.Thread(target=send_notificaton, args=(13635273142, ))
+    t2.setDaemon(True)
+    t2.start()
+    
+    while task < 2:
+        time.sleep(1)
+
+    print "test notification completed"
 
 def main():
     cluster = True
@@ -969,15 +1021,15 @@ def main():
      
     TestSuperGroupOffline()
     time.sleep(1)
-
+     
     if cluster:
         TestClusterGroupMessage()
         time.sleep(1)
      
         TestClusterSuperGroupMessage()
         time.sleep(1)
-
-
+     
+     
     TestInputing()
     time.sleep(1)
      
@@ -1006,7 +1058,10 @@ def main():
      
     TestSendHttpGroupMessage()
     time.sleep(1)
-     
+
+    TestNotification()
+    time.sleep(1)
+
     TestSystemMessage()
     time.sleep(1)
 
