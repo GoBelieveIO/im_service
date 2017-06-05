@@ -19,7 +19,7 @@
    
    git clone https://github.com/GoBelieveIO/im_service.git
 
-3. 编译proto文件
+3. 编译proto文件（可选）
 
    cd im_service
 
