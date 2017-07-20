@@ -350,25 +350,6 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 	route.RemoveUserID(id.uid)
 }
 
-func (client *Client) HandleInitQueue(q *InitQueue) {
-	log.Infof("init queue appid:%d uid:%d device id:%d", 
-		q.appid, q.uid, q.device_id)
-
-	storage.InitQueue(q.appid, q.uid, q.device_id)
-	result := &MessageResult{status:0}
-	msg := &Message{cmd:MSG_RESULT, body:result}
-	SendMessage(client.conn, msg)
-}
-
-func (client *Client) HandleInitGroupQueue(q *InitGroupQueue) {
-	log.Infof("init group queue appid:%d gid:%d uid:%d device id:%d", 
-		q.appid, q.gid, q.uid, q.device_id)
-
-	storage.InitGroupQueue(q.appid, q.gid, q.uid, q.device_id)
-	result := &MessageResult{status:0}
-	msg := &Message{cmd:MSG_RESULT, body:result}
-	SendMessage(client.conn, msg)
-}
 
 func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", Command(msg.cmd))
@@ -397,10 +378,6 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleSubscribe(msg.body.(*AppUserID))
 	case MSG_UNSUBSCRIBE:
 		client.HandleUnsubscribe(msg.body.(*AppUserID))
-	case MSG_INIT_QUEUE:
-		client.HandleInitQueue(msg.body.(*InitQueue))
-	case MSG_INIT_GROUP_QUEUE:
-		client.HandleInitGroupQueue(msg.body.(*InitGroupQueue))
 	default:
 		log.Warning("unknown msg:", msg.cmd)
 	}
