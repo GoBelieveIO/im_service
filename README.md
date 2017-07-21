@@ -16,7 +16,7 @@
 2. 下载im_service代码
 
    cd $GOPATH/src/github.com/GoBelieveIO
-   
+
    git clone https://github.com/GoBelieveIO/im_service.git
 
 3. 编译proto文件（可选）
@@ -92,6 +92,15 @@
 
     nohup $BASEDIR/im -log_dir=/data/logs/im im.cfg >/data/logs/im/im.log 2>&1 &
 
+
+## token的格式
+
+    连接im服务器token存储在redis的hash对象中,脱离API服务器测试时，可以手工生成。
+    $token就是客户端需要获得的, 用来连接im服务器的认证信息。
+    key:access_token_$token
+    field:
+        user_id:用户id
+        app_id:应用id
 
 
 ## 官方QQ群
