@@ -37,41 +37,40 @@
 
 4. 编译
 
-  cd im_service
-
-  mkdir bin
-
-  go get github.com/bitly/go-simplejson
-
-  go get github.com/golang/glog
-
-  go get github.com/go-sql-driver/mysql
-
-  go get github.com/garyburd/redigo/redis
-
-  go get github.com/googollee/go-engine.io
-
-  go get github.com/richmonkey/cfg
-
-  go get github.com/syndtr/goleveldb/leveldb/opt
-
-  go get github.com/syndtr/goleveldb/leveldb
-
-  go get github.com/valyala/gorpc
-
-  //注意需要翻墙
-
-  go get google.golang.org/grpc
-
-  make install
-
-  可执行程序在bin目录下
+   cd im_service
+    
+   mkdir bin
+    
+   go get github.com/bitly/go-simplejson
+    
+   go get github.com/golang/glog
+    
+   go get github.com/go-sql-driver/mysql
+    
+   go get github.com/garyburd/redigo/redis
+    
+   go get github.com/googollee/go-engine.io
+    
+   go get github.com/richmonkey/cfg
+    
+   go get github.com/syndtr/goleveldb/leveldb/opt
+    
+   go get github.com/syndtr/goleveldb/leveldb
+    
+   go get github.com/valyala/gorpc
+    
+   //注意需要翻墙
+    
+   go get google.golang.org/grpc
+    
+   make install
+    
+   可执行程序在bin目录下
 
 5. 安装mysql数据库, redis, 并导入db.sql
 
 6. 配置程序
    配置项的说明参考ims.cfg.sample, imr.cfg.sample, im.cfg.sample
-
 
 7. 启动程序
 
@@ -81,7 +80,6 @@
     mkdir /data/logs/ims
     mkdir /data/logs/imr
     mkdir /data/logs/im
-
 
     pushd `dirname $0` > /dev/null
     BASEDIR=`pwd`
