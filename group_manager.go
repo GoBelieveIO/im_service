@@ -31,7 +31,7 @@ import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 
 //同redis的长链接保持5minute的心跳
-const SUBSCRIBE_HEATBEAT = 30
+const SUBSCRIBE_HEATBEAT = 5*60
 
 type GroupObserver interface {
 	OnGroupMemberAdd(g *Group, uid int64)
@@ -145,6 +145,42 @@ func (group_manager *GroupManager) HandleDisband(data string) {
 	}
 }
 
+func (group_manager *GroupManager) HandleUpgrade(data string) {
+	arr := strings.Split(data, ",")
+	if len(arr) != 3 {
+		log.Info("message error:", data)
+		return
+	}
+	gid, err := strconv.ParseInt(arr[0], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+	appid, err := strconv.ParseInt(arr[1], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+	super, err := strconv.ParseInt(arr[2], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+
+	if super == 0 {
+		log.Warning("super group can't transfer to nomal group")
+		return
+	}
+	group := group_manager.FindGroup(gid)
+	if group != nil {
+		group.super = (super == 1)
+		log.Infof("upgrade group appid:%d gid:%d super:%d", appid, gid, super)
+	} else {
+		log.Infof("can't find group:%d\n", gid)
+	}
+}
+
+
 func (group_manager *GroupManager) HandleMemberAdd(data string) {
 	arr := strings.Split(data, ",")
 	if len(arr) != 2 {
@@ -253,7 +289,8 @@ func (group_manager *GroupManager) RunOnce() bool {
 	}
 
 	psc := redis.PubSubConn{c}
-	psc.Subscribe("group_create", "group_disband", "group_member_add", "group_member_remove", group_manager.ping)
+	psc.Subscribe("group_create", "group_disband", "group_member_add",
+		"group_member_remove", "group_upgrade", group_manager.ping)
 	group_manager.Reload()
 	for {
 		switch v := psc.Receive().(type) {
@@ -266,6 +303,8 @@ func (group_manager *GroupManager) RunOnce() bool {
 				group_manager.HandleMemberAdd(string(v.Data))
 			} else if v.Channel == "group_member_remove" {
 				group_manager.HandleMemberRemove(string(v.Data))
+			} else if v.Channel == "group_upgrade" {
+				group_manager.HandleUpgrade(string(v.Data))
 			} else {
 				log.Infof("%s: message: %s\n", v.Channel, v.Data)
 			}
