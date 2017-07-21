@@ -257,8 +257,8 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
-func (client *IMClient) HandleSuperGroupMessage(m *Message) {
-	msg := m.body.(*IMMessage)
+func (client *IMClient) HandleSuperGroupMessage(msg *IMMessage) {
+	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 	msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save group message:%d %d err:%s", err, msg.sender, msg.receiver)
@@ -273,22 +273,26 @@ func (client *IMClient) HandleSuperGroupMessage(m *Message) {
 	client.SendGroupMessage(msg.receiver, notify)
 }
 
-func (client *IMClient) HandleGroupMessage(m *Message, group *Group) {
-	msg := m.body.(*IMMessage)
+func (client *IMClient) HandleGroupMessage(im *IMMessage, group *Group) {
+	gm := &PendingGroupMessage{}
+	gm.appid = client.appid
+	gm.sender = im.sender	
+	gm.device_ID = client.device_ID
+	gm.gid = im.receiver
+	gm.timestamp = im.timestamp
+	
 	members := group.Members()
-	for member := range members {
-		msgid, err := SaveMessage(client.appid, member, client.device_ID, m)
-		if err != nil {
-			log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
-			continue
-		}
+	gm.members = make([]int64, len(members))
+	i := 0
+	for uid := range members {
+		gm.members[i] = uid
+		i += 1
+	}
 
-		if msg.sender != member {
-			PushMessage(client.appid, member, m)
-		}
-		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
-		client.SendMessage(member, notify)
-	}	
+	gm.content = im.content
+	
+	m := &Message{cmd:MSG_PENDING_GROUP_MESSAGE, body: gm}
+	group_message_deliver.SaveMessage(m)
 }
 
 func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
@@ -303,7 +307,6 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 	}
 	
 	msg.timestamp = int32(time.Now().Unix())
-	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 
 	group := group_manager.FindGroup(msg.receiver)
 	if group == nil {
@@ -316,9 +319,9 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		return
 	}
 	if group.super {
-		client.HandleSuperGroupMessage(m)
+		client.HandleSuperGroupMessage(msg)
 	} else {
-		client.HandleGroupMessage(m, group)
+		client.HandleGroupMessage(msg, group)
 	}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
 	r := client.EnqueueMessage(ack)

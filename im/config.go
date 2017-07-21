@@ -28,7 +28,8 @@ type Config struct {
 	port                int
 	mysqldb_datasource  string
 	mysqldb_appdatasource  string
-
+	pending_root        string
+	
 	kefu_appid          int64
 
 	redis_address       string
@@ -107,6 +108,7 @@ func read_cfg(cfg_path string) *Config {
 	db := get_opt_int(app_cfg, "redis_db")
 	config.redis_db = int(db)
 
+	config.pending_root = get_string(app_cfg, "pending_root")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.socket_io_address = get_string(app_cfg, "socket_io_address")
 	config.tls_address = get_opt_string(app_cfg, "tls_address")

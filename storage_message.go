@@ -46,6 +46,7 @@ const MSG_STORAGE_SYNC_MESSAGE = 221
 const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
 //内部文件存储使用
+const MSG_PENDING_GROUP_MESSAGE = 251
 const MSG_GROUP_IM_LIST = 252
 const MSG_GROUP_ACK_IN = 253
 const MSG_OFFLINE = 254
@@ -66,8 +67,8 @@ func init() {
 	message_creators[MSG_GET_OFFLINE_COUNT] = func()IMessage{return new(LoadOffline)}
 	message_creators[MSG_GET_GROUP_OFFLINE_COUNT] = func()IMessage{return new(LoadGroupOffline)}
 
-	
 
+	message_creators[MSG_PENDING_GROUP_MESSAGE] = func()IMessage{return new (PendingGroupMessage)}
 	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
 
@@ -91,6 +92,8 @@ func init() {
 	message_descriptions[MSG_STORAGE_SYNC_BEGIN] = "MSG_STORAGE_SYNC_BEGIN"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE] = "MSG_STORAGE_SYNC_MESSAGE"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
+
+	message_descriptions[MSG_PENDING_GROUP_MESSAGE] = "MSG_PENDING_GROUP_MESSAGE"
 
 }
 type SyncCursor struct {
@@ -567,5 +570,66 @@ func (lo *LoadGroupOffline) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &lo.gid)
 	binary.Read(buffer, binary.BigEndian, &lo.uid)
 	binary.Read(buffer, binary.BigEndian, &lo.device_id)
+	return true
+}
+
+//待发送的群组消息临时存储结构
+type PendingGroupMessage struct {
+    appid     int64
+	sender    int64
+	device_ID int64 //发送者的设备id
+	gid       int64
+	timestamp int32
+
+	members   []int64 //需要接受此消息的成员列表
+	content   string
+}
+
+func (gm *PendingGroupMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, gm.appid)
+	binary.Write(buffer, binary.BigEndian, gm.sender)
+	binary.Write(buffer, binary.BigEndian, gm.device_ID)
+	binary.Write(buffer, binary.BigEndian, gm.gid)
+	binary.Write(buffer, binary.BigEndian, gm.timestamp)
+
+	count := int16(len(gm.members))
+	binary.Write(buffer, binary.BigEndian, count)
+	for _, uid := range gm.members {
+		binary.Write(buffer, binary.BigEndian, uid)
+	}
+	
+	buffer.Write([]byte(gm.content))	
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (gm *PendingGroupMessage) FromData(buff []byte) bool {
+	if len(buff) < 38 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &gm.appid)
+	binary.Read(buffer, binary.BigEndian, &gm.sender)
+	binary.Read(buffer, binary.BigEndian, &gm.device_ID)
+	binary.Read(buffer, binary.BigEndian, &gm.gid)
+	binary.Read(buffer, binary.BigEndian, &gm.timestamp)
+
+	var count int16
+	binary.Read(buffer, binary.BigEndian, &count)
+
+	if len(buff) < int(38 + count*8) {
+		return false
+	}
+	
+	gm.members = make([]int64, count)
+	for i := 0; i < int(count); i++ {
+		var uid int64
+		binary.Read(buffer, binary.BigEndian, &uid)
+		gm.members[i] = uid
+	}
+	offset := 38 + count*8
+	gm.content = string(buff[offset:])	
+
 	return true
 }

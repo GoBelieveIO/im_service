@@ -48,7 +48,7 @@ var server_summary *ServerSummary
 
 var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
-
+var group_message_deliver *GroupMessageDeliver
 
 func init() {
 	app_route = NewAppRoute()
@@ -366,7 +366,8 @@ func main() {
 	log.Info("storage addresses:", config.storage_addrs)
 	log.Info("route addressed:", config.route_addrs)
 	log.Info("kefu appid:", config.kefu_appid)
-
+	log.Info("pending root:", config.pending_root)
+	
 	log.Infof("socket io address:%s tls_address:%s cert file:%s key file:%s",
 		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
 	
@@ -411,6 +412,9 @@ func main() {
 	group_manager = NewGroupManager()
 	group_manager.Start()
 
+	group_message_deliver = NewGroupMessageDeliver(config.pending_root)
+	group_message_deliver.Start()
+	
 	go ListenRedis()
 
 	StartHttpServer(config.http_listen_address)

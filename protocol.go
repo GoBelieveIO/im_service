@@ -32,6 +32,8 @@ const PLATFORM_WEB = 3
 
 const DEFAULT_VERSION = 1
 
+const MSG_HEADER_SIZE = 12
+
 var message_descriptions map[int]string = make(map[int]string)
 
 type MessageCreator func()IMessage

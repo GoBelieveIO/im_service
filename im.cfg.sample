@@ -29,6 +29,9 @@ redis_address=127.0.0.1:6379
 redis_password=
 redis_db=0
 
+#群组消息发送队列的存储路径，必须存在
+pending_root=/tmp/pending
+
 #客服的appid 可选项
 kefu_appid=0
 
