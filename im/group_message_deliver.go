@@ -325,7 +325,7 @@ func (storage *GroupMessageDeliver) openReadFile() *os.File {
 
 
 //device_ID 发送者的设备ID
-func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, device_ID int64, msg *Message) bool {
+func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender int64, device_ID int64, msg *Message) bool {
 
 	PushMessage(appid, uid, msg)
 
@@ -342,7 +342,7 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, device_I
 
 	for c, _ := range(clients) {
 		//不再发送给自己
-		if c.device_ID == device_ID {
+		if c.device_ID == device_ID && sender == uid {
 			continue
 		}
 	
@@ -353,7 +353,7 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, device_I
 }
 
 func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) bool {
-	msg := &IMMessage{sender: gm.sender, receiver: gm.gid,	timestamp: gm.timestamp, content: gm.content}
+	msg := &IMMessage{sender: gm.sender, receiver: gm.gid, timestamp: gm.timestamp, content: gm.content}
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 	
 	members := gm.members
@@ -369,7 +369,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) bo
 			PushMessage(gm.appid, member, m)
 		}
 		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
-		storage.sendMessage(gm.appid, member, gm.device_ID, notify)
+		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
 	}
 
 	return true
@@ -380,8 +380,13 @@ func (storage *GroupMessageDeliver) sendPendingMessage() {
 	if file == nil {
 		return
 	}
+
+	offset := storage.latest_sended_msgid
+	if offset == 0 {
+		offset = HEADER_SIZE
+	}
 	
-	_, err := file.Seek(storage.latest_sended_msgid, os.SEEK_SET)
+	_, err := file.Seek(offset, os.SEEK_SET)
 	if err != nil {
 		log.Error("seek file err:", err)
 		return
@@ -431,6 +436,8 @@ func (storage *GroupMessageDeliver) truncateFile() {
 
 func (storage *GroupMessageDeliver) flushPendingMessage() {
 	latest_msgid := atomic.LoadInt64(&storage.latest_msgid)
+	log.Infof("flush pending message latest msgid:%d latest sended msgid:%d",
+		latest_msgid, storage.latest_sended_msgid)	
 	if latest_msgid > storage.latest_sended_msgid {
 		storage.sendPendingMessage()
 
