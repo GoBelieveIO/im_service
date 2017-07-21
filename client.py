@@ -8,6 +8,7 @@ import json
 import uuid
 import base64
 import md5
+import sys
 
 MSG_HEARTBEAT = 1
 #MSG_AUTH = 2
@@ -42,6 +43,9 @@ MSG_SYNC_GROUP = 30
 MSG_SYNC_GROUP_BEGIN = 31
 MSG_SYNC_GROUP_END = 32
 MSG_SYNC_GROUP_NOTIFY = 33
+
+MSG_SYNC_KEY  = 34
+MSG_GROUP_SYNC_KEY = 35
 
 MSG_NOTIFICATION = 36
 
@@ -111,11 +115,11 @@ def send_message(cmd, seq, msg, sock):
         h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!q", msg)
         sock.sendall(h+b)
-    elif cmd == MSG_SYNC:
+    elif cmd == MSG_SYNC or cmd == MSG_SYNC_KEY:
         h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!q", msg)
         sock.sendall(h+b)
-    elif cmd == MSG_SYNC_GROUP:
+    elif cmd == MSG_SYNC_GROUP or cmd == MSG_GROUP_SYNC_KEY:
         group_id, sync_key = msg
         h = struct.pack("!iibbbb", 16, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qq", group_id, sync_key)
@@ -268,7 +272,7 @@ def recv_client_(uid, port, handler, group_id):
             if new_sync_key > sync_key:
                 sync_key = new_sync_key
                 seq += 1
-                send_message(MSG_SYNC, seq, sync_key, sock)
+                send_message(MSG_SYNC_KEY, seq, sync_key, sock)
             if quit:
                 break
         elif cmd == MSG_SYNC_NOTIFY:
@@ -292,8 +296,7 @@ def recv_client_(uid, port, handler, group_id):
                 group_sync_keys[group_id] = new_sync_key
                 skey = group_sync_keys.get(group_id, 0)
                 seq += 1
-                send_message(MSG_SYNC_GROUP, seq, (group_id, skey), sock)
-
+                send_message(MSG_GROUP_SYNC_KEY, seq, (group_id, skey), sock)
             if quit:
                 break
 
@@ -303,7 +306,7 @@ def recv_client_(uid, port, handler, group_id):
                 break
 
 
-    
+    sock.close()
     task += 1
 
 def recv_inputing(uid, port=23000):
@@ -439,6 +442,8 @@ def send_client(uid, receiver, msg_type):
             send_message(MSG_ACK, seq, s, sock)
         else:
             pass
+        
+    sock.close()    
     task += 1
     print "send success"
 
@@ -736,9 +741,18 @@ def TestGroup():
 
     url = URL + "/groups/%s/members/13635273143"%str(group_id)
     r = requests.delete(url, headers = headers)
-
     assert(r.status_code == 200)
 
+
+    secret = md5.new(APP_SECRET).digest().encode("hex")
+    basic = base64.b64encode(str(APP_ID) + ":" + secret)
+    app_headers = {'Content-Type': 'application/json; charset=UTF-8',
+               'Authorization': 'Basic ' + basic}
+    
+    url = URL + "/groups/%s/upgrade"%str(group_id)
+    r = requests.post(url, headers=app_headers)
+    assert(r.status_code == 200)
+    
     url = URL + "/groups/%s"%str(group_id)
     r = requests.delete(url, headers = headers)
 
@@ -1003,7 +1017,7 @@ def main():
      
     TestGroup()
     time.sleep(1)
-     
+    
     TestGroupNotification()
     time.sleep(1)
      
@@ -1012,7 +1026,7 @@ def main():
      
     TestGroupMessage()
     time.sleep(1)
-     
+    
     TestSuperGroupMessage()
     time.sleep(1)
      
