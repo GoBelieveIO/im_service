@@ -136,7 +136,6 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 }
 
 func (client *Client) HandleDQGroupMessage(dq *DQGroupMessage) {
-	storage.DequeueGroupOffline(dq.msgid, dq.appid, dq.gid, dq.receiver, dq.device_id)
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
@@ -182,7 +181,6 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 }
 
 func (client *Client) HandleDQMessage(dq *DQMessage) {
-	storage.DequeueOffline(dq.msgid, dq.appid, dq.receiver, dq.device_id)
 	result := &MessageResult{status:0}
 	msg := &Message{cmd:MSG_RESULT, body:result}
 	SendMessage(client.conn, msg)
@@ -233,12 +231,12 @@ func (client *Client) filterMessages(messages []*EMessage, id *LoadOffline) []*E
 	return c
 }
 
+//todo remove
 func (client *Client) HandleLoadOffline(id *LoadOffline) {
-	messages := storage.LoadOfflineMessage(id.appid, id.uid, id.device_id)
+	messages := make([]*EMessage, 0, 10)
 	result := &MessageResult{status:0}
 	buffer := new(bytes.Buffer)
 
-	messages = client.filterMessages(messages, id)
 	count := int16(len(messages))
 
 	binary.Write(buffer, binary.BigEndian, count)
@@ -291,7 +289,7 @@ func (client *Client) HandleLoadHistory(lh *LoadHistory) {
 }
 
 func (client *Client) HandleLoadGroupOffline(lh *LoadGroupOffline) {
-	messages := storage.LoadGroupOfflineMessage(lh.appid, lh.gid, lh.uid, lh.device_id, GROUP_OFFLINE_LIMIT)
+	messages := make([]*EMessage, 0, 10)
 	result := &MessageResult{status:0}
 	buffer := new(bytes.Buffer)
 

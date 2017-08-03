@@ -21,65 +21,36 @@ package main
 
 
 import "fmt"
-import "strconv"
-import "strings"
+import "io"
+import "os"
+import "time"
+import "bytes"
+import "encoding/binary"
 import log "github.com/golang/glog"
 
-type AppGroupMemberLoginID struct {
+type GroupID struct {
 	appid  int64
 	gid    int64
-	uid    int64
-	device_id int64
 }
 
 type GroupStorage struct {
 	*StorageFile
-	group_received   map[AppGroupMemberLoginID]int64
+	message_index  map[GroupID]int64 //记录每个群组最近的消息ID	
 }
 
 func NewGroupStorage(f *StorageFile) *GroupStorage {
 	storage := &GroupStorage{StorageFile:f}
-	storage.group_received = make(map[AppGroupMemberLoginID]int64)
+	storage.message_index = make(map[GroupID]int64)
+
+	r := storage.readGroupIndex()
+	if !r {
+		storage.createGroupIndex()
+	}
+	//程序退出时再生成Index
+	storage.removeGroupIndex()
+	
 	return storage
 }
-
-//获取最后被接收到的消息id
-func (storage *Storage) GetLastGroupMsgID(appid int64, gid int64, uid int64) int64 {
-	start := fmt.Sprintf("g_%d_%d_%d_", appid, gid, uid)
-	max_id := int64(0)
-
-	//遍历"g_appid_gid_uid_%did%",找出最大的值
-	iter := storage.db.NewIterator(nil, nil)
-	for ok := iter.Seek([]byte(start)); ok; ok = iter.Next() {
-		k := string(iter.Key())
-		v := string(iter.Value())
-
-		if !strings.HasPrefix(k, start) {
-			break
-		}
-
-		received_id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			log.Error("parse int err:", err)
-			break
-		}
-
-		if received_id > max_id {
-			max_id = received_id
-		}
-	}
-	iter.Release()
-	err := iter.Error()
-	if err != nil {
-		log.Error("iter error:", err)
-	}
-
-	log.Infof("appid:%d gid:%d uid:%d max received id:%d",
-		appid, gid, uid, max_id)
-
-	return max_id
-}
-
 
 func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) int64 {
 	storage.mutex.Lock()
@@ -87,107 +58,41 @@ func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id 
 
 	msgid := storage.saveMessage(msg)
 
-	last_id, _ := storage.GetLastGroupMessageID(appid, gid)
+	last_id, _ := storage.getLastGroupMessageID(appid, gid)
 	lt := &GroupOfflineMessage{appid:appid, gid:gid, msgid:msgid, device_id:device_id, prev_msgid:last_id}
 	m := &Message{cmd:MSG_GROUP_IM_LIST, body:lt}
 	
 	last_id = storage.saveMessage(m)
-	storage.SetLastGroupMessageID(appid, gid, last_id)
+	storage.setLastGroupMessageID(appid, gid, last_id)
 	return msgid
 }
 
+func (storage *GroupStorage) setLastGroupMessageID(appid int64, gid int64, msgid int64) {
+	id := GroupID{appid, gid}
+	storage.message_index[id] = msgid
+}
+
 func (storage *GroupStorage) SetLastGroupMessageID(appid int64, gid int64, msgid int64) {
-	key := fmt.Sprintf("g_%d_%d", appid, gid)
-	value := fmt.Sprintf("%d", msgid)	
-	err := storage.db.Put([]byte(key), []byte(value), nil)
-	if err != nil {
-		log.Error("put err:", err)
-		return
-	}
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	storage.setLastGroupMessageID(appid, gid, msgid)
+}
+
+func (storage *GroupStorage) getLastGroupMessageID(appid int64, gid int64) (int64, error) {
+	id := GroupID{appid, gid}
+	return storage.message_index[id], nil
 }
 
 func (storage *GroupStorage) GetLastGroupMessageID(appid int64, gid int64) (int64, error) {
-	key := fmt.Sprintf("g_%d_%d", appid, gid)
-	value, err := storage.db.Get([]byte(key), nil)
-	if err != nil {
-		log.Error("get err:", err)
-		return 0, err
-	}
-
-	msgid, err := strconv.ParseInt(string(value), 10, 64)
-	if err != nil {
-		log.Error("parseint err:", err)
-		return 0, err
-	}
-	return msgid, nil
-}
-
-func (storage *GroupStorage) SetLastGroupReceivedID(member *AppGroupMemberLoginID, msgid int64) {
-	appid := member.appid
-	gid := member.gid
-	uid := member.uid
-	device_id := member.device_id
-
-	key := fmt.Sprintf("g_%d_%d_%d_%d", appid, gid, uid, device_id)
-	value := fmt.Sprintf("%d", msgid)	
-	err := storage.db.Put([]byte(key), []byte(value), nil)
-	if err != nil {
-		log.Error("put err:", err)
-		return
-	}
-}
-
-func (storage *GroupStorage) getLastGroupReceivedID(member *AppGroupMemberLoginID) (int64, error) {
-	appid := member.appid
-	gid := member.gid
-	uid := member.uid
-	device_id := member.device_id
-
-	key := fmt.Sprintf("g_%d_%d_%d_%d", appid, gid, uid, device_id)
-
-	id := AppGroupMemberLoginID{appid:appid, gid:gid, uid:uid, device_id:device_id}
-	if msgid, ok := storage.group_received[id]; ok {
-		return msgid, nil
-	}
-	value, err := storage.db.Get([]byte(key), nil)
-	if err != nil {
-		log.Errorf("get key:%s err:%s", key, err)
-		return 0, err
-	}
-
-	msgid, err := strconv.ParseInt(string(value), 10, 64)
-	if err != nil {
-		log.Error("parseint err:", err)
-		return 0, err
-	}
-	return msgid, nil
-}
-
-func (storage *GroupStorage) GetLastGroupReceivedID(member *AppGroupMemberLoginID) (int64, error) {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
-	return storage.getLastGroupReceivedID(member)
-}
-
-func (storage *GroupStorage) DequeueGroupOffline(msg_id int64, appid int64, gid int64, receiver int64, device_id int64) {
-	log.Infof("dequeue group offline:%d %d %d %d\n", appid, gid, receiver, msg_id)
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 
-	member := &AppGroupMemberLoginID{appid:appid, gid:gid, uid:receiver, device_id:device_id}
-	last, _ := storage.getLastGroupReceivedID(member)
-	if msg_id <= last {
-		log.Infof("group ack msgid:%d last:%d\n", msg_id, last)
-		return
-	}
-
-	storage.group_received[*member] = msg_id
+	return storage.getLastGroupMessageID(appid, gid)
 }
 
 
 //获取所有消息id大于msgid的消息
 func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gid int64, msgid int64, limit int) []*EMessage {
-
 	last_id, err := storage.GetLastGroupMessageID(appid, gid)
 	if err != nil {
 		log.Info("get last group message id err:", err)
@@ -226,84 +131,140 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 	return c
 }
 
+func (storage *GroupStorage) createGroupIndex() {
+	log.Info("create group message index begin:", time.Now().UnixNano())
 
-func (storage *GroupStorage) LoadGroupOfflineMessage(appid int64, gid int64, uid int64, device_id int64, limit int) []*EMessage {
-	last_id, err := storage.GetLastGroupMessageID(appid, gid)
-	if err != nil {
-		log.Info("get last group message id err:", err)
-		return nil
+	for i := 0; i <= storage.block_NO; i++ {
+		file := storage.openReadFile(i)
+		if file == nil {
+			break
+		}
+
+		_, err := file.Seek(HEADER_SIZE, os.SEEK_SET)
+		if err != nil {
+			log.Warning("seek file err:", err)
+			file.Close()
+			break
+		}
+		for {
+			msgid, err := file.Seek(0, os.SEEK_CUR)
+			if err != nil {
+				log.Info("seek file err:", err)
+				break
+			}
+			msg := storage.ReadMessage(file)
+			if msg == nil {
+				break
+			}
+
+			if msg.cmd == MSG_GROUP_IM_LIST {
+				off := msg.body.(*GroupOfflineMessage)
+				id := GroupID{off.appid, off.gid}
+				storage.message_index[id] = msgid
+			}
+		}
+
+		file.Close()
 	}
-
-	member := &AppGroupMemberLoginID{appid:appid, gid:gid, uid:uid, device_id:device_id}
-	last_received_id, _ := storage.GetLastGroupReceivedID(member)
-
-	c := make([]*EMessage, 0, 10)
-
-	msgid := last_id
-	for ; msgid > 0; {
-		msg := storage.LoadMessage(msgid)
-		if msg == nil {
-			log.Warningf("load message:%d error\n", msgid)
-			break
-		}
-		if msg.cmd != MSG_GROUP_IM_LIST {
-			log.Warning("invalid message cmd:", Command(msg.cmd))
-			break
-		}
-		off := msg.body.(*GroupOfflineMessage)
-
-		if off.msgid == 0 || off.msgid <= last_received_id {
-			break
-		}
-
-		m := storage.LoadMessage(off.msgid)
-		c = append(c, &EMessage{msgid:off.msgid, device_id:off.device_id, msg:m})
-
-		msgid = off.prev_msgid
-
-		if len(c) >= limit {
-			break
-		}
-	}
-
-	if len(c) > 0 {
-		//reverse
-		size := len(c)
-		for i := 0; i < size/2; i++ {
-			t := c[i]
-			c[i] = c[size-i-1]
-			c[size-i-1] = t
-		}
-	}
-
-	log.Infof("load group offline message appid:%d gid:%d uid:%d count:%d last id:%d last received id:%d\n", appid, gid, uid, len(c), last_id, last_received_id)
-	return c
+	log.Info("create group message index end:", time.Now().UnixNano())
 }
 
-func (storage *GroupStorage) FlushReceived() {
-	if len(storage.group_received) > 0 {
-		log.Infof("flush group received:%d\n", len(storage.group_received))
+func (storage *GroupStorage) readGroupIndex() bool {
+	path := fmt.Sprintf("%s/group_index", storage.root)
+	log.Info("read group message index path:", path)
+	file, err := os.Open(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Fatal("open file:", err)			
+		}
+		return false
+	}
+	defer file.Close()
+	data := make([]byte, 24*1000)
+
+	for {
+		n, err := file.Read(data)
+		if err != nil {
+			if err != io.EOF {
+				log.Fatal("read err:", err)
+			}
+			break
+		}
+		n = n - n%24
+		buffer := bytes.NewBuffer(data[:n])
+		for i := 0; i < n/24; i++ {
+			id := GroupID{}
+			var msg_id int64
+			binary.Read(buffer, binary.BigEndian, &id.appid)
+			binary.Read(buffer, binary.BigEndian, &id.gid)
+			binary.Read(buffer, binary.BigEndian, &msg_id)
+
+			storage.message_index[id] = msg_id
+		}
+	}
+	return true
+}
+
+func (storage *GroupStorage) removeGroupIndex() {
+	path := fmt.Sprintf("%s/group_index", storage.root)
+	err := os.Remove(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Fatal("remove file:", err)
+		}
+	}
+}
+
+//appid gid msgid = 24字节
+func (storage *GroupStorage) FlushGroupIndex() {
+	path := fmt.Sprintf("%s/group_index", storage.root)
+	log.Info("write group message index path:", path)
+	begin := time.Now().UnixNano()
+	log.Info("flush group index begin:", begin)
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatal("open file:", err)
+	}
+	defer file.Close()
+
+	buffer := new(bytes.Buffer)
+	index := 0
+	for id, value := range(storage.message_index) {
+		binary.Write(buffer, binary.BigEndian, id.appid)
+		binary.Write(buffer, binary.BigEndian, id.gid)
+		binary.Write(buffer, binary.BigEndian, value)
+
+		index += 1
+		//batch write to file
+		if index % 1000 == 0 {
+			buf := buffer.Bytes()
+			n, err := file.Write(buf)
+			if err != nil {
+				log.Fatal("write file:", err)
+			}
+			if n != len(buf) {
+				log.Fatal("can't write file:", len(buf), n)
+			}
+
+			buffer.Reset()
+		}
 	}
 
-	if len(storage.group_received) > 0 {
-		for id, msg_id := range storage.group_received {
-			storage.SetLastGroupReceivedID(&id, msg_id)
-			off := &GroupOfflineMessage{appid:id.appid, receiver:id.uid, 
-				device_id:id.device_id, msgid:msg_id, gid:id.gid}
-			msg := &Message{cmd:MSG_GROUP_ACK_IN, body:off}
-			storage.saveMessage(msg)
-		}
-		storage.group_received = make(map[AppGroupMemberLoginID]int64)
+	buf := buffer.Bytes()
+	n, err := file.Write(buf)
+	if err != nil {
+		log.Fatal("write file:", err)
 	}
+	if n != len(buf) {
+		log.Fatal("can't write file:", len(buf), n)
+	}
+	end := time.Now().UnixNano()
+	log.Info("flush group index end:", end, " used:", end - begin)
 }
 
 func (storage *GroupStorage) ExecMessage(msg *Message, msgid int64) {
 	if msg.cmd == MSG_GROUP_IM_LIST {
 		off := msg.body.(*GroupOfflineMessage)
 		storage.SetLastGroupMessageID(off.appid, off.gid, msgid)
-	} else if msg.cmd == MSG_GROUP_ACK_IN {
-		off := msg.body.(*GroupOfflineMessage)
-		id := &AppGroupMemberLoginID{appid:off.appid, gid:off.gid, uid:off.receiver, device_id:off.device_id}
-		storage.SetLastGroupReceivedID(id, msgid)
 	}
 }

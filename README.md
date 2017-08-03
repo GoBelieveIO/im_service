@@ -53,10 +53,6 @@
     
    go get github.com/richmonkey/cfg
     
-   go get github.com/syndtr/goleveldb/leveldb/opt
-    
-   go get github.com/syndtr/goleveldb/leveldb
-    
    go get github.com/valyala/gorpc
     
    //注意需要翻墙

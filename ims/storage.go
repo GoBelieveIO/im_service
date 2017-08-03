@@ -37,14 +37,6 @@ func NewStorage(root string) *Storage {
 	return &Storage{f, ps, gs}
 }
 
-func (storage *Storage) FlushReceived() {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
-
-	storage.PeerStorage.FlushReceived()
-	storage.GroupStorage.FlushReceived()
-}
-
 func (storage *Storage) NextMessageID() int64 {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()

@@ -29,8 +29,6 @@ import "strings"
 import "strconv"
 import "io"
 import log "github.com/golang/glog"
-import "github.com/syndtr/goleveldb/leveldb"
-import "github.com/syndtr/goleveldb/leveldb/opt"
 import "github.com/GoBelieveIO/im_service/lru"
 
 const HEADER_SIZE = 32
@@ -42,7 +40,6 @@ const LRU_SIZE = 128
 
 type StorageFile struct {
 	root      string
-	db        *leveldb.DB
 	mutex     sync.Mutex
 
 	block_NO  int      //write file block NO
@@ -65,7 +62,7 @@ func NewStorageFile(root string) *StorageFile {
 	//find the last block file
 	pattern := fmt.Sprintf("%s/message_*", storage.root)
 	files, _ := filepath.Glob(pattern)
-	block_NO := 0
+	block_NO := 0 //begin from 0
 	for _, f := range files {
 		base := filepath.Base(f)
 		if strings.HasPrefix(base, "message_") {
@@ -81,15 +78,6 @@ func NewStorageFile(root string) *StorageFile {
 	}
 
 	storage.openWriteFile(block_NO)
-
-	path := fmt.Sprintf("%s/%s", storage.root, "offline")
-	option := &opt.Options{}
-	db, err := leveldb.OpenFile(path, option)
-	if err != nil {
-		log.Fatal("open leveldb:", err)
-	}
-
-	storage.db = db
 	
 	return storage
 }
@@ -168,12 +156,7 @@ func (storage *StorageFile) getFile(block_NO int) *os.File {
 }
 
 
-func (storage *StorageFile) ListKeyValue() {
-	iter := storage.db.NewIterator(nil, nil)
-	for iter.Next() {
-		log.Info("key:", string(iter.Key()), " value:", string(iter.Value()))
-	}
-}
+
 
 func (storage *StorageFile) ReadMessage(file *os.File) *Message {
 	//校验消息起始位置的magic

@@ -197,18 +197,17 @@ func waitSignal() error {
         fmt.Println("singal:", sig.String())
         switch sig {
             case syscall.SIGTERM, syscall.SIGINT:
-			storage.FlushReceived()
+			storage.FlushPeerIndex()
+			storage.FlushGroupIndex()
 			os.Exit(0)
         }
     }
     return nil // It'll never get here.
 }
 
+//todo flush index
 func FlushLoop() {
-	for {
-		time.Sleep(1*time.Second)
-		storage.FlushReceived()
-	}
+
 }
 
 func NewRedisPool(server, password string, db int) *redis.Pool {

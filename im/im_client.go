@@ -261,7 +261,7 @@ func (client *IMClient) HandleSuperGroupMessage(msg *IMMessage) {
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 	msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
-		log.Errorf("save group message:%d %d err:%s", err, msg.sender, msg.receiver)
+		log.Errorf("save group message:%d %d err:%s", msg.sender, msg.receiver, err)
 		return
 	}
 	
