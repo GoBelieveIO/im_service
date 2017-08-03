@@ -55,7 +55,7 @@
     
    go get github.com/valyala/gorpc
     
-   //注意需要翻墙
+   //注意需要翻墙(可选)
     
    go get google.golang.org/grpc
     

@@ -28,8 +28,6 @@ import "net/http"
 import "github.com/garyburd/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
-import "google.golang.org/grpc"
-import pb "github.com/GoBelieveIO/im_service/rpc"
 
 var storage_pools []*StorageConnPool
 
@@ -309,20 +307,6 @@ func StartHttpServer(addr string) {
 
 	handler := loggingHandler{http.DefaultServeMux}
 	HTTPService(addr, handler)
-}
-
-func StartRPCServer(addr string) {
-	go func() {
-		lis, err := net.Listen("tcp", addr)
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-		s := grpc.NewServer()
-		pb.RegisterIMServer(s, &RPCServer{})
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
-		}
-	}()
 }
 
 func SyncKeyService() {
