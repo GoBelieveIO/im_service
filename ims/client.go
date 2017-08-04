@@ -29,7 +29,6 @@ type Client struct {
 	
 	//subscribe mode
 	wt     chan *Message
-	app_route *AppRoute
 }
 
 func NewClient(conn *net.TCPConn) *Client {
@@ -37,41 +36,13 @@ func NewClient(conn *net.TCPConn) *Client {
 	client.conn = conn 
 
 	client.wt = make(chan *Message, 10)
-	client.app_route = NewAppRoute()
 	return client
-}
-
-func (client *Client) ContainAppGroupID(appid int64, gid int64) bool {
-	route := client.app_route.FindRoute(appid)
-	if route == nil {
-		return false
-	}
-	return route.ContainGroupID(gid)
-}
-
-func (client *Client) ContainGroupUserID(appid int64, gid int64, uid int64) bool {
-	route := client.app_route.FindRoute(appid)
-	if route == nil {
-		return false
-	}
-
-	return route.ContainGroupMember(gid, uid)
-}
-
-func (client *Client) ContainAppUserID(id *AppUserID) bool {
-	route := client.app_route.FindRoute(id.appid)
-	if route == nil {
-		return false
-	}
-
-	return route.ContainUserID(id.uid)
 }
 
 func (client *Client) Read() {
 	for {
 		msg := client.read()
 		if msg == nil {
-			RemoveClient(client)
 			client.wt <- nil
 			break
 		}
@@ -103,29 +74,9 @@ func (client *Client) HandleSaveAndEnqueueGroup(sae *SAEMessage) {
 
 	appid := sae.appid
 	gid := sae.receiver
-
-	//保证群组消息以id递增的顺序发出去
-	t := make(chan int64)
-	f := func () {
-		msgid := storage.SaveGroupMessage(appid, gid, sae.device_id, sae.msg)
-
-		s := FindGroupClientSet(appid, gid)
-		for c := range s {
-			log.Info("publish group message")
-			am := &AppMessage{appid:appid, receiver:gid, msgid:msgid, device_id:sae.device_id, msg:sae.msg}
-			m := &Message{cmd:MSG_PUBLISH_GROUP, body:am}
-			c.wt <- m
-		}
-		if len(s) == 0 {
-			log.Infof("can't publish group message:%d", gid)
-		}
-		t <- msgid
-	}
-
-	c := GetGroupChan(gid)
-	c <- f
-	msgid := <- t
-
+	
+	msgid := storage.SaveGroupMessage(appid, gid, sae.device_id, sae.msg)
+	
 	result := &MessageResult{}
 	result.status = 0
 	buffer := new(bytes.Buffer)
@@ -149,28 +100,8 @@ func (client *Client) HandleSaveAndEnqueue(sae *SAEMessage) {
 
 	appid := sae.appid
 	uid := sae.receiver
-	//保证消息以id递增的顺序发出
-	t := make(chan int64)	
-	f := func() {
-		msgid := storage.SavePeerMessage(appid, uid, sae.device_id, sae.msg)
-		
-		id := &AppUserID{appid:appid, uid:uid}
-		s := FindClientSet(id)
-		for c := range s {
-			am := &AppMessage{appid:appid, receiver:uid, msgid:msgid, device_id:sae.device_id, msg:sae.msg}
-			m := &Message{cmd:MSG_PUBLISH, body:am}
-			c.wt <- m
-		}
-		if len(s) == 0 {
-			log.Infof("can't publish message:%s %d", Command(sae.msg.cmd), uid)
-		}
-		t <- msgid
-	}
-
-	c := GetUserChan(uid)
-	c <- f
-	msgid := <- t
-
+	msgid := storage.SavePeerMessage(appid, uid, sae.device_id, sae.msg)
+	
 	result := &MessageResult{}
 	result.status = 0
 	buffer := new(bytes.Buffer)
@@ -321,33 +252,6 @@ func (client *Client) HandleLoadGroupOffline(lh *LoadGroupOffline) {
 	SendMessage(client.conn, msg)
 }
 
-func (client *Client) HandleSubscribeGroup(lo *AppGroupMemberID) {
-	log.Infof("subscribe group appid:%d gid:%d uid:%d\n", lo.appid, lo.gid, lo.uid)
-	AddClient(client)
-
-	route := client.app_route.FindOrAddRoute(lo.appid)
-	route.AddGroupMember(lo.gid, lo.uid)
-}
-
-func (client *Client) HandleUnSubscribeGroup(id *AppGroupMemberID) {
-	route := client.app_route.FindOrAddRoute(id.appid)
-	route.RemoveGroupMember(id.gid, id.uid)
-}
-
-func (client *Client) HandleSubscribe(id *AppUserID) {
-	log.Infof("subscribe appid:%d uid:%d", id.appid, id.uid)
-	AddClient(client)
-
-	route := client.app_route.FindOrAddRoute(id.appid)
-	route.AddUserID(id.uid)
-}
-
-func (client *Client) HandleUnsubscribe(id *AppUserID) {
-	log.Infof("unsubscribe appid:%d uid:%d", id.appid, id.uid)
-	route := client.app_route.FindOrAddRoute(id.appid)
-	route.RemoveUserID(id.uid)
-}
-
 
 func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", Command(msg.cmd))
@@ -366,16 +270,8 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleSaveAndEnqueueGroup(msg.body.(*SAEMessage))
 	case MSG_DEQUEUE_GROUP:
 		client.HandleDQGroupMessage(msg.body.(*DQGroupMessage))
-	case MSG_SUBSCRIBE_GROUP:
-		client.HandleSubscribeGroup(msg.body.(*AppGroupMemberID))
-	case MSG_UNSUBSCRIBE_GROUP:
-		client.HandleUnSubscribeGroup(msg.body.(*AppGroupMemberID))
 	case MSG_LOAD_GROUP_OFFLINE:
 		client.HandleLoadGroupOffline(msg.body.(*LoadGroupOffline))
-	case MSG_SUBSCRIBE:
-		client.HandleSubscribe(msg.body.(*AppUserID))
-	case MSG_UNSUBSCRIBE:
-		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	default:
 		log.Warning("unknown msg:", msg.cmd)
 	}

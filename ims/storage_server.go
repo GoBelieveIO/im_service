@@ -33,105 +33,15 @@ import "github.com/garyburd/redigo/redis"
 import "github.com/valyala/gorpc"
 
 const GROUP_OFFLINE_LIMIT = 100
-const GROUP_C_COUNT = 10
-
 
 var storage *Storage
 var config *StorageConfig
 var master *Master
-var group_manager *GroupManager
-var clients ClientSet
 var mutex   sync.Mutex
 var redis_pool *redis.Pool
 
-var group_c []chan func()
-
 func init() {
-	clients = NewClientSet()
-	group_c = make([]chan func(), GROUP_C_COUNT)
-	for i := 0; i < GROUP_C_COUNT; i++ {
-		group_c[i] = make(chan func())
-	}
 }
-
-func GetGroupChan(gid int64) chan func() {
-	index := gid%GROUP_C_COUNT
-	return group_c[index]
-}
-
-func GetUserChan(uid int64) chan func() {
-	index := uid%GROUP_C_COUNT
-	return group_c[index]
-}
-
-//clone when write, lockless when read
-func AddClient(client *Client) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	
-	if clients.IsMember(client) {
-		return
-	}
-	c := clients.Clone()
-	c.Add(client)
-	clients = c
-}
-
-func RemoveClient(client *Client) {
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	if !clients.IsMember(client) {
-		return
-	}
-	c := clients.Clone()
-	c.Remove(client)
-	clients = c
-}
-
-//group im
-func FindGroupClientSet(appid int64, gid int64) ClientSet {
-	s := NewClientSet()
-
-	for c := range(clients) {
-		if c.ContainAppGroupID(appid, gid) {
-			s.Add(c)
-		}
-	}
-	return s
-}
-
-func IsGroupUserOnline(appid int64, gid int64, uid int64) bool {
-	for c := range(clients) {
-		if c.ContainGroupUserID(appid, gid, uid) {
-			return true
-		}
-	}
-	return false
-}
-
-//peer im
-func FindClientSet(id *AppUserID) ClientSet {
-	s := NewClientSet()
-
-	for c := range(clients) {
-		if c.ContainAppUserID(id) {
-			s.Add(c)
-		}
-	}
-	return s
-}
-
-func IsUserOnline(appid int64, uid int64) bool {
-	id := &AppUserID{appid:appid, uid:uid}
-	for c := range(clients) {
-		if c.ContainAppUserID(id) {
-			return true
-		}
-	}
-	return false
-}
-
 
 func handle_client(conn *net.TCPConn) {
 	conn.SetKeepAlive(true)
@@ -175,14 +85,6 @@ func handle_sync_client(conn *net.TCPConn) {
 func ListenSyncClient() {
 	Listen(handle_sync_client, config.sync_listen)
 }
-
-func GroupLoop(c chan func()) {
-	for {
-		f := <- c
-		f()
-	}
-}
-
 
 // Signal handler
 func waitSignal() error {
@@ -256,8 +158,8 @@ func ListenRPCClient() {
 	if err := s.Serve(); err != nil {
 		log.Fatalf("Cannot start rpc server: %s", err)
 	}
-
 }
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -283,13 +185,6 @@ func main() {
 	if len(config.master_address) > 0 {
 		slaver := NewSlaver(config.master_address)
 		slaver.Start()
-	}
-
-	group_manager = NewGroupManager()
-	group_manager.Start()
-
-	for i := 0; i < GROUP_C_COUNT; i++ {
-		go GroupLoop(group_c[i])
 	}
 
 	//刷新storage缓存的ack
