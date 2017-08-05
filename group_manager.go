@@ -33,15 +33,10 @@ import log "github.com/golang/glog"
 //同redis的长链接保持5minute的心跳
 const SUBSCRIBE_HEATBEAT = 5*60
 
-type GroupObserver interface {
-	OnGroupMemberAdd(g *Group, uid int64)
-	OnGroupMemberRemove(g *Group, uid int64)
-}
 
 type GroupManager struct {
 	mutex  sync.Mutex
 	groups map[int64]*Group
-	observer GroupObserver
 	ping     string
 }
 
@@ -201,9 +196,6 @@ func (group_manager *GroupManager) HandleMemberAdd(data string) {
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		group.AddMember(uid)
-		if group_manager.observer != nil {
-			group_manager.observer.OnGroupMemberAdd(group, uid)
-		}
 		log.Infof("add group member gid:%d uid:%d", gid, uid)
 	} else {
 		log.Infof("can't find group:%d\n", gid)
@@ -230,9 +222,6 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		group.RemoveMember(uid)
-		if group_manager.observer != nil {
-			group_manager.observer.OnGroupMemberRemove(group, uid)
-		}
 		log.Infof("remove group member gid:%d uid:%d", gid, uid)
 	} else {
 		log.Infof("can't find group:%d\n", gid)
