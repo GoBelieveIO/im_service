@@ -133,7 +133,7 @@ func (channel *Channel) GetAllSubscriber() []*AppUserID {
 //online表示用户不再接受推送通知(apns, gcm)
 func (channel *Channel) Subscribe(appid int64, uid int64, online bool) {
 	count, online_count := channel.AddSubscribe(appid, uid, online)
-	log.Info("sub count:", count)
+	log.Info("sub count:", count, online_count)
 	if count == 0 {
 		//新用户上线
 		on := 0
