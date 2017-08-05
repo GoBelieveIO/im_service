@@ -48,6 +48,7 @@ type Config struct {
 
 	storage_addrs       []string
 	storage_rpc_addrs   []string
+	group_storage_rpc_addrs   []string	
 	route_addrs         []string
 	group_route_addrs   []string //可选配置项， 超群群的route server
 }
@@ -132,6 +133,20 @@ func read_cfg(cfg_path string) *Config {
 		log.Fatal("storage pool config")
 	}
 
+	str = get_opt_string(app_cfg, "group_storage_rpc_pool")
+	if str != "" {
+		array = strings.Split(str, " ")
+		config.group_storage_rpc_addrs = array
+		//check repeat 
+		for _, addr := range config.group_storage_rpc_addrs {
+			for _, addr2 := range config.storage_rpc_addrs {
+				if addr == addr2 {
+					log.Fatal("stroage and group storage address repeat")
+				}
+			}
+		}		
+	}
+	
 	str = get_string(app_cfg, "route_pool")
     array = strings.Split(str, " ")
 	config.route_addrs = array

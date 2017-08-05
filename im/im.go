@@ -31,8 +31,11 @@ import "github.com/valyala/gorpc"
 
 var storage_pools []*StorageConnPool
 
-//group storage server
+//storage server,  peer, group, customer message
 var rpc_clients []*gorpc.DispatcherClient
+
+//super group storage server
+var group_rpc_clients []*gorpc.DispatcherClient
 
 //route server
 var route_channels []*Channel
@@ -108,8 +111,8 @@ func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
 
 //超级群消息
 func GetGroupStorageRPCClient(group_id int64) *gorpc.DispatcherClient {
-	index := group_id%int64(len(rpc_clients))
-	return rpc_clients[index]
+	index := group_id%int64(len(group_rpc_clients))
+	return group_rpc_clients[index]
 }
 
 func GetStorageConnPool(uid int64) *StorageConnPool {
@@ -387,6 +390,28 @@ func main() {
 		rpc_clients = append(rpc_clients, dc)
 	}
 
+	if len(config.group_storage_rpc_addrs) > 0 {
+		group_rpc_clients = make([]*gorpc.DispatcherClient, 0)
+		for _, addr := range(config.group_storage_rpc_addrs) {
+			c := &gorpc.Client{
+				Conns: 4,
+				Addr: addr,
+			}
+			c.Start()
+
+			dispatcher := gorpc.NewDispatcher()
+			dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
+			dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
+			dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
+			dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
+
+			dc := dispatcher.NewFuncClient(c)
+
+			group_rpc_clients = append(group_rpc_clients, dc)
+		}
+	} else {
+		group_rpc_clients = rpc_clients
+	}
 
 	route_channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {

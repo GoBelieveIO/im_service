@@ -4,6 +4,11 @@ port=23000
 storage_pool=127.0.0.1:3333
 storage_rpc_pool=127.0.0.1:13333
 
+#可选项 超级群的存储服务器, 格式和storage_rpc_pool
+#不能和格式和storage_rpc_pool有重复
+group_storage_rpc_pool=
+
+
 #路由服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
 route_pool=127.0.0.1:4444
 
