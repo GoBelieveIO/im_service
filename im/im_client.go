@@ -30,6 +30,14 @@ func (client *IMClient) Login() {
 	channel := GetChannel(client.uid)
 	channel.Subscribe(client.appid, client.uid)
 
+	for _, c := range group_route_channels {
+		if c == channel {
+			continue
+		}
+
+		c.Subscribe(client.appid, client.uid)
+	}
+	
 	SetUserUnreadCount(client.appid, client.uid, 0)
 }
 
@@ -37,6 +45,14 @@ func (client *IMClient) Logout() {
 	if client.uid > 0 {
 		channel := GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid)
+
+		for _, c := range group_route_channels {
+			if c == channel {
+				continue
+			}
+
+			c.Unsubscribe(client.appid, client.uid)
+		}		
 	}
 }
 

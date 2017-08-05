@@ -37,6 +37,9 @@ var rpc_clients []*gorpc.DispatcherClient
 //route server
 var route_channels []*Channel
 
+//super group route server
+var group_route_channels []*Channel
+
 var app_route *AppRoute
 var group_manager *GroupManager
 var redis_pool *redis.Pool
@@ -119,15 +122,14 @@ func GetGroupStorageConnPool(gid int64) *StorageConnPool {
 	return storage_pools[index]
 }
 
-
 func GetChannel(uid int64) *Channel{
 	index := uid%int64(len(route_channels))
 	return route_channels[index]
 }
 
 func GetGroupChannel(group_id int64) *Channel{
-	index := group_id%int64(len(route_channels))
-	return route_channels[index]
+	index := group_id%int64(len(group_route_channels))
+	return group_route_channels[index]
 }
 
 func GetRoomChannel(room_id int64) *Channel {
@@ -341,14 +343,14 @@ func main() {
 	}
 
 	config = read_cfg(flag.Args()[0])
-	log.Infof("port:%d redis address:%s\n",
-		config.port,  config.redis_address)
+	log.Infof("port:%d\n", config.port)
 
 	log.Infof("redis address:%s password:%s db:%d\n", 
 		config.redis_address, config.redis_password, config.redis_db)
 
 	log.Info("storage addresses:", config.storage_addrs)
 	log.Info("route addressed:", config.route_addrs)
+	log.Info("group route addressed:", config.group_route_addrs)	
 	log.Info("kefu appid:", config.kefu_appid)
 	log.Info("pending root:", config.pending_root)
 	
@@ -391,6 +393,17 @@ func main() {
 		channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
 		channel.Start()
 		route_channels = append(route_channels, channel)
+	}
+
+	if len(config.group_route_addrs) > 0 {
+		group_route_channels = make([]*Channel, 0)
+		for _, addr := range(config.group_route_addrs) {
+			channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
+			channel.Start()
+			group_route_channels = append(group_route_channels, channel)
+		}
+	} else {
+		group_route_channels = route_channels
 	}
 	
 	group_manager = NewGroupManager()
