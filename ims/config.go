@@ -27,10 +27,6 @@ type StorageConfig struct {
 	listen              string
 	rpc_listen          string
 	storage_root        string
-	mysqldb_datasource  string
-	redis_address       string
-	redis_password      string
-	redis_db            int
 	kefu_appid          int64
 
 	sync_listen         string
@@ -90,14 +86,7 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.listen = get_string(app_cfg, "listen")
 	config.rpc_listen = get_string(app_cfg, "rpc_listen")
 	config.storage_root = get_string(app_cfg, "storage_root")
-	config.redis_address = get_string(app_cfg, "redis_address")
-	config.redis_password = get_opt_string(app_cfg, "redis_password")
-	db := get_opt_int(app_cfg, "redis_db")
-	config.redis_db = int(db)
-
 	config.kefu_appid = get_int(app_cfg, "kefu_appid")
-
-	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.sync_listen = get_string(app_cfg, "sync_listen")
 	config.master_address = get_opt_string(app_cfg, "master_address")
 	config.is_push_system = get_opt_int(app_cfg, "is_push_system") == 1

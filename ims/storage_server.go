@@ -38,7 +38,6 @@ var storage *Storage
 var config *StorageConfig
 var master *Master
 var mutex   sync.Mutex
-var redis_pool *redis.Pool
 
 func init() {
 }
@@ -173,11 +172,6 @@ func main() {
 	log.Infof("listen:%s rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%d\n", 
 		config.listen, config.rpc_listen, config.storage_root, config.sync_listen, config.master_address, config.is_push_system)
 
-	log.Infof("redis address:%s password:%s db:%d\n", 
-		config.redis_address, config.redis_password, config.redis_db)
-
-	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
-		config.redis_db)
 	storage = NewStorage(config.storage_root)
 	
 	master = NewMaster()
