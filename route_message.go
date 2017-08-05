@@ -27,8 +27,7 @@ const MSG_SUBSCRIBE = 130
 const MSG_UNSUBSCRIBE = 131
 const MSG_PUBLISH = 132
 
-const MSG_SUBSCRIBE_GROUP = 133
-const MSG_UNSUBSCRIBE_GROUP = 134
+
 const MSG_PUBLISH_GROUP = 135
 
 const MSG_SUBSCRIBE_ROOM = 136
@@ -37,13 +36,11 @@ const MSG_PUBLISH_ROOM = 138
 
 
 func init() {
-	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(AppUserID)}
+	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(SubscribeMessage)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
 	message_creators[MSG_PUBLISH_OFFLINE] = func()IMessage{return new(AppMessage)}
 
-	message_creators[MSG_SUBSCRIBE_GROUP] = func()IMessage{return new(AppGroupMemberID)}
-	message_creators[MSG_UNSUBSCRIBE_GROUP] = func()IMessage{return new(AppGroupMemberID)}
 	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(AppMessage)}
 	
 	message_creators[MSG_SUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
@@ -55,8 +52,6 @@ func init() {
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
 	message_descriptions[MSG_PUBLISH] = "MSG_PUBLISH"
 
-	message_descriptions[MSG_SUBSCRIBE_GROUP] = "MSG_SUBSCRIBE_GROUP"
-	message_descriptions[MSG_UNSUBSCRIBE_GROUP] = "MSG_UNSUBSCRIBE_GROUP"
 	message_descriptions[MSG_PUBLISH_GROUP] = "MSG_PUBLISH_GROUP"
 
 	message_descriptions[MSG_SUBSCRIBE_ROOM] = "MSG_SUBSCRIBE_ROOM"
@@ -122,5 +117,36 @@ func (amsg *AppMessage) FromData(buff []byte) bool {
 	}
 	amsg.msg = msg
 
+	return true
+}
+
+
+
+
+type SubscribeMessage struct {
+	appid    int64
+	uid      int64
+	online   int8 //1 or 0
+}
+
+func (sub *SubscribeMessage) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, sub.appid)
+	binary.Write(buffer, binary.BigEndian, sub.uid)
+	binary.Write(buffer, binary.BigEndian, sub.online)	
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (sub *SubscribeMessage) FromData(buff []byte) bool {
+	if len(buff) < 17 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &sub.appid)
+	binary.Read(buffer, binary.BigEndian, &sub.uid)
+	binary.Read(buffer, binary.BigEndian, &sub.online)
+	
 	return true
 }

@@ -47,6 +47,14 @@ func (client *Client) ContainAppUserID(id *AppUserID) bool {
 	return route.ContainUserID(id.uid)
 }
 
+func (client *Client) IsAppUserOnline(id *AppUserID) bool {
+	route := client.app_route.FindRoute(id.appid)
+	if route == nil {
+		return false
+	}
+
+	return route.IsUserOnline(id.uid)
+}
 
 func (client *Client) ContainAppRoomID(id *AppRoomID) bool {
 	route := client.app_route.FindRoute(id.appid)
@@ -74,7 +82,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", Command(msg.cmd))
 	switch msg.cmd {
 	case MSG_SUBSCRIBE:
-		client.HandleSubscribe(msg.body.(*AppUserID))
+		client.HandleSubscribe(msg.body.(*SubscribeMessage))
 	case MSG_UNSUBSCRIBE:
 		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	case MSG_PUBLISH:
@@ -92,10 +100,11 @@ func (client *Client) HandleMessage(msg *Message) {
 	}
 }
 
-func (client *Client) HandleSubscribe(id *AppUserID) {
+func (client *Client) HandleSubscribe(id *SubscribeMessage) {
 	log.Infof("subscribe appid:%d uid:%d", id.appid, id.uid)
 	route := client.app_route.FindOrAddRoute(id.appid)
-	route.AddUserID(id.uid)
+	on := id.online != 0
+	route.AddUserID(id.uid, on)
 }
 
 func (client *Client) HandleUnsubscribe(id *AppUserID) {

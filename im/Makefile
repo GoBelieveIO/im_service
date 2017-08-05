@@ -25,5 +25,9 @@ benchmark_route:benchmark_route.go channel.go protocol.go message.go route_messa
 	go build -o benchmark_route benchmark_route.go channel.go protocol.go message.go route_message.go
 
 
+main.test:im_test.go user.go
+	go test -c  im_test.go user.go
+
+
 clean:
-	rm -f im benchmark benchmark_group benchmark_connection benchmark_sender benchmark_storage benchmark_route
+	rm -f im benchmark benchmark_group benchmark_connection benchmark_sender benchmark_storage benchmark_route main.test

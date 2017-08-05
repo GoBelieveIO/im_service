@@ -101,7 +101,7 @@ func IsUserOnline(appid, uid int64) bool {
 	id := &AppUserID{appid:appid, uid:uid}
 
 	for c := range(clients) {
-		if c.ContainAppUserID(id) {
+		if c.IsAppUserOnline(id) {
 			return true
 		}
 	}

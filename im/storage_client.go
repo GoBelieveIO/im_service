@@ -232,8 +232,8 @@ func (client *StorageConn) GetOfflineCount(appid int64, uid int64, device_id int
 func (client *StorageConn) LoadLatestMessage(appid int64, uid int64, limit int32) ([]*EMessage, error) {
 	lh := &LoadLatest{}
 	lh.limit = limit
-	lh.app_uid.appid = appid
-	lh.app_uid.uid = uid
+	lh.appid = appid
+	lh.uid = uid
 
 	msg := &Message{cmd:MSG_LOAD_LATEST, body:lh}
 	SendMessage(client.conn, msg)

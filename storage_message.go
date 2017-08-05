@@ -464,15 +464,16 @@ func (result *MessageResult) FromData(buff []byte) bool {
 }
 
 type LoadLatest struct {
-	app_uid AppUserID
+	appid    int64
+	uid      int64	
 	limit int32
 }
 
 
 func (lh *LoadLatest) ToData() []byte {
 	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, lh.app_uid.appid)
-	binary.Write(buffer, binary.BigEndian, lh.app_uid.uid)
+	binary.Write(buffer, binary.BigEndian, lh.appid)
+	binary.Write(buffer, binary.BigEndian, lh.uid)
 	binary.Write(buffer, binary.BigEndian, lh.limit)
 	buf := buffer.Bytes()
 	return buf
@@ -483,8 +484,8 @@ func (lh *LoadLatest) FromData(buff []byte) bool {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &lh.app_uid.appid)
-	binary.Read(buffer, binary.BigEndian, &lh.app_uid.uid)
+	binary.Read(buffer, binary.BigEndian, &lh.appid)
+	binary.Read(buffer, binary.BigEndian, &lh.uid)
 	binary.Read(buffer, binary.BigEndian, &lh.limit)
 	return true
 }

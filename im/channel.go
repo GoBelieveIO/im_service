@@ -62,7 +62,7 @@ func NewChannel(addr string, f func(*AppMessage),
 }
 
 //返回添加前的计数
-func (channel *Channel) AddSubscribe(appid, uid int64) int {
+func (channel *Channel) AddSubscribe(appid, uid int64, online bool) (int, int) {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 	subscriber, ok := channel.subscribers[appid]
@@ -70,30 +70,50 @@ func (channel *Channel) AddSubscribe(appid, uid int64) int {
 		subscriber = NewSubscriber()
 		channel.subscribers[appid] = subscriber
 	}
-	//不存在count==0
+	//不存在时count==0
 	count := subscriber.uids[uid]
-	subscriber.uids[uid] = count + 1
-	return count
+
+	//低16位表示总数量 高16位表示online的数量
+	c1 := count&0xffff
+	c2 := count>>16&0xffff
+
+	if online {
+		c2 += 1
+	}
+	c1 += 1
+	subscriber.uids[uid] = c2 << 16 | c1
+	return count&0xffff, count>>16&0xffff
 }
 
 //返回删除前的计数
-func (channel *Channel) RemoveSubscribe(appid, uid int64) int {
+func (channel *Channel) RemoveSubscribe(appid, uid int64, online bool) (int, int) {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 	subscriber, ok := channel.subscribers[appid]
 	if !ok {
-		return 0
+		return 0, 0
 	}
 
 	count, ok := subscriber.uids[uid]
+	//低16位表示总数量 高16位表示online的数量	
+	c1 := count&0xffff
+	c2 := count>>16&0xffff
 	if ok {
-		if count > 1 {
-			subscriber.uids[uid] = count - 1
+		if online {
+			c2 -= 1
+			//assert c2 >= 0
+			if c2 < 0 {
+				log.Warning("online count < 0")
+			}
+		}
+		c1 -= 1		
+		if c1 > 0 {
+			subscriber.uids[uid] = c2 << 16 | c1
 		} else {
 			delete(subscriber.uids, uid)
 		}
 	}
-	return count
+	return count&0xffff, count>>16&0xffff	
 }
 
 func (channel *Channel) GetAllSubscriber() []*AppUserID {
@@ -110,23 +130,40 @@ func (channel *Channel) GetAllSubscriber() []*AppUserID {
 	return subs
 }
 
-func (channel *Channel) Subscribe(appid int64, uid int64) {
-	count := channel.AddSubscribe(appid, uid)
+//online表示用户不再接受推送通知(apns, gcm)
+func (channel *Channel) Subscribe(appid int64, uid int64, online bool) {
+	count, online_count := channel.AddSubscribe(appid, uid, online)
 	log.Info("sub count:", count)
 	if count == 0 {
-		id := &AppUserID{appid: appid, uid: uid}
+		//新用户上线
+		on := 0
+		if online {
+			on = 1
+		}
+		id := &SubscribeMessage{appid: appid, uid: uid, online:int8(on)}
+		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+		channel.wt <- msg
+	} else if online_count == 0 && online {
+		//手机端上线
+		id := &SubscribeMessage{appid: appid, uid: uid, online:1}
 		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
 		channel.wt <- msg
 	}
 }
 
-func (channel *Channel) Unsubscribe(appid int64, uid int64) {
-	count := channel.RemoveSubscribe(appid, uid)
-	log.Info("unsub count:", count)
+func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
+	count, online_count := channel.RemoveSubscribe(appid, uid, online)
+	log.Info("unsub count:", count, online_count)
 	if count == 1 {
+		//用户断开全部连接
 		id := &AppUserID{appid: appid, uid: uid}
 		msg := &Message{cmd: MSG_UNSUBSCRIBE, body: id}
 		channel.wt <- msg
+	} else if count > 1 && online_count == 1 && online {
+		//手机端断开连接,pc/web端还未断开连接
+		id := &SubscribeMessage{appid: appid, uid: uid, online:0}
+		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+		channel.wt <- msg		
 	}
 }
 

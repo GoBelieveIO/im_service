@@ -28,14 +28,15 @@ type IMClient struct {
 
 func (client *IMClient) Login() {
 	channel := GetChannel(client.uid)
-	channel.Subscribe(client.appid, client.uid)
+	
+	channel.Subscribe(client.appid, client.uid, client.online)
 
 	for _, c := range group_route_channels {
 		if c == channel {
 			continue
 		}
 
-		c.Subscribe(client.appid, client.uid)
+		c.Subscribe(client.appid, client.uid, client.online)
 	}
 	
 	SetUserUnreadCount(client.appid, client.uid, 0)
@@ -44,14 +45,14 @@ func (client *IMClient) Login() {
 func (client *IMClient) Logout() {
 	if client.uid > 0 {
 		channel := GetChannel(client.uid)
-		channel.Unsubscribe(client.appid, client.uid)
+		channel.Unsubscribe(client.appid, client.uid, client.online)
 
 		for _, c := range group_route_channels {
 			if c == channel {
 				continue
 			}
 
-			c.Unsubscribe(client.appid, client.uid)
+			c.Unsubscribe(client.appid, client.uid, client.online)
 		}		
 	}
 }

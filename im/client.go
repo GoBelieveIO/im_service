@@ -139,19 +139,14 @@ func (client *Client) HandleMessage(msg *Message) {
 }
 
 
-func (client *Client) AuthToken(token string) (int64, int64, int, error) {
-	appid, uid, err := LoadUserAccessToken(token)
+func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
+	appid, uid, forbidden, notification_on, err := LoadUserAccessToken(token)
 
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, false, err
 	}
 
-	forbidden, err := GetUserForbidden(appid, uid)
-	if err != nil {
-		return appid, uid, 0, nil
-	} else {
-		return appid, uid, forbidden, nil
-	}
+	return appid, uid, forbidden, notification_on, nil
 }
 
 
@@ -162,7 +157,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	}
 
 	var err error
-	appid, uid, fb, err := client.AuthToken(login.token)
+	appid, uid, fb, on, err := client.AuthToken(login.token)
 	if err != nil {
 		log.Infof("auth token:%s err:%s", login.token, err)
 		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
@@ -186,15 +181,24 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		}
 	}
 
+	is_mobile := login.platform_id == PLATFORM_IOS || login.platform_id == PLATFORM_ANDROID
+	online := true	
+	if on && !is_mobile {
+		online = false
+	}
+	
 	client.appid = appid
 	client.uid = uid
 	client.forbidden = int32(fb)
+	client.notification_on = on
+	client.online = online
 	client.version = version
 	client.device_id = login.device_id
 	client.platform_id = login.platform_id
 	client.tm = time.Now()
-	log.Infof("auth token:%s appid:%d uid:%d device id:%s:%d forbidden:%d", 
-		login.token, client.appid, client.uid, client.device_id, client.device_ID, client.forbidden)
+	log.Infof("auth token:%s appid:%d uid:%d device id:%s:%d forbidden:%d notification on:%t online:%t", 
+		login.token, client.appid, client.uid, client.device_id,
+		client.device_ID, client.forbidden, client.notification_on, client.online)
 
 	msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{0, client.public_ip}}
 	client.EnqueueMessage(msg)

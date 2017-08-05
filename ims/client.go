@@ -184,7 +184,7 @@ func (client *Client) HandleLoadOffline(id *LoadOffline) {
 
 
 func (client *Client) HandleLoadLatest(lh *LoadLatest) {
-	messages := storage.LoadLatestMessages(lh.app_uid.appid, lh.app_uid.uid, int(lh.limit))
+	messages := storage.LoadLatestMessages(lh.appid, lh.uid, int(lh.limit))
 	result := &MessageResult{status:0}
 	buffer := new(bytes.Buffer)
 	var count int16

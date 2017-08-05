@@ -95,34 +95,38 @@ func GetUserForbidden(appid int64, uid int64) (int, error) {
 	return forbidden, nil
 }
 
-func LoadUserAccessToken(token string) (int64, int64, error) {
+func LoadUserAccessToken(token string) (int64, int64, int, bool, error) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("access_token_%s", token)
 	var uid int64
 	var appid int64
-
+	var notification_on int8
+	var forbidden int
+	
 	exists, err := redis.Bool(conn.Do("EXISTS", key))
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, false, err
 	}
 	if !exists {
-		return 0, 0,  errors.New("token non exists")
+		return 0, 0, 0, false,  errors.New("token non exists")
 	}
 
-	reply, err := redis.Values(conn.Do("HMGET", key, "user_id", "app_id"))
+	reply, err := redis.Values(conn.Do("HMGET", key, "user_id",
+		"app_id", "notification_on", "forbidden"))
 	if err != nil {
 		log.Info("hmget error:", err)
-		return 0, 0, err
+		return 0, 0, 0, false, err
 	}
 
-	_, err = redis.Scan(reply, &uid, &appid)
+	_, err = redis.Scan(reply, &uid, &appid, &notification_on, &forbidden)
 	if err != nil {
 		log.Warning("scan error:", err)
-		return 0, 0, err
+		return 0, 0, 0, false, err
 	}
-	return appid, uid, nil	
+	
+	return appid, uid, forbidden, notification_on != 0, nil	
 }
 
 func CountUser(appid int64, uid int64) {

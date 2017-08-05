@@ -16,7 +16,7 @@ func main() {
 	channel1 := NewChannel(route_addr, Dispatch, nil, nil)
 	channel1.Start()
 
-	channel1.Subscribe(appid, 1000)
+	channel1.Subscribe(appid, 1000, true)
 
 	time.Sleep(1*time.Second)
 
@@ -37,7 +37,7 @@ func main() {
 
 	time.Sleep(3*time.Second)
 
-	channel1.Unsubscribe(appid, 1000)
+	channel1.Unsubscribe(appid, 1000, true)
 
 	time.Sleep(1*time.Second)
 }

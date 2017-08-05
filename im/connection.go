@@ -31,8 +31,11 @@ const CLIENT_TIMEOUT = (60 * 6)
 type Connection struct {
 	conn   interface{}
 	closed int32
+	
 	forbidden int32 //是否被禁言
-
+	notification_on bool //桌面在线时是否通知手机端
+	online bool
+	
 	tc     int32 //write channel timeout count
 	wt     chan *Message
 	ewt    chan *EMessage //在线消息
