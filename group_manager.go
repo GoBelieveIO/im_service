@@ -23,6 +23,7 @@ import "sync"
 import "strconv"
 import "strings"
 import "time"
+import "errors"
 import "fmt"
 import "math/rand"
 import "database/sql"
@@ -38,6 +39,8 @@ type GroupManager struct {
 	mutex  sync.Mutex
 	groups map[int64]*Group
 	ping     string
+	action_id int64
+	dirty     bool
 }
 
 func NewGroupManager() *GroupManager {
@@ -51,6 +54,8 @@ func NewGroupManager() *GroupManager {
 	m := new(GroupManager)
 	m.groups = make(map[int64]*Group)
 	m.ping = r
+	m.action_id = 0
+	m.dirty = true
 	return m
 }
 
@@ -228,6 +233,53 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
 	}
 }
 
+//保证action id的顺序性
+func (group_manager *GroupManager) parseAction(data string) (bool, int64, int64, string) {
+	arr := strings.SplitN(data, ":", 3)
+	if len(arr) != 3 {
+		log.Warning("group action error:", data)
+		return false, 0, 0, ""
+	}
+
+	prev_id, err := strconv.ParseInt(arr[0], 10, 64)
+	if err != nil {
+		log.Info("error:", err, data)
+		return false, 0, 0, ""
+	}
+
+	action_id, err := strconv.ParseInt(arr[1], 10, 64)
+	if err != nil {
+		log.Info("error:", err, data)
+		return false, 0, 0, ""
+	}
+	return true, prev_id, action_id, arr[2]
+}
+
+func (group_manager *GroupManager) handleAction(data string, channel string) {
+	r, prev_id, action_id, content := group_manager.parseAction(data)
+	if r {
+		log.Info("group action:", prev_id, action_id, group_manager.action_id, " ", channel)
+		if group_manager.action_id != prev_id {
+			//reload later
+			group_manager.dirty = true
+			log.Warning("action nonsequence:", group_manager.action_id, prev_id, action_id)
+		}
+
+		if channel == "group_create" {
+			group_manager.HandleCreate(content)
+		} else if channel == "group_disband" {
+			group_manager.HandleDisband(content)
+		} else if channel == "group_member_add" {
+			group_manager.HandleMemberAdd(content)
+		} else if channel == "group_member_remove" {
+			group_manager.HandleMemberRemove(content)
+		} else if channel == "group_upgrade" {
+			group_manager.HandleUpgrade(content)
+		} 
+		group_manager.action_id = action_id
+	}	
+}
+
 func (group_manager *GroupManager) ReloadGroup() bool {
 	log.Info("reload group...")
 	db, err := sql.Open("mysql", config.mysqldb_datasource)
@@ -239,7 +291,7 @@ func (group_manager *GroupManager) ReloadGroup() bool {
 
 	groups, err := LoadAllGroup(db)
 	if err != nil {
-		log.Info("error:", err)
+		log.Info("load all group error:", err)
 		return false
 	}
 
@@ -250,14 +302,78 @@ func (group_manager *GroupManager) ReloadGroup() bool {
 	return true
 }
 
-func (group_manager *GroupManager) Reload() {
+func (group_manager *GroupManager) getActionID() (int64, error) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	actions, err := redis.String(conn.Do("GET", "groups_actions"))
+	if err != nil && err != redis.ErrNil {
+		log.Info("hget error:", err)
+		return 0, err
+	}
+	if actions == "" {
+		return 0, nil
+	} else {
+		arr := strings.Split(actions, ":")
+		if len(arr) != 2 {
+			log.Error("groups_actions invalid:", actions)
+			return 0, errors.New("groups actions invalid")
+		}
+		_, err := strconv.ParseInt(arr[0], 10, 64)
+		if err != nil {
+			log.Info("error:", err, actions)
+			return 0, err
+		}
+
+		action_id, err := strconv.ParseInt(arr[1], 10, 64)
+		if err != nil {
+			log.Info("error:", err, actions)
+			return 0, err			
+		}
+		return action_id, nil
+	}
+}
+
+func (group_manager *GroupManager) load() {
 	//循环直到成功
 	for {
+		action_id, err := group_manager.getActionID()
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		
+		r := group_manager.ReloadGroup()
+		if !r {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		group_manager.action_id = action_id
+		group_manager.dirty = false
+		log.Info("group action id:", action_id)
+		break
+	}
+}
+
+//检查当前的action id 是否变更，变更时则重新加载群组结构
+func (group_manager *GroupManager) checkActionID() {
+	action_id, err := group_manager.getActionID()
+	if err != nil {
+		//load later
+		group_manager.dirty = true
+		return
+	}
+
+	if action_id != group_manager.action_id {
 		r := group_manager.ReloadGroup()
 		if r {
-			break
+			group_manager.dirty = false
+			group_manager.action_id = action_id
+		} else {
+			//load later
+			group_manager.dirty = true
 		}
-		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -280,20 +396,34 @@ func (group_manager *GroupManager) RunOnce() bool {
 	psc := redis.PubSubConn{c}
 	psc.Subscribe("group_create", "group_disband", "group_member_add",
 		"group_member_remove", "group_upgrade", group_manager.ping)
-	group_manager.Reload()
+	
+	group_manager.checkActionID()
 	for {
 		switch v := psc.Receive().(type) {
 		case redis.Message:
-			if v.Channel == "group_create" {
-				group_manager.HandleCreate(string(v.Data))
-			} else if v.Channel == "group_disband" {
-				group_manager.HandleDisband(string(v.Data))
-			} else if v.Channel == "group_member_add" {
-				group_manager.HandleMemberAdd(string(v.Data))
-			} else if v.Channel == "group_member_remove" {
-				group_manager.HandleMemberRemove(string(v.Data))
-			} else if v.Channel == "group_upgrade" {
-				group_manager.HandleUpgrade(string(v.Data))
+			if v.Channel == "group_create" ||
+				v.Channel == "group_disband" ||
+				v.Channel == "group_member_add"	||
+				v.Channel == "group_member_remove" ||
+				v.Channel == "group_upgrade" {
+				group_manager.handleAction(string(v.Data), v.Channel)
+			} else if v.Channel == group_manager.ping {
+				//check dirty
+				if group_manager.dirty {
+					action_id, err := group_manager.getActionID()
+					if err == nil {
+						r := group_manager.ReloadGroup()
+						if r {
+							group_manager.dirty = false
+							group_manager.action_id = action_id
+						}
+					} else {
+						log.Warning("get action id err:", err)
+					}
+				} else {
+					group_manager.checkActionID()
+				}
+				log.Info("group manager dirty:", group_manager.dirty)
 			} else {
 				log.Infof("%s: message: %s\n", v.Channel, v.Data)
 			}
@@ -341,7 +471,7 @@ func (group_manager *GroupManager) PingLoop() {
 }
 
 func (group_manager *GroupManager) Start() {
-	group_manager.Reload()
+	group_manager.load()
 	go group_manager.Run()
 	go group_manager.PingLoop()
 }
