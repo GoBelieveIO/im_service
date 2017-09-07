@@ -68,9 +68,27 @@ func handle_client(conn net.Conn) {
 }
 
 func Listen(f func(net.Conn), port int) {
-	TCPService(fmt.Sprintf("0.0.0.0:%d", port), f)
+	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
+	listen, err := net.Listen("tcp", listen_addr)
+	if err != nil {
+		fmt.Println("初始化失败", err.Error())
+		return
+	}
+	tcp_listener, ok := listen.(*net.TCPListener)
+	if !ok {
+		fmt.Println("listen error")
+		return
+	}
 
+	for {
+		client, err := tcp_listener.AcceptTCP()
+		if err != nil {
+			return
+		}
+		f(client)
+	}
 }
+
 func ListenClient() {
 	Listen(handle_client, config.port)
 }
@@ -311,7 +329,11 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/dequeue_message", DequeueMessage)
 
 	handler := loggingHandler{http.DefaultServeMux}
-	HTTPService(addr, handler)
+	
+	err := http.ListenAndServe(addr, handler)
+	if err != nil {
+		log.Fatal("http server err:", err)
+	}
 }
 
 func SyncKeyService() {
@@ -351,7 +373,7 @@ func main() {
 	log.Infof("redis address:%s password:%s db:%d\n", 
 		config.redis_address, config.redis_password, config.redis_db)
 
-	log.Info("storage addresses:", config.storage_addrs)
+	log.Info("storage addresses:", config.storage_addrs, config.storage_rpc_addrs)
 	log.Info("route addressed:", config.route_addrs)
 	log.Info("group route addressed:", config.group_route_addrs)	
 	log.Info("kefu appid:", config.kefu_appid)
@@ -438,14 +460,13 @@ func main() {
 	group_message_deliver.Start()
 	
 	go ListenRedis()
-
-	StartHttpServer(config.http_listen_address)
+	go SyncKeyService()
+	
+	go StartHttpServer(config.http_listen_address)
 	StartRPCServer(config.rpc_listen_address)
 
 	go StartSocketIO(config.socket_io_address, config.tls_address, 
 		config.cert_file, config.key_file)
-	go SyncKeyService()
 
 	ListenClient()
-	Wait()
 }
