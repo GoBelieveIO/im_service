@@ -4,17 +4,18 @@ port=23000
 storage_pool=127.0.0.1:3333
 storage_rpc_pool=127.0.0.1:13333
 
-#可选项 超级群的存储服务器, 格式和storage_rpc_pool
-#不能和格式和storage_rpc_pool有重复
-group_storage_rpc_pool=
-
+#可选项 超级群的存储服务器, 格式和storage_rpc_pool一样
+#不配置的情况下，使用storage_rpc_pool
+#配置的情况下,不能和storage_rpc_pool有重复
+#group_storage_rpc_pool=
 
 #路由服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
 route_pool=127.0.0.1:4444
 
 #可选项 超级群的路由服务器地址，格式和route_pool一样
-#不配置的情况下，使用route_pool, 配置的情况下，一定不能和route_pool重复
-group_route_pool=
+#不配置的情况下，使用route_pool
+#配置的情况下，一定不能和route_pool有重复
+#group_route_pool=
 
 #websocket的监听地址 ip:port
 socket_io_address=:13890
