@@ -42,6 +42,7 @@ type StorageFile struct {
 	root      string
 	mutex     sync.Mutex
 
+	dirty     bool     //write file dirty
 	block_NO  int      //write file block NO
 	file      *os.File //write
 	files     *lru.Cache//read, block files
@@ -107,6 +108,7 @@ func (storage *StorageFile) openWriteFile(block_NO int) {
 	}
 	storage.file = file
 	storage.block_NO = block_NO
+	storage.dirty = false
 }
 
 func (storage *StorageFile) openReadFile(block_NO int) *os.File {
@@ -271,6 +273,10 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 	buf := buffer.Bytes()
 
 	if msgid + int64(len(buf)) > BLOCK_SIZE {
+		err = storage.file.Sync()
+		if err != nil {
+			log.Fatalln("sync storage file:", err)
+		}
 		storage.file.Close()
 		storage.openWriteFile(storage.block_NO + 1)
 		msgid, err = storage.file.Seek(0, os.SEEK_END)
@@ -289,6 +295,7 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 	if n != len(buf) {
 		log.Fatal("file write size:", len(buf), " nwrite:", n)
 	}
+	storage.dirty = true
 
 	msgid = int64(storage.block_NO)*BLOCK_SIZE + msgid
 	master.ewt <- &EMessage{msgid:msgid, msg:msg}
@@ -301,4 +308,18 @@ func (storage *StorageFile) SaveMessage(msg *Message) int64 {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 	return storage.saveMessage(msg)
+}
+
+func (storage *StorageFile) Flush() {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+
+	if storage.file != nil && storage.dirty {
+		err := storage.file.Sync()
+		if err != nil {
+			log.Fatal("sync err:", err)
+		}
+		storage.dirty = false
+		log.Info("sync storage file success")
+	}
 }

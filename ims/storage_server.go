@@ -106,9 +106,12 @@ func waitSignal() error {
     return nil // It'll never get here.
 }
 
-//todo flush index
+//flush storage file
 func FlushLoop() {
-
+	ticker := time.NewTicker(time.Millisecond * 1000)
+	for range ticker.C {
+		storage.Flush()
+	}
 }
 
 func NewRedisPool(server, password string, db int) *redis.Pool {
@@ -169,7 +172,7 @@ func main() {
 	}
 
 	config = read_storage_cfg(flag.Args()[0])
-	log.Infof("listen:%s rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%d\n", 
+	log.Infof("listen:%s rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t\n", 
 		config.listen, config.rpc_listen, config.storage_root, config.sync_listen, config.master_address, config.is_push_system)
 
 	storage = NewStorage(config.storage_root)
@@ -181,7 +184,7 @@ func main() {
 		slaver.Start()
 	}
 
-	//刷新storage缓存的ack
+	//刷新storage file
 	go FlushLoop()
 	go waitSignal()
 
