@@ -342,8 +342,8 @@ func (storage *PeerStorage) removePeerIndex() {
 }
 
 //appid uid msgid = 24字节
-func (storage *PeerStorage) FlushPeerIndex() {
-	path := fmt.Sprintf("%s/peer_index", storage.root)
+func (storage *PeerStorage) savePeerIndex() {
+	path := fmt.Sprintf("%s/peer_index_t", storage.root)
 	log.Info("write peer message index path:", path)
 	begin := time.Now().UnixNano()
 	log.Info("flush peer index begin:", begin)
@@ -384,6 +384,17 @@ func (storage *PeerStorage) FlushPeerIndex() {
 	if n != len(buf) {
 		log.Fatal("can't write file:", len(buf), n)
 	}
+	err = file.Sync()
+	if err != nil {
+		log.Infof("sync file err:", err)
+	}
+
+	path2 := fmt.Sprintf("%s/peer_index", storage.root)
+	err = os.Rename(path, path2)
+	if err != nil {
+		log.Fatal("rename peer index file err:", err)
+	}
+	
 	end := time.Now().UnixNano()
 	log.Info("flush peer index end:", end, " used:", end - begin)
 }

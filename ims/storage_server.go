@@ -97,10 +97,9 @@ func waitSignal() error {
         sig := <-ch
         fmt.Println("singal:", sig.String())
         switch sig {
-            case syscall.SIGTERM, syscall.SIGINT:
-			storage.FlushPeerIndex()
-			storage.FlushGroupIndex()
-			os.Exit(0)
+		case syscall.SIGTERM, syscall.SIGINT:
+			storage.Flush()
+			storage.SaveIndexFileAndExit()
         }
     }
     return nil // It'll never get here.

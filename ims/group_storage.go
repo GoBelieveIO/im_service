@@ -216,8 +216,8 @@ func (storage *GroupStorage) removeGroupIndex() {
 }
 
 //appid gid msgid = 24字节
-func (storage *GroupStorage) FlushGroupIndex() {
-	path := fmt.Sprintf("%s/group_index", storage.root)
+func (storage *GroupStorage) saveGroupIndex() {
+	path := fmt.Sprintf("%s/group_index_t", storage.root)
 	log.Info("write group message index path:", path)
 	begin := time.Now().UnixNano()
 	log.Info("flush group index begin:", begin)
@@ -258,6 +258,17 @@ func (storage *GroupStorage) FlushGroupIndex() {
 	if n != len(buf) {
 		log.Fatal("can't write file:", len(buf), n)
 	}
+	err = file.Sync()
+	if err != nil {
+		log.Infof("sync file err:", err)
+	}
+
+	path2 := fmt.Sprintf("%s/group_index", storage.root)
+	err = os.Rename(path, path2)
+	if err != nil {
+		log.Fatal("rename group index file err:", err)
+	}
+	
 	end := time.Now().UnixNano()
 	log.Info("flush group index end:", end, " used:", end - begin)
 }

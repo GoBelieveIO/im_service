@@ -192,3 +192,12 @@ func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *MessageB
 	}()
 	return c
 }
+
+
+func (storage *Storage) SaveIndexFileAndExit() {
+	storage.mutex.Lock()
+	storage.savePeerIndex()
+	storage.saveGroupIndex()
+	
+	os.Exit(0)
+}
