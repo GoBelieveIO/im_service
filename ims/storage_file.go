@@ -67,6 +67,11 @@ func NewStorageFile(root string) *StorageFile {
 	for _, f := range files {
 		base := filepath.Base(f)
 		if strings.HasPrefix(base, "message_") {
+			if !checkFile(f) {
+				log.Fatal("check file failure")
+			} else {
+				log.Infof("check file pass:%s", f)
+			}
 			b, err := strconv.ParseInt(base[8:], 10, 64)
 			if err != nil {
 				log.Fatal("invalid message file:", f)
@@ -82,6 +87,43 @@ func NewStorageFile(root string) *StorageFile {
 	
 	return storage
 }
+
+//校验文件结尾是否合法
+func checkFile(file_path string) bool {
+	file, err := os.Open(file_path)
+	if err != nil {
+		log.Fatal("open file:", err)
+	}
+
+	file_size, err := file.Seek(0, os.SEEK_END)
+	if err != nil {
+		log.Fatal("seek file")
+	}
+
+	if file_size == HEADER_SIZE {
+		return true
+	}
+
+	if file_size < HEADER_SIZE {
+		return false
+	}
+	
+	_, err = file.Seek(file_size - 4, os.SEEK_SET)
+	if err != nil {
+		log.Fatal("seek file")
+	}
+
+	mf := make([]byte, 4)
+	n, err := file.Read(mf)
+	if err != nil || n != 4 {
+		log.Fatal("read file err:", err)
+	}
+	buffer := bytes.NewBuffer(mf)
+	var m int32
+	binary.Read(buffer, binary.BigEndian, &m)
+	return int(m) == MAGIC
+}
+
 
 //open write file
 func (storage *StorageFile) openWriteFile(block_NO int) {
