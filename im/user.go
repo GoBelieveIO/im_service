@@ -22,7 +22,7 @@ package main
 import "fmt"
 import "time"
 import log "github.com/golang/glog"
-import "github.com/garyburd/redigo/redis"
+import "github.com/gomodule/redigo/redis"
 import "errors"
 
 func GetSyncKey(appid int64, uid int64) int64 {

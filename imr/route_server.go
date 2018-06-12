@@ -26,7 +26,7 @@ import "fmt"
 import "time"
 import "math/rand"
 import log "github.com/golang/glog"
-import "github.com/garyburd/redigo/redis"
+import "github.com/gomodule/redigo/redis"
 
 var config *RouteConfig
 var clients ClientSet

@@ -22,7 +22,7 @@ import "time"
 import "strings"
 import "strconv"
 import "sync/atomic"
-import "github.com/garyburd/redigo/redis"
+import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 
 

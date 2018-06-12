@@ -29,7 +29,7 @@ import log "github.com/golang/glog"
 import "os"
 import "os/signal"
 import "syscall"
-import "github.com/garyburd/redigo/redis"
+import "github.com/gomodule/redigo/redis"
 import "github.com/valyala/gorpc"
 
 const GROUP_OFFLINE_LIMIT = 100

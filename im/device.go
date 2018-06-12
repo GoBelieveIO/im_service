@@ -19,7 +19,7 @@
 
 package main
 import "fmt"
-import "github.com/garyburd/redigo/redis"
+import "github.com/gomodule/redigo/redis"
 
 func GetDeviceID(device_id string, platform_id int) (int64, error) {
 	conn := redis_pool.Get()

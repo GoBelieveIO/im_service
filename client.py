@@ -712,7 +712,7 @@ def TestBindToken():
     
 def TestGroup():
     access_token = login(13635273142)
-    url = URL + "/groups"
+    url = URL + "/client/groups"
 
     group = {"master":13635273142,"members":[13635273142], "name":"test", "super":True}
     headers = {}
@@ -725,22 +725,24 @@ def TestGroup():
     group_id = obj["data"]["group_id"]
 
 
-    url = URL + "/groups/%s"%str(group_id)
+    url = URL + "/client/groups/%s"%str(group_id)
     r = requests.patch(url, data=json.dumps({"name":"test_new"}), headers = headers)
     assert(r.status_code == 200)
 
-    url = URL + "/groups/%s/members"%str(group_id)
+    url = URL + "/client/groups/%s/members"%str(group_id)
     r = requests.post(url, data=json.dumps({"uid":13635273143}), headers = headers)
     assert(r.status_code == 200)
 
 
-    url = URL + "/groups/%s/members"%str(group_id)
+    url = URL + "/client/groups/%s/members"%str(group_id)
     r = requests.post(url, data=json.dumps([13635273144,13635273145]), headers = headers)
     assert(r.status_code == 200)
 
 
-    url = URL + "/groups/%s/members/13635273143"%str(group_id)
-    r = requests.delete(url, headers = headers)
+    url = URL + "/client/groups/%s/members"%str(group_id)
+    data = json.dumps([{"uid":13635273143}])
+    r = requests.delete(url, data=data, headers = headers)
+    print r.content
     assert(r.status_code == 200)
 
 
@@ -749,11 +751,8 @@ def TestGroup():
     app_headers = {'Content-Type': 'application/json; charset=UTF-8',
                'Authorization': 'Basic ' + basic}
     
-    url = URL + "/groups/%s/upgrade"%str(group_id)
-    r = requests.post(url, headers=app_headers)
-    assert(r.status_code == 200)
     
-    url = URL + "/groups/%s"%str(group_id)
+    url = URL + "/client/groups/%s"%str(group_id)
     r = requests.delete(url, headers = headers)
 
 
@@ -773,7 +772,7 @@ def TestSendHttpGroupMessage():
     #create group
     is_super = False
     access_token = login(13635273142)
-    url = URL + "/groups"
+    url = URL + "/client/groups"
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test", "super":is_super}
     headers = {}
     headers["Authorization"] = "Bearer " + access_token
@@ -793,7 +792,7 @@ def TestSendHttpGroupMessage():
     while task < 2:
         time.sleep(1)
 
-    url = URL + "/groups/%s"%str(group_id)
+    url = URL + "/client/groups/%s"%str(group_id)
     r = requests.delete(url, headers=headers)
     assert(r.status_code == 200)
 
@@ -812,7 +811,7 @@ def TestGroupOffline():
 def _TestGroupOffline(is_super):
     access_token = login(13635273142)
 
-    url = URL + "/groups"
+    url = URL + "/client/groups"
 
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test", "super":is_super}
     headers = {}
@@ -842,7 +841,7 @@ def _TestGroupOffline(is_super):
         time.sleep(1)
 
 
-    url = URL + "/groups/%s"%str(group_id)
+    url = URL + "/client/groups/%s"%str(group_id)
     r = requests.delete(url, headers=headers)
     assert(r.status_code == 200)
 
@@ -859,7 +858,7 @@ def _TestGroupMessage(is_super, port):
 
     #create group
     access_token = login(13635273142)
-    url = URL + "/groups"
+    url = URL + "/client/groups"
     group = {"master":13635273142,"members":[13635273142,13635273143], "name":"test", "super":is_super}
     headers = {}
     headers["Authorization"] = "Bearer " + access_token
@@ -879,7 +878,7 @@ def _TestGroupMessage(is_super, port):
     while task < 2:
         time.sleep(1)
 
-    url = URL + "/groups/%s"%str(group_id)
+    url = URL + "/client/groups/%s"%str(group_id)
     r = requests.delete(url, headers=headers)
     assert(r.status_code == 200)
 
@@ -912,7 +911,7 @@ def _TestGroupNotification(is_super):
 
     access_token = login(13635273142)
 
-    url = URL + "/groups"
+    url = URL + "/client/groups"
 
     group = {"master":13635273142,"members":[13635273142,13635273143], 
              "super":is_super, "name":"test"}
@@ -927,7 +926,7 @@ def _TestGroupNotification(is_super):
     while task < 1:
         time.sleep(1)
 
-    url = URL + "/groups/%s"%str(group_id)
+    url = URL + "/client/groups/%s"%str(group_id)
     r = requests.delete(url, headers=headers)
     print r.status_code, r.text
 
@@ -1010,23 +1009,23 @@ def TestNotification():
     print "test notification completed"
 
 def main():
-    cluster = True
+    cluster = False
 
     TestBindToken()
     time.sleep(1)
      
     TestGroup()
     time.sleep(1)
-    
+     
     TestGroupNotification()
     time.sleep(1)
      
     TestSuperGroupNotification()
     time.sleep(1)
-     
+    
     TestGroupMessage()
     time.sleep(1)
-    
+
     TestSuperGroupMessage()
     time.sleep(1)
      

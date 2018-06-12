@@ -25,7 +25,7 @@ import "time"
 import "runtime"
 import "math/rand"
 import "net/http"
-import "github.com/garyburd/redigo/redis"
+import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
 

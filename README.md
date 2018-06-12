@@ -47,8 +47,8 @@
    go get github.com/golang/glog
     
    go get github.com/go-sql-driver/mysql
-    
-   go get github.com/garyburd/redigo/redis
+
+   go get github.com/gomodule/redigo/redis
     
    go get github.com/googollee/go-engine.io
     
