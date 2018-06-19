@@ -71,15 +71,25 @@
 
 7. 启动程序
 
-    创建ims消息存放路径
+  * 创建配置文件中配置的im&ims消息存放路径
 
-    创建日志文件路径
+    mkdir /tmp/im
+
+    mkdir /tmp/impending
+
+  * 创建日志文件路径
+    
     mkdir /data/logs/ims
+
     mkdir /data/logs/imr
+
     mkdir /data/logs/im
 
-    pushd `dirname $0` > /dev/null
-    BASEDIR=`pwd`
+  * 启动im服务
+
+    pushd \`dirname $0\` > /dev/null
+
+    BASEDIR=\`pwd\`
 
     nohup $BASEDIR/ims -log_dir=/data/logs/ims ims.cfg >/data/logs/ims/ims.log 2>&1 &
 
