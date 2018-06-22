@@ -51,6 +51,8 @@ type Config struct {
 	group_storage_rpc_addrs   []string	
 	route_addrs         []string
 	group_route_addrs   []string //可选配置项， 超群群的route server
+
+	word_file           string //关键词字典文件
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -168,5 +170,7 @@ func read_cfg(cfg_path string) *Config {
 			}
 		}
 	}
+
+	config.word_file = get_opt_string(app_cfg, "word_file")
 	return config
 }

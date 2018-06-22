@@ -28,6 +28,8 @@ import "net/http"
 import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
+import "github.com/importcjj/sensitive"
+import "github.com/bitly/go-simplejson"
 
 var storage_pools []*StorageConnPool
 
@@ -53,6 +55,7 @@ var server_summary *ServerSummary
 var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
 var group_message_deliver *GroupMessageDeliver
+var filter *sensitive.Filter
 
 func init() {
 	app_route = NewAppRoute()
@@ -225,6 +228,36 @@ func SendAppMessage(appid int64, uid int64, msg *Message) {
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
 	DispatchAppMessage(amsg)
+}
+
+//过滤敏感词
+func FilterDirtyWord(msg *IMMessage) {
+	if filter == nil {
+		return
+	}
+
+	obj, err := simplejson.NewJson([]byte(msg.content))
+	if err != nil {
+		return
+	}
+
+	text, err := obj.Get("text").String()
+	if err != nil {
+		return
+	}
+
+	if exist,  _ := filter.FindIn(text); exist {
+		t := filter.RemoveNoise(text)
+		replacedText := filter.Replace(t, '*')
+
+		obj.Set("text", replacedText)
+		c, err := obj.Encode()
+		if err != nil {
+			log.Errorf("json encode err:%s", err)
+			return
+		}
+		msg.content = string(c)
+	}
 }
 
 func DispatchAppMessage(amsg *AppMessage) {
@@ -451,6 +484,11 @@ func main() {
 		}
 	} else {
 		group_route_channels = route_channels
+	}
+
+	if len(config.word_file) > 0 {
+		filter = sensitive.New()
+		filter.LoadWordDict(config.word_file)
 	}
 	
 	group_manager = NewGroupManager()
