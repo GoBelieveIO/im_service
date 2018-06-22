@@ -226,7 +226,9 @@ func (client *IMClient) HandleSyncKey(sync_key *SyncKey) {
 	}
 }
 
-func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
+func (client *IMClient) HandleIMMessage(message *Message) {
+	msg := message.body.(*IMMessage)
+	seq := message.seq
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -236,9 +238,9 @@ func (client *IMClient) HandleIMMessage(msg *IMMessage, seq int) {
 		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
 		return
 	}
-
-	FilterDirtyWord(msg)
-
+	if message.flag & MESSAGE_FLAG_TEXT != 0 {
+		FilterDirtyWord(msg)
+	}
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
@@ -315,7 +317,9 @@ func (client *IMClient) HandleGroupMessage(im *IMMessage, group *Group) {
 	group_message_deliver.SaveMessage(m)
 }
 
-func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
+func (client *IMClient) HandleGroupIMMessage(message *Message) {
+	msg := message.body.(*IMMessage)
+	seq := message.seq		
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -325,8 +329,9 @@ func (client *IMClient) HandleGroupIMMessage(msg *IMMessage, seq int) {
 		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
 		return
 	}
-
-	FilterDirtyWord(msg)
+	if message.flag & MESSAGE_FLAG_TEXT != 0 {
+		FilterDirtyWord(msg)
+	}
 	
 	msg.timestamp = int32(time.Now().Unix())
 
@@ -383,9 +388,9 @@ func (client *IMClient) HandleRTMessage(msg *Message) {
 func (client *IMClient) HandleMessage(msg *Message) {
 	switch msg.cmd {
 	case MSG_IM:
-		client.HandleIMMessage(msg.body.(*IMMessage), msg.seq)
+		client.HandleIMMessage(msg)
 	case MSG_GROUP_IM:
-		client.HandleGroupIMMessage(msg.body.(*IMMessage), msg.seq)
+		client.HandleGroupIMMessage(msg)
 	case MSG_INPUTING:
 		client.HandleInputing(msg.body.(*MessageInputing))
 	case MSG_RT:
