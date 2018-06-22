@@ -81,13 +81,14 @@ func send(uid int64, receiver int64) {
 	}
 	seq := 1
 	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, auth})
+	SendMessage(conn, &Message{cmd:MSG_AUTH_TOKEN, seq:seq, version:DEFAULT_VERSION, body:auth})
 	ReceiveMessage(conn)
 
 	for i := 0; i < count; i++ {
 		content := fmt.Sprintf("test....%d", i)
 		seq++
-		msg := &Message{MSG_IM, seq, DEFAULT_VERSION, &IMMessage{uid, receiver, 0, int32(i), content}}
+		msg := &Message{MSG_IM, seq, DEFAULT_VERSION, 0,
+			&IMMessage{uid, receiver, 0, int32(i), content}}
 		SendMessage(conn, msg)
 		for {
 			ack := ReceiveMessage(conn)
@@ -118,7 +119,7 @@ func receive(uid int64) {
 	}
 	seq := 1
 	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, auth})
+	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, 0, auth})
 	ReceiveMessage(conn)
 
 	total := count
@@ -138,7 +139,7 @@ func receive(uid int64) {
 			//log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 		}
 		seq++
-		ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, &MessageACK{int32(msg.seq)}}
+		ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{int32(msg.seq)}}
 		SendMessage(conn, ack)
 	}
 	conn.Close()

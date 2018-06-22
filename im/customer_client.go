@@ -55,7 +55,15 @@ func (client *CustomerClient) HandleCustomerSupportMessage(msg *Message) {
 	}
 
 	cm.timestamp = int32(time.Now().Unix())
-
+	
+	if (msg.flag & MESSAGE_FLAG_UNPERSISTENT) > 0 {
+		log.Info("customer support message unpersistent")		
+		SendAppMessage(cm.customer_appid, cm.customer_id, msg)
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+		client.EnqueueMessage(ack)
+		return
+	}
+	
 	msgid, err := SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer support message err:", err)
@@ -88,7 +96,8 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 	cm := msg.body.(*CustomerMessage)
 	cm.timestamp = int32(time.Now().Unix())
 
-	log.Infof("customer message customer appid:%d customer id:%d store id:%d seller id:%d", cm.customer_appid, cm.customer_id, cm.store_id, cm.seller_id)
+	log.Infof("customer message customer appid:%d customer id:%d store id:%d seller id:%d",
+		cm.customer_appid, cm.customer_id, cm.store_id, cm.seller_id)
 	if cm.customer_appid != client.appid {
 		log.Warningf("message appid:%d client appid:%d", 
 			cm.customer_appid, client.appid)
@@ -105,6 +114,14 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 		return
 	}
 
+	if (msg.flag & MESSAGE_FLAG_UNPERSISTENT) > 0 {
+		log.Info("customer message unpersistent")
+		SendAppMessage(config.kefu_appid, cm.seller_id, msg)
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+		client.EnqueueMessage(ack)		
+		return
+	}
+	
 	msgid, err := SaveMessage(config.kefu_appid, cm.seller_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer message err:", err)

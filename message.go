@@ -96,6 +96,13 @@ const MSG_NOTIFICATION = 36
 
 const MSG_VOIP_CONTROL = 64
 
+
+//消息标志
+//文本消息
+const MESSAGE_FLAG_TEXT = 0x01
+//消息不持久化
+const MESSAGE_FLAG_UNPERSISTENT = 0x02
+
 func init() {
 	message_creators[MSG_AUTH] = func()IMessage {return new(Authentication)}
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
@@ -204,6 +211,7 @@ type Message struct {
 	cmd  int
 	seq  int
 	version int
+	flag int
 	
 	body interface{}
 }

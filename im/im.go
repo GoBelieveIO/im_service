@@ -261,7 +261,7 @@ func FilterDirtyWord(msg *IMMessage) {
 }
 
 func DispatchAppMessage(amsg *AppMessage) {
-	log.Info("dispatch app message:", Command(amsg.msg.cmd))
+	log.Infof("dispatch app message:%s %d", Command(amsg.msg.cmd), amsg.msg.flag)
 
 	route := app_route.FindRoute(amsg.appid)
 	if route == nil {
@@ -270,7 +270,7 @@ func DispatchAppMessage(amsg *AppMessage) {
 	}
 	clients := route.FindClientSet(amsg.receiver)
 	if len(clients) == 0 {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+		log.Infof("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return
 	}
 	for c, _ := range(clients) {
@@ -285,7 +285,7 @@ func DispatchRoomMessage(amsg *AppMessage) {
 	clients := route.FindRoomClientSet(room_id)
 
 	if len(clients) == 0 {
-		log.Warningf("can't dispatch room message, appid:%d room id:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+		log.Infof("can't dispatch room message, appid:%d room id:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
 		return
 	}
 	for c, _ := range(clients) {
@@ -294,7 +294,7 @@ func DispatchRoomMessage(amsg *AppMessage) {
 }
 
 func DispatchGroupMessage(amsg *AppMessage) {
-	log.Info("dispatch group message:", Command(amsg.msg.cmd))
+	log.Infof("dispatch group message:%s %d", Command(amsg.msg.cmd), amsg.msg.flag)
 	group := group_manager.FindGroup(amsg.receiver)
 	if group == nil {
 		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)

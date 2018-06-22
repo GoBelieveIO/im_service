@@ -44,14 +44,14 @@ var vmessage_creators map[int]VersionMessageCreator = make(map[int]VersionMessag
 
 
 
-func WriteHeader(len int32, seq int32, cmd byte, version byte, buffer io.Writer) {
+func WriteHeader(len int32, seq int32, cmd byte, version byte, flag byte, buffer io.Writer) {
 	binary.Write(buffer, binary.BigEndian, len)
 	binary.Write(buffer, binary.BigEndian, seq)
-	t := []byte{cmd, byte(version), 0, 0}
+	t := []byte{cmd, byte(version), flag, 0}
 	buffer.Write(t)
 }
 
-func ReadHeader(buff []byte) (int, int, int, int) {
+func ReadHeader(buff []byte) (int, int, int, int, int) {
 	var length int32
 	var seq int32
 	buffer := bytes.NewBuffer(buff)
@@ -59,12 +59,13 @@ func ReadHeader(buff []byte) (int, int, int, int) {
 	binary.Read(buffer, binary.BigEndian, &seq)
 	cmd, _ := buffer.ReadByte()
 	version, _ := buffer.ReadByte()
-	return int(length), int(seq), int(cmd), int(version)
+	flag, _ := buffer.ReadByte()
+	return int(length), int(seq), int(cmd), int(version), int(flag)
 }
 
 func WriteMessage(w *bytes.Buffer, msg *Message) {
 	body := msg.ToData()
-	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), byte(msg.version), w)
+	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), byte(msg.version), byte(msg.flag), w)
 	w.Write(body)
 }
 
@@ -92,7 +93,7 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int) *Message {
 		return nil
 	}
 
-	length, seq, cmd, version := ReadHeader(buff)
+	length, seq, cmd, version, flag := ReadHeader(buff)
 	if length < 0 || length >= limit_size {
 		log.Info("invalid len:", length)
 		return nil
@@ -108,6 +109,7 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int) *Message {
 	message.cmd = cmd
 	message.seq = seq
 	message.version = version
+	message.flag = flag
 	if !message.FromData(buff) {
 		log.Warning("parse error")
 		return nil

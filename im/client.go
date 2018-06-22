@@ -254,7 +254,7 @@ func (client *Client) Write() {
 			seq++
 
 			//以当前客户端所用版本号发送消息
-			vmsg := &Message{msg.cmd, seq, client.version, msg.body}
+			vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
 			client.send(vmsg)
 		case emsg, ok := <- client.owt:
 			if !ok {
@@ -267,7 +267,7 @@ func (client *Client) Write() {
 			emsg.msg.seq = seq
 
 			//以当前客户端所用版本号发送消息
-			msg := &Message{emsg.msg.cmd, seq, client.version, emsg.msg.body}
+			msg := &Message{emsg.msg.cmd, seq, client.version, emsg.msg.flag, emsg.msg.body}
 			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
@@ -291,7 +291,7 @@ func (client *Client) Write() {
 			seq++
 
 			//以当前客户端所用版本号发送消息
-			vmsg := &Message{msg.cmd, seq, client.version, msg.body}
+			vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
 			client.send(vmsg)
 		case emsg := <- client.ewt:
 			seq++
@@ -299,7 +299,13 @@ func (client *Client) Write() {
 			emsg.msg.seq = seq
 
 			//以当前客户端所用版本号发送消息
-			msg := &Message{cmd:emsg.msg.cmd, seq:seq, version:client.version, body:emsg.msg.body}
+			msg := &Message{ 
+				cmd:emsg.msg.cmd,
+				seq:seq,
+				version:client.version,
+				flag:emsg.msg.flag,
+				body:emsg.msg.body,
+			}
 			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}

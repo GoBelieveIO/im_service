@@ -276,7 +276,8 @@ func (storage *GroupMessageDeliver) saveMessage(msg *Message) int64 {
 	var msg_len int32 = MSG_HEADER_SIZE + int32(len(body))
 	binary.Write(buffer, binary.BigEndian, msg_len)
 	
-	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), byte(msg.version), buffer)
+	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd),
+		byte(msg.version), byte(msg.flag), buffer)
 	buffer.Write(body)
 
 	binary.Write(buffer, binary.BigEndian, msg_len)

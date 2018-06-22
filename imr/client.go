@@ -182,8 +182,10 @@ func (client *Client) HandlePublish(amsg *AppMessage) {
 	if cmd == MSG_IM || cmd == MSG_GROUP_IM || 
 		cmd == MSG_CUSTOMER || cmd == MSG_CUSTOMER_SUPPORT || 
 		cmd == MSG_SYSTEM {
-		//持久化的消息不主动推送消息到客户端
-		return
+		if amsg.msg.flag & MESSAGE_FLAG_UNPERSISTENT == 0 {
+			//持久化的消息不主动推送消息到客户端
+			return
+		}
 	}
 
 	msg := &Message{cmd:MSG_PUBLISH, body:amsg}
