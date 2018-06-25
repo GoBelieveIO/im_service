@@ -54,6 +54,8 @@
     
    go get github.com/richmonkey/cfg
     
+   go get github.com/importcjj/sensitive
+   
    go get github.com/valyala/gorpc
     
    //注意需要翻墙(可选)
