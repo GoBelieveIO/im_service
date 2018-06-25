@@ -101,7 +101,7 @@ func (client *Client) HandleMessage(msg *Message) {
 }
 
 func (client *Client) HandleSubscribe(id *SubscribeMessage) {
-	log.Infof("subscribe appid:%d uid:%d", id.appid, id.uid)
+	log.Infof("subscribe appid:%d uid:%d online:%d", id.appid, id.uid, id.online)
 	route := client.app_route.FindOrAddRoute(id.appid)
 	on := id.online != 0
 	route.AddUserID(id.uid, on)
@@ -160,7 +160,14 @@ func (client *Client) HandlePublish(amsg *AppMessage) {
 	receiver := &AppUserID{appid:amsg.appid, uid:amsg.receiver}
 	s := FindClientSet(receiver)
 
-	if len(s) == 0 {
+	offline := true
+	for c := range(s) {
+		if c.IsAppUserOnline(receiver) {
+			offline = false
+		}
+	}
+	
+	if offline {
 		//用户不在线,推送消息到终端
 		if cmd == MSG_IM {
 			client.PublishPeerMessage(amsg.appid, amsg.msg.body.(*IMMessage))
