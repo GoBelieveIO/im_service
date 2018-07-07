@@ -32,7 +32,11 @@ import "syscall"
 import "github.com/gomodule/redigo/redis"
 import "github.com/valyala/gorpc"
 
+//超级群离线消息数量限制,超过的部分会被丢弃
 const GROUP_OFFLINE_LIMIT = 100
+
+//个人离线消息单词返回的数量限制,超过部分会多次返回，不会被丢弃
+const PEER_OFFLINE_LIMIT = 3000
 
 var storage *Storage
 var config *StorageConfig
@@ -42,12 +46,6 @@ var mutex   sync.Mutex
 func init() {
 }
 
-func handle_client(conn *net.TCPConn) {
-	conn.SetKeepAlive(true)
-	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
-	client := NewClient(conn)
-	client.Run()
-}
 
 func Listen(f func(*net.TCPConn), listen_addr string) {
 	listen, err := net.Listen("tcp", listen_addr)
@@ -70,9 +68,6 @@ func Listen(f func(*net.TCPConn), listen_addr string) {
 	}
 }
 
-func ListenClient() {
-	Listen(handle_client, config.listen)
-}
 
 func handle_sync_client(conn *net.TCPConn) {
 	conn.SetKeepAlive(true)
@@ -188,7 +183,5 @@ func main() {
 	go waitSignal()
 
 	go ListenSyncClient()
-	go ListenRPCClient()
-
-	ListenClient()
+	ListenRPCClient()
 }

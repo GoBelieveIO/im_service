@@ -97,12 +97,15 @@ func (storage *PeerStorage) SetLastMessageID(appid int64, receiver int64, msg_id
 }
 
 
-//获取所有消息id大于msgid的消息
-func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msgid int64) []*EMessage {
+//获取所有消息id大于msgid的消息,
+//todo 优化当消息数量溢出，效率低下问题
+func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msgid int64, limit int) ([]*EMessage, int64) {
 	last_id, err := storage.GetLastMessageID(appid, receiver)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
+	overflow := false
+	var last_msgid int64
 	messages := make([]*EMessage, 0, 10)
 	for {
 		if last_id == 0 {
@@ -135,13 +138,31 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 			last_id = off.prev_msgid
 			continue
 		}
-
+		if last_msgid == 0 {
+			last_msgid = off.msgid
+		}
 		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
 		messages = append(messages, emsg)
 
+		if len(messages) >= limit*2 {
+			copy(messages, messages[limit:])
+			messages = messages[:limit]
+			overflow = true
+			log.Warning("offline message overflow")
+		}
 		last_id = off.prev_msgid
 	}
-	return messages
+
+	if len(messages) > limit {
+		messages = messages[:limit]
+		overflow = true
+		log.Warning("offline message overflow")
+	}
+	if !overflow {
+		last_msgid = 0
+	}
+	
+	return messages, last_msgid
 }
 
 

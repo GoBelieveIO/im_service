@@ -186,8 +186,9 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 		log.Warning("sync message err:", err)
 		return
 	}
-	
-	messages := resp.([]*HistoryMessage)
+
+	ph := resp.(*PeerHistoryMessage)
+	messages := ph.Messages
 
 	sk := &SyncKey{last_id}
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_BEGIN, body:sk})
@@ -207,6 +208,14 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 	}
 
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_END, body:sk})
+
+
+	if ph.LastMsgID > 0 {
+		//离线消息数量超过单次限制
+		log.Warning("offline message overflow, send sync notify:", ph.LastMsgID)
+		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{ph.LastMsgID}}
+		client.EnqueueMessage(notify)
+	}
 }
 
 func (client *IMClient) HandleSyncKey(sync_key *SyncKey) {

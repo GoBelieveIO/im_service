@@ -20,9 +20,10 @@
 
 package main
 
-func SyncMessage(addr string, sync_key *SyncHistory) []*HistoryMessage {
-	messages := storage.LoadHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID)
- 
+func SyncMessage(addr string, sync_key *SyncHistory) *PeerHistoryMessage {
+	messages, last_msgid := storage.LoadHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, PEER_OFFLINE_LIMIT)
+
+	
 	historyMessages := make([]*HistoryMessage, 0, 10)
 	for _, emsg := range(messages) {
 		hm := &HistoryMessage{}
@@ -34,7 +35,7 @@ func SyncMessage(addr string, sync_key *SyncHistory) []*HistoryMessage {
 		hm.Raw = emsg.msg.ToData()
 		historyMessages = append(historyMessages, hm)
 	}
-	return historyMessages
+	return &PeerHistoryMessage{historyMessages, last_msgid}
 }
 
 func SyncGroupMessage(addr string , sync_key *SyncGroupHistory) []*HistoryMessage {
