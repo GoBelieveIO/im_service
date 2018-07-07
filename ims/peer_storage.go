@@ -154,7 +154,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 	}
 
 	if len(messages) > limit {
-		messages = messages[:limit]
+		messages = messages[len(messages)-limit:]
 		overflow = true
 		log.Warning("offline message overflow")
 	}
