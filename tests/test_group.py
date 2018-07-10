@@ -69,7 +69,10 @@ def recv_group_message_client(uid, port=23000, group_id = 0):
     global task
     def handle_message(cmd, s, msg):
         if cmd == MSG_GROUP_IM:
-            return True
+            if group_id == 0 or msg.receiver == group_id:
+                return True
+            else:
+                return False
         elif cmd == MSG_IM:
             return False
         else:

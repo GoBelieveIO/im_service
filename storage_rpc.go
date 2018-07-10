@@ -61,6 +61,7 @@ type SyncGroupHistory struct {
 	DeviceID  int64
 	GroupID   int64
 	LastMsgID int64
+	Timestamp int32
 }
 
 

@@ -94,6 +94,21 @@ func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 	}
 
 	group_id := group_sync_key.group_id
+
+
+	group := group_manager.FindGroup(group_id)
+	if group == nil {
+		log.Warning("can't find group:", group_id)
+		return
+	}
+
+	if !group.IsMember(client.uid) {
+		log.Warningf("sender:%d is not group member", client.uid)
+		return
+	}
+
+	ts := group.GetMemberTimestamp(client.uid)
+	
 	rpc := GetGroupStorageRPCClient(group_id)
 
 	last_id := group_sync_key.sync_key
@@ -107,6 +122,7 @@ func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		DeviceID:client.device_ID, 
 		GroupID:group_sync_key.group_id, 
 		LastMsgID:last_id,
+		Timestamp:int32(ts),
 	}
 
 	log.Info("sync group message...", group_sync_key.sync_key, last_id)

@@ -90,9 +90,10 @@ func (storage *GroupStorage) GetLastGroupMessageID(appid int64, gid int64) (int6
 	return storage.getLastGroupMessageID(appid, gid)
 }
 
-
 //获取所有消息id大于msgid的消息
-func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gid int64, msgid int64, limit int) []*EMessage {
+//ts:入群时间
+func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gid int64, msgid int64, ts int32, limit int) []*EMessage {
+	log.Infof("load group history message:%d %d", msgid, ts)
 	last_id, err := storage.GetLastGroupMessageID(appid, gid)
 	if err != nil {
 		log.Info("get last group message id err:", err)
@@ -118,6 +119,13 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 		}
 
 		m := storage.LoadMessage(off.msgid)
+		if msgid == 0 && m.cmd == MSG_GROUP_IM {
+			//不取入群之前的消息
+			im := m.body.(*IMMessage)
+			if im.timestamp < ts {
+				break
+			}
+		}
 		c = append(c, &EMessage{msgid:off.msgid, device_id:off.device_id, msg:m})
 
 		last_id = off.prev_msgid

@@ -29,58 +29,74 @@ type Group struct {
 	appid   int64
 	super   bool //超大群
 	mutex   sync.Mutex
-	members IntSet
+	//key:成员id value:入群时间
+	members map[int64]int
 }
 
-func NewGroup(gid int64, appid int64, members []int64) *Group {
+func NewGroup(gid int64, appid int64, members map[int64]int) *Group {
 	group := new(Group)
 	group.appid = appid
 	group.gid = gid
 	group.super = false
-	group.members = NewIntSet()
-	for _, m := range members {
-		group.members.Add(m)
-	}
+	group.members = members
 	return group
 }
 
-func NewSuperGroup(gid int64, appid int64, members []int64) *Group {
+func NewSuperGroup(gid int64, appid int64, members map[int64]int) *Group {
 	group := new(Group)
 	group.appid = appid
 	group.gid = gid
 	group.super = true
-	group.members = NewIntSet()
-	for _, m := range members {
-		group.members.Add(m)
-	}
+	group.members = members
 	return group
 }
 
 
-func (group *Group) Members() IntSet {
+func (group *Group) Members() map[int64]int {
 	return group.members
 }
 
+
+func (group *Group) cloneMembers() map[int64]int {
+	members := group.members
+	n := make(map[int64]int)
+	for k, v := range members {
+		n[k] = v
+	}
+	return n
+}
+
+
 //修改成员，在副本修改，避免读取时的lock
-func (group *Group) AddMember(uid int64) {
+func (group *Group) AddMember(uid int64, timestamp int) {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
-	members := group.members.Clone()
-	members.Add(uid)
+
+	members := group.cloneMembers()
+	members[uid] = timestamp
 	group.members = members
 }
 
 func (group *Group) RemoveMember(uid int64) {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
-	members := group.members.Clone()
-	members.Remove(uid)
+
+	if _, ok := group.members[uid]; !ok {
+		return
+	}
+	members := group.cloneMembers()
+	delete(members, uid)
 	group.members = members
 }
 
 func (group *Group) IsMember(uid int64) bool {
 	_, ok := group.members[uid]
 	return ok
+}
+
+func (group *Group) GetMemberTimestamp(uid int64) int {
+	ts, _ := group.members[uid]
+	return ts
 }
 
 func (group *Group) IsEmpty() bool {
@@ -149,35 +165,6 @@ ROLLBACK:
 	return false
 }
 
-func AddGroupMember(db *sql.DB, group_id int64, uid int64) bool {
-	stmtIns, err := db.Prepare("INSERT INTO group_member(group_id, uid) VALUES( ?, ? )")
-	if err != nil {
-		log.Info("error:", err)
-		return false
-	}
-	defer stmtIns.Close()
-	_, err = stmtIns.Exec(group_id, uid)
-	if err != nil {
-		log.Info("error:", err)
-		return false
-	}
-	return true
-}
-
-func RemoveGroupMember(db *sql.DB, group_id int64, uid int64) bool {
-	stmtIns, err := db.Prepare("DELETE FROM group_member WHERE group_id=? AND uid=?")
-	if err != nil {
-		log.Info("error:", err)
-		return false
-	}
-	defer stmtIns.Close()
-	_, err = stmtIns.Exec(group_id, uid)
-	if err != nil {
-		log.Info("error:", err)
-		return false
-	}
-	return true
-}
 
 func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
 	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group`")
@@ -211,20 +198,21 @@ func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
 	return groups, nil
 }
 
-func LoadGroupMember(db *sql.DB, group_id int64) ([]int64, error) {
-	stmtIns, err := db.Prepare("SELECT uid FROM group_member WHERE group_id=?")
+func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int, error) {
+	stmtIns, err := db.Prepare("SELECT uid, timestamp FROM group_member WHERE group_id=?")
 	if err != nil {
 		log.Info("error:", err)
 		return nil, err
 	}
 
 	defer stmtIns.Close()
-	members := make([]int64, 0, 4)
+	members := make(map[int64]int)
 	rows, err := stmtIns.Query(group_id)
 	for rows.Next() {
 		var uid int64
-		rows.Scan(&uid)
-		members = append(members, uid)
+		var timestamp int
+		rows.Scan(&uid, &timestamp)
+		members[uid] = timestamp
 	}
 	return members, nil
 }

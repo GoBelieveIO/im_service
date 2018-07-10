@@ -200,7 +200,8 @@ func (group_manager *GroupManager) HandleMemberAdd(data string) {
 
 	group := group_manager.FindGroup(gid)
 	if group != nil {
-		group.AddMember(uid)
+		timestamp := int(time.Now().Unix())
+		group.AddMember(uid, timestamp)
 		log.Infof("add group member gid:%d uid:%d", gid, uid)
 	} else {
 		log.Infof("can't find group:%d\n", gid)

@@ -39,7 +39,7 @@ func SyncMessage(addr string, sync_key *SyncHistory) *PeerHistoryMessage {
 }
 
 func SyncGroupMessage(addr string , sync_key *SyncGroupHistory) []*HistoryMessage {
-	messages := storage.LoadGroupHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.GroupID, sync_key.LastMsgID, GROUP_OFFLINE_LIMIT)
+	messages := storage.LoadGroupHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.GroupID, sync_key.LastMsgID, sync_key.Timestamp, GROUP_OFFLINE_LIMIT)
  
 	historyMessages := make([]*HistoryMessage, 0, 10)
 	for _, emsg := range(messages) {
