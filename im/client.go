@@ -27,6 +27,7 @@ import log "github.com/golang/glog"
 type Client struct {
 	Connection//必须放在结构体首部
 	*IMClient
+	*GroupClient
 	*RoomClient
 	*CustomerClient
 	public_ip int32
@@ -55,6 +56,7 @@ func NewClient(conn interface{}) *Client {
 	atomic.AddInt64(&server_summary.nconnections, 1)
 
 	client.IMClient = &IMClient{&client.Connection}
+	client.GroupClient = &GroupClient{&client.Connection}	
 	client.RoomClient = &RoomClient{Connection:&client.Connection}
 	client.CustomerClient = NewCustomerClient(&client.Connection)
 	return client
@@ -131,6 +133,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	}
 
 	client.IMClient.HandleMessage(msg)
+	client.GroupClient.HandleMessage(msg)
 	client.RoomClient.HandleMessage(msg)
 	client.CustomerClient.HandleMessage(msg)
 }

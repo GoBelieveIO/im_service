@@ -58,124 +58,6 @@ func (client *IMClient) Logout() {
 }
 
 
-//自己是否是发送者
-func (client *IMClient) isSender(msg *Message, device_id int64) bool {
-	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-		m := msg.body.(*IMMessage)
-		if m.sender == client.uid && device_id == client.device_ID {
-			return true
-		}
-	}
-
-	if msg.cmd == MSG_CUSTOMER {
-		m := msg.body.(*CustomerMessage)
-		if m.customer_appid == client.appid && 
-			m.customer_id == client.uid && 
-			device_id == client.device_ID {
-			return true
-		}
-	}
-
-	if msg.cmd == MSG_CUSTOMER_SUPPORT {
-		m := msg.body.(*CustomerMessage)
-		if config.kefu_appid == client.appid && 
-			m.seller_id == client.uid && 
-			device_id == client.device_ID {
-			return true
-		}
-	}
-	return false
-}
-
-
-func (client *IMClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
-	if client.uid == 0 {
-		return
-	}
-
-	group_id := group_sync_key.group_id
-
-
-	group := group_manager.FindGroup(group_id)
-	if group == nil {
-		log.Warning("can't find group:", group_id)
-		return
-	}
-
-	if !group.IsMember(client.uid) {
-		log.Warningf("sender:%d is not group member", client.uid)
-		return
-	}
-
-	ts := group.GetMemberTimestamp(client.uid)
-	
-	rpc := GetGroupStorageRPCClient(group_id)
-
-	last_id := group_sync_key.sync_key
-	if last_id == 0 {
-		last_id = GetGroupSyncKey(client.appid, client.uid, group_id)
-	}
-
-	s := &SyncGroupHistory{
-		AppID:client.appid, 
-		Uid:client.uid, 
-		DeviceID:client.device_ID, 
-		GroupID:group_sync_key.group_id, 
-		LastMsgID:last_id,
-		Timestamp:int32(ts),
-	}
-
-	log.Info("sync group message...", group_sync_key.sync_key, last_id)
-	resp, err := rpc.Call("SyncGroupMessage", s)
-	if err != nil {
-		log.Warning("sync message err:", err)
-		return
-	}
-
-	messages := resp.([]*HistoryMessage)
-
-	sk := &GroupSyncKey{sync_key:last_id, group_id:group_id}
-	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_BEGIN, body:sk})
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-		log.Info("message:", msg.MsgID, Command(msg.Cmd))
-		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
-		m.FromData(msg.Raw)
-		sk.sync_key = msg.MsgID
-
-		//过滤掉所有自己在当前设备发出的消息
-		if client.isSender(m, msg.DeviceID) {
-			continue
-		}
-
-		client.EnqueueMessage(m)
-	}
-
-	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_END, body:sk})
-}
-
-
-func (client *IMClient) HandleGroupSyncKey(group_sync_key *GroupSyncKey) {
-	if client.uid == 0 {
-		return
-	}
-
-	group_id := group_sync_key.group_id
-	last_id := group_sync_key.sync_key
-
-	log.Info("group sync key:", group_sync_key.sync_key, last_id)
-	if last_id > 0 {
-		s := &SyncGroupHistory{
-			AppID:client.appid, 
-			Uid:client.uid, 
-			GroupID:group_id, 
-			LastMsgID:last_id,
-		}
-		group_sync_c <- s
-	}
-}
-
-
 func (client *IMClient) HandleSync(sync_key *SyncKey) {
 	if client.uid == 0 {
 		return
@@ -304,87 +186,6 @@ func (client *IMClient) HandleIMMessage(message *Message) {
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
-func (client *IMClient) HandleSuperGroupMessage(msg *IMMessage) {
-	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
-	msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
-	if err != nil {
-		log.Errorf("save group message:%d %d err:%s", msg.sender, msg.receiver, err)
-		return
-	}
-	
-	//推送外部通知
-	PushGroupMessage(client.appid, msg.receiver, m)
-
-	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:msg.receiver, sync_key:msgid}}
-	client.SendGroupMessage(msg.receiver, notify)
-}
-
-func (client *IMClient) HandleGroupMessage(im *IMMessage, group *Group) {
-	gm := &PendingGroupMessage{}
-	gm.appid = client.appid
-	gm.sender = im.sender	
-	gm.device_ID = client.device_ID
-	gm.gid = im.receiver
-	gm.timestamp = im.timestamp
-	
-	members := group.Members()
-	gm.members = make([]int64, len(members))
-	i := 0
-	for uid := range members {
-		gm.members[i] = uid
-		i += 1
-	}
-
-	gm.content = im.content
-	
-	m := &Message{cmd:MSG_PENDING_GROUP_MESSAGE, body: gm}
-	group_message_deliver.SaveMessage(m)
-}
-
-func (client *IMClient) HandleGroupIMMessage(message *Message) {
-	msg := message.body.(*IMMessage)
-	seq := message.seq		
-	if client.uid == 0 {
-		log.Warning("client has't been authenticated")
-		return
-	}
-
-	if msg.sender != client.uid {
-		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
-		return
-	}
-	if message.flag & MESSAGE_FLAG_TEXT != 0 {
-		FilterDirtyWord(msg)
-	}
-	
-	msg.timestamp = int32(time.Now().Unix())
-
-	group := group_manager.FindGroup(msg.receiver)
-	if group == nil {
-		log.Warning("can't find group:", msg.receiver)
-		return
-	}
-
-	if !group.IsMember(msg.sender) {
-		log.Warningf("sender:%d is not group member", msg.sender)
-		return
-	}
-	if group.super {
-		client.HandleSuperGroupMessage(msg)
-	} else {
-		client.HandleGroupMessage(msg, group)
-	}
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
-	r := client.EnqueueMessage(ack)
-	if !r {
-		log.Warning("send group message ack error")
-	}
-
-	atomic.AddInt64(&server_summary.in_message_count, 1)
-	log.Infof("group message sender:%d group id:%d", msg.sender, msg.receiver)
-}
-
 func (client *IMClient) HandleInputing(inputing *MessageInputing) {
 	msg := &Message{cmd: MSG_INPUTING, body: inputing}
 	client.SendMessage(inputing.receiver, msg)
@@ -414,8 +215,6 @@ func (client *IMClient) HandleMessage(msg *Message) {
 	switch msg.cmd {
 	case MSG_IM:
 		client.HandleIMMessage(msg)
-	case MSG_GROUP_IM:
-		client.HandleGroupIMMessage(msg)
 	case MSG_INPUTING:
 		client.HandleInputing(msg.body.(*MessageInputing))
 	case MSG_RT:
@@ -426,10 +225,6 @@ func (client *IMClient) HandleMessage(msg *Message) {
 		client.HandleSync(msg.body.(*SyncKey))
 	case MSG_SYNC_KEY:
 		client.HandleSyncKey(msg.body.(*SyncKey))
-	case MSG_SYNC_GROUP:
-		client.HandleGroupSync(msg.body.(*GroupSyncKey))
-	case MSG_GROUP_SYNC_KEY:
-		client.HandleGroupSyncKey(msg.body.(*GroupSyncKey))
 	}
 }
 
