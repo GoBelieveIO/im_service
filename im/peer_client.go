@@ -22,11 +22,11 @@ import "time"
 import "sync/atomic"
 import log "github.com/golang/glog"
 
-type IMClient struct {
+type PeerClient struct {
 	*Connection
 }
 
-func (client *IMClient) Login() {
+func (client *PeerClient) Login() {
 	channel := GetChannel(client.uid)
 	
 	channel.Subscribe(client.appid, client.uid, client.online)
@@ -42,7 +42,7 @@ func (client *IMClient) Login() {
 	SetUserUnreadCount(client.appid, client.uid, 0)
 }
 
-func (client *IMClient) Logout() {
+func (client *PeerClient) Logout() {
 	if client.uid > 0 {
 		channel := GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid, client.online)
@@ -58,7 +58,7 @@ func (client *IMClient) Logout() {
 }
 
 
-func (client *IMClient) HandleSync(sync_key *SyncKey) {
+func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	if client.uid == 0 {
 		return
 	}
@@ -116,7 +116,7 @@ func (client *IMClient) HandleSync(sync_key *SyncKey) {
 	}
 }
 
-func (client *IMClient) HandleSyncKey(sync_key *SyncKey) {
+func (client *PeerClient) HandleSyncKey(sync_key *SyncKey) {
 	if client.uid == 0 {
 		return
 	}
@@ -133,7 +133,7 @@ func (client *IMClient) HandleSyncKey(sync_key *SyncKey) {
 	}
 }
 
-func (client *IMClient) HandleIMMessage(message *Message) {
+func (client *PeerClient) HandleIMMessage(message *Message) {
 	msg := message.body.(*IMMessage)
 	seq := message.seq
 	if client.uid == 0 {
@@ -186,17 +186,17 @@ func (client *IMClient) HandleIMMessage(message *Message) {
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
-func (client *IMClient) HandleInputing(inputing *MessageInputing) {
+func (client *PeerClient) HandleInputing(inputing *MessageInputing) {
 	msg := &Message{cmd: MSG_INPUTING, body: inputing}
 	client.SendMessage(inputing.receiver, msg)
 	log.Infof("inputting sender:%d receiver:%d", inputing.sender, inputing.receiver)
 }
 
-func (client *IMClient) HandleUnreadCount(u *MessageUnreadCount) {
+func (client *PeerClient) HandleUnreadCount(u *MessageUnreadCount) {
 	SetUserUnreadCount(client.appid, client.uid, u.count)
 }
 
-func (client *IMClient) HandleRTMessage(msg *Message) {
+func (client *PeerClient) HandleRTMessage(msg *Message) {
 	rt := msg.body.(*RTMessage)
 	if rt.sender != client.uid {
 		log.Warningf("rt message sender:%d client uid:%d\n", rt.sender, client.uid)
@@ -211,7 +211,7 @@ func (client *IMClient) HandleRTMessage(msg *Message) {
 }
 
 
-func (client *IMClient) HandleMessage(msg *Message) {
+func (client *PeerClient) HandleMessage(msg *Message) {
 	switch msg.cmd {
 	case MSG_IM:
 		client.HandleIMMessage(msg)

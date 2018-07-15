@@ -26,7 +26,7 @@ import log "github.com/golang/glog"
 
 type Client struct {
 	Connection//必须放在结构体首部
-	*IMClient
+	*PeerClient
 	*GroupClient
 	*RoomClient
 	*CustomerClient
@@ -55,7 +55,7 @@ func NewClient(conn interface{}) *Client {
 	client.unackMessages = make(map[int]*EMessage)
 	atomic.AddInt64(&server_summary.nconnections, 1)
 
-	client.IMClient = &IMClient{&client.Connection}
+	client.PeerClient = &PeerClient{&client.Connection}
 	client.GroupClient = &GroupClient{&client.Connection}	
 	client.RoomClient = &RoomClient{Connection:&client.Connection}
 	client.CustomerClient = NewCustomerClient(&client.Connection)
@@ -116,7 +116,7 @@ func (client *Client) HandleClientClosed() {
 	client.wt <- nil
 
 	client.RoomClient.Logout()
-	client.IMClient.Logout()
+	client.PeerClient.Logout()
 }
 
 func (client *Client) HandleMessage(msg *Message) {
@@ -132,7 +132,7 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandlePing()
 	}
 
-	client.IMClient.HandleMessage(msg)
+	client.PeerClient.HandleMessage(msg)
 	client.GroupClient.HandleMessage(msg)
 	client.RoomClient.HandleMessage(msg)
 	client.CustomerClient.HandleMessage(msg)
@@ -205,7 +205,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 
 	client.AddClient()
 
-	client.IMClient.Login()
+	client.PeerClient.Login()
 	
 	close(client.owt)
 
