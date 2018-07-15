@@ -287,22 +287,10 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 		WriteHttpError(400, "invalid query param", w)
 		return
 	}
+	log.Infof("appid:%d uid:%d limit:%d", appid, uid, limit)
 	
-	storage_pool := GetStorageConnPool(uid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		WriteHttpError(400, "server internal error", w)
-		return
-	}
-	defer storage_pool.Release(storage)
-
-	messages, err := storage.LoadLatestMessage(appid, uid, int32(limit))
-	if err != nil {
-		WriteHttpError(400, "server internal error", w)
-		return
-	}
-
+	//todo implement rpc
+	messages := make([]EMessage, 0)
 	if len(messages) > 0 {
 		//reverse
 		size := len(messages)
@@ -378,21 +366,24 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	
-	storage_pool := GetStorageConnPool(uid)
-	storage, err := storage_pool.Get()
-	if err != nil {
-		log.Error("connect storage err:", err)
-		WriteHttpError(400, "server internal error", w)
-		return
-	}
-	defer storage_pool.Release(storage)
 
-	messages, err := storage.LoadHistoryMessage(appid, uid, msgid)
+	rpc := GetStorageRPCClient(uid)
+
+	s := &SyncHistory{
+		AppID:appid, 
+		Uid:uid, 
+		DeviceID:0, 
+		LastMsgID:msgid,
+	}
+
+	resp, err := rpc.Call("SyncMessage", s)
 	if err != nil {
-		WriteHttpError(400, "server internal error", w)
+		log.Warning("sync message err:", err)
 		return
 	}
+
+	ph := resp.(*PeerHistoryMessage)
+	messages := ph.Messages
 
 	if len(messages) > 0 {
 		//reverse
@@ -406,22 +397,24 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
 
 	msg_list := make([]map[string]interface{}, 0, len(messages))
 	for _, emsg := range messages {
-		if emsg.msg.cmd == MSG_IM || 
-			emsg.msg.cmd == MSG_GROUP_IM {
-			im := emsg.msg.body.(*IMMessage)
+		msg := &Message{cmd:int(emsg.Cmd), version:DEFAULT_VERSION}
+		msg.FromData(emsg.Raw)
+		if msg.cmd == MSG_IM || 
+			msg.cmd == MSG_GROUP_IM {
+			im := msg.body.(*IMMessage)
 			
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
 			obj["timestamp"] = im.timestamp
 			obj["sender"] = im.sender
 			obj["receiver"] = im.receiver
-			obj["command"] = emsg.msg.cmd
-			obj["id"] = emsg.msgid
+			obj["command"] = emsg.Cmd
+			obj["id"] = emsg.MsgID
 			msg_list = append(msg_list, obj)
 
-		} else if emsg.msg.cmd == MSG_CUSTOMER || 
-			emsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
-			im := emsg.msg.body.(*CustomerMessage)
+		} else if msg.cmd == MSG_CUSTOMER || 
+			msg.cmd == MSG_CUSTOMER_SUPPORT {
+			im := msg.body.(*CustomerMessage)
 			
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
@@ -430,8 +423,8 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
 			obj["customer_id"] = im.customer_id
 			obj["store_id"] = im.store_id
 			obj["seller_id"] = im.seller_id
-			obj["command"] = emsg.msg.cmd
-			obj["id"] = emsg.msgid
+			obj["command"] = emsg.Cmd
+			obj["id"] = emsg.MsgID
 			msg_list = append(msg_list, obj)
 		}
 	}

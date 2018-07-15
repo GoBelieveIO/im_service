@@ -24,7 +24,6 @@ import "log"
 import "github.com/richmonkey/cfg"
 
 type StorageConfig struct {
-	listen              string
 	rpc_listen          string
 	storage_root        string
 	kefu_appid          int64
@@ -83,7 +82,6 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 		log.Fatal(err)
 	}
 
-	config.listen = get_string(app_cfg, "listen")
 	config.rpc_listen = get_string(app_cfg, "rpc_listen")
 	config.storage_root = get_string(app_cfg, "storage_root")
 	config.kefu_appid = get_int(app_cfg, "kefu_appid")

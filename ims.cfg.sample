@@ -1,5 +1,4 @@
 #监听地址 ip:port ip一般选择内网网卡的地址
-listen=:3333
 rpc_listen=:13333
 #消息存储路径，必须存在
 storage_root=/tmp/im

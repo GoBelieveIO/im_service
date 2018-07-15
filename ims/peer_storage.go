@@ -104,7 +104,6 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 	if err != nil {
 		return nil, 0
 	}
-	overflow := false
 	var last_msgid int64
 	messages := make([]*EMessage, 0, 10)
 	for {
@@ -147,7 +146,6 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 		if len(messages) >= limit*2 {
 			copy(messages, messages[limit:])
 			messages = messages[:limit]
-			overflow = true
 			log.Warning("offline message overflow")
 		}
 		last_id = off.prev_msgid
@@ -155,13 +153,8 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 
 	if len(messages) > limit {
 		messages = messages[len(messages)-limit:]
-		overflow = true
 		log.Warning("offline message overflow")
 	}
-	if !overflow {
-		last_msgid = 0
-	}
-	
 	return messages, last_msgid
 }
 

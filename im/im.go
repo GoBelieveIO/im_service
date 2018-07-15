@@ -31,7 +31,6 @@ import "github.com/valyala/gorpc"
 import "github.com/importcjj/sensitive"
 import "github.com/bitly/go-simplejson"
 
-var storage_pools []*StorageConnPool
 
 //storage server,  peer, group, customer message
 var rpc_clients []*gorpc.DispatcherClient
@@ -134,16 +133,6 @@ func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
 func GetGroupStorageRPCClient(group_id int64) *gorpc.DispatcherClient {
 	index := group_id%int64(len(group_rpc_clients))
 	return group_rpc_clients[index]
-}
-
-func GetStorageConnPool(uid int64) *StorageConnPool {
-	index := uid%int64(len(storage_pools))
-	return storage_pools[index]
-}
-
-func GetGroupStorageConnPool(gid int64) *StorageConnPool {
-	index := gid%int64(len(storage_pools))
-	return storage_pools[index]
 }
 
 func GetChannel(uid int64) *Channel{
@@ -320,18 +309,6 @@ func DispatchGroupMessage(amsg *AppMessage) {
 	}
 }
 
-func DialStorageFun(addr string) func()(*StorageConn, error) {
-	f := func() (*StorageConn, error){
-		storage := NewStorageConn()
-		err := storage.Dial(addr)
-		if err != nil {
-			log.Error("connect storage err:", err)
-			return nil, err
-		}
-		return storage, nil
-	}
-	return f
-}
 
 
 type loggingHandler struct {
@@ -406,7 +383,7 @@ func main() {
 	log.Infof("redis address:%s password:%s db:%d\n", 
 		config.redis_address, config.redis_password, config.redis_db)
 
-	log.Info("storage addresses:", config.storage_addrs, config.storage_rpc_addrs)
+	log.Info("storage addresses:", config.storage_rpc_addrs)
 	log.Info("route addressed:", config.route_addrs)
 	log.Info("group route addressed:", config.group_route_addrs)	
 	log.Info("kefu appid:", config.kefu_appid)
@@ -417,14 +394,6 @@ func main() {
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
-
-	storage_pools = make([]*StorageConnPool, 0)
-	for _, addr := range(config.storage_addrs) {
-		f := DialStorageFun(addr)
-		pool := NewStorageConnPool(100, 500, 600 * time.Second, f) 
-		storage_pools = append(storage_pools, pool)
-	}
-
 
 	rpc_clients = make([]*gorpc.DispatcherClient, 0)
 	for _, addr := range(config.storage_rpc_addrs) {

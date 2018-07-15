@@ -166,8 +166,8 @@ func main() {
 	}
 
 	config = read_storage_cfg(flag.Args()[0])
-	log.Infof("listen:%s rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t\n", 
-		config.listen, config.rpc_listen, config.storage_root, config.sync_listen, config.master_address, config.is_push_system)
+	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t\n", 
+		config.rpc_listen, config.storage_root, config.sync_listen, config.master_address, config.is_push_system)
 
 	storage = NewStorage(config.storage_root)
 	
