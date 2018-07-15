@@ -28,7 +28,6 @@ type Client struct {
 	Connection//必须放在结构体首部
 	*IMClient
 	*RoomClient
-	*VOIPClient
 	*CustomerClient
 	public_ip int32
 }
@@ -57,7 +56,6 @@ func NewClient(conn interface{}) *Client {
 
 	client.IMClient = &IMClient{&client.Connection}
 	client.RoomClient = &RoomClient{Connection:&client.Connection}
-	client.VOIPClient = &VOIPClient{Connection:&client.Connection}
 	client.CustomerClient = NewCustomerClient(&client.Connection)
 	return client
 }
@@ -134,7 +132,6 @@ func (client *Client) HandleMessage(msg *Message) {
 
 	client.IMClient.HandleMessage(msg)
 	client.RoomClient.HandleMessage(msg)
-	client.VOIPClient.HandleMessage(msg)
 	client.CustomerClient.HandleMessage(msg)
 }
 
