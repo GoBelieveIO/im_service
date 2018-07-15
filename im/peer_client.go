@@ -106,7 +106,7 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	}
 
 
-	if ph.LastMsgID < last_id {
+	if ph.LastMsgID < last_id && ph.LastMsgID > 0 {
 		sk.sync_key = ph.LastMsgID
 		log.Warningf("client last id:%d server last id:%d", last_id, ph.LastMsgID)
 	}

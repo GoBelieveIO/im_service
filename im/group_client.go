@@ -172,7 +172,7 @@ func (client *GroupClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		client.EnqueueMessage(m)
 	}
 
-	if gh.LastMsgID < last_id {
+	if gh.LastMsgID < last_id && gh.LastMsgID > 0 {
 		sk.sync_key = gh.LastMsgID
 		log.Warningf("group:%d client last id:%d server last id:%d", group_id, last_id, gh.LastMsgID)		
 	}
