@@ -92,14 +92,14 @@ func (storage *GroupStorage) GetLastGroupMessageID(appid int64, gid int64) (int6
 
 //获取所有消息id大于msgid的消息
 //ts:入群时间
-func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gid int64, msgid int64, ts int32, limit int) []*EMessage {
+func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gid int64, msgid int64, ts int32, limit int) ([]*EMessage, int64) {
 	log.Infof("load group history message:%d %d", msgid, ts)
 	last_id, err := storage.GetLastGroupMessageID(appid, gid)
 	if err != nil {
 		log.Info("get last group message id err:", err)
-		return nil
+		return nil, 0
 	}
-
+	var last_msgid int64
 	c := make([]*EMessage, 0, 10)
 
 	for ; last_id > 0; {
@@ -113,7 +113,10 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 			break
 		}
 		off := msg.body.(*GroupOfflineMessage)
-
+		if last_msgid == 0 {
+			last_msgid = off.msgid
+		}
+		
 		if off.msgid == 0 || off.msgid <= msgid {
 			break
 		}
@@ -136,7 +139,7 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 	}
 
 	log.Infof("load group history message appid:%d gid:%d uid:%d count:%d\n", appid, gid, uid, len(c))
-	return c
+	return c, last_msgid
 }
 
 func (storage *GroupStorage) createGroupIndex() {

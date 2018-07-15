@@ -120,6 +120,10 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 			break
 		}
 		off := msg.body.(*OfflineMessage)
+		if last_msgid == 0 {
+			last_msgid = off.msgid
+		}
+		
 		if off.msgid <= msgid {
 			break
 		}
@@ -137,9 +141,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 			last_id = off.prev_msgid
 			continue
 		}
-		if last_msgid == 0 {
-			last_msgid = off.msgid
-		}
+
 		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
 		messages = append(messages, emsg)
 

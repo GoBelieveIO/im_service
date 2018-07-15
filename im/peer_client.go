@@ -105,6 +105,12 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		client.EnqueueMessage(m)
 	}
 
+
+	if ph.LastMsgID < last_id {
+		sk.sync_key = ph.LastMsgID
+		log.Warningf("client last id:%d server last id:%d", last_id, ph.LastMsgID)
+	}
+
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_END, body:sk})
 
 

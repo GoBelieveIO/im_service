@@ -47,6 +47,7 @@ type PeerHistoryMessage struct {
 	LastMsgID int64
 }
 
+type GroupHistoryMessage PeerHistoryMessage
 
 type SyncHistory struct {
 	AppID     int64
@@ -69,7 +70,7 @@ func SyncMessageInterface(addr string, sync_key *SyncHistory) *PeerHistoryMessag
 	return nil
 }
 
-func SyncGroupMessageInterface(addr string , sync_key *SyncGroupHistory) []*HistoryMessage {
+func SyncGroupMessageInterface(addr string , sync_key *SyncGroupHistory) *GroupHistoryMessage {
 	return nil
 }
 

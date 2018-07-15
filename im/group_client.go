@@ -152,8 +152,9 @@ func (client *GroupClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		return
 	}
 
-	messages := resp.([]*HistoryMessage)
-
+	gh := resp.(*GroupHistoryMessage)
+	messages := gh.Messages
+	
 	sk := &GroupSyncKey{sync_key:last_id, group_id:group_id}
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_BEGIN, body:sk})
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -171,6 +172,10 @@ func (client *GroupClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		client.EnqueueMessage(m)
 	}
 
+	if gh.LastMsgID < last_id {
+		sk.sync_key = gh.LastMsgID
+		log.Warningf("group:%d client last id:%d server last id:%d", group_id, last_id, gh.LastMsgID)		
+	}
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_GROUP_END, body:sk})
 }
 
