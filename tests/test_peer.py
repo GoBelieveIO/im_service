@@ -336,23 +336,6 @@ def TestPingPong():
         else:
             continue
 
-
-def TestBindToken():
-    access_token = login(13635273142)
-    url = URL + "/device/bind"
-
-    obj = {"apns_device_token":"11"}
-    headers = {}
-    headers["Authorization"] = "Bearer " + access_token
-    headers["Content-Type"] = "application/json; charset=UTF-8"
-
-    r = requests.post(url, data=json.dumps(obj), headers = headers)
-    print "bind device token:", r.status_code
-
-    url = URL + "/device/unbind"
-    r = requests.post(url, data=json.dumps(obj), headers = headers)
-    print "unbind device token:", r.status_code
-    
     
 def _TestRoomMessage(port):
     global task
@@ -424,9 +407,6 @@ def TestNotification():
     
 def main():
     cluster = False
-
-    TestBindToken()
-    time.sleep(1)
      
     TestRTSendAndRecv()
     time.sleep(1)

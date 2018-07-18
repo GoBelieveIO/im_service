@@ -32,10 +32,10 @@ import "syscall"
 import "github.com/gomodule/redigo/redis"
 import "github.com/valyala/gorpc"
 
-//超级群离线消息数量限制,超过的部分会被丢弃
+//群离线消息数量限制,超过的部分会被丢弃
 const GROUP_OFFLINE_LIMIT = 100
 
-//个人离线消息单词返回的数量限制,超过部分会多次返回，不会被丢弃
+//个人离线消息返回的数量限制,个人消息不会被丢弃，普通群的离线消息会被丢弃
 const PEER_OFFLINE_LIMIT = 3000
 
 var storage *Storage

@@ -98,13 +98,19 @@ func (storage *PeerStorage) SetLastMessageID(appid int64, receiver int64, msg_id
 
 
 //获取所有消息id大于msgid的消息,
-//todo 优化当消息数量溢出，效率低下问题
-func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msgid int64, limit int) ([]*EMessage, int64) {
+//获取群最近100（group_limit）条离线消息
+//当所有离线消息总数没有超过3000（limit）条时,单个群离线消息会超过100条
+func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msgid int64, group_limit int, limit int) ([]*EMessage, int64) {
 	last_id, err := storage.GetLastMessageID(appid, receiver)
 	if err != nil {
 		return nil, 0
 	}
+
+	//群离线消息计数
+	groupMessages := make(map[int64]int)
+	
 	var last_msgid int64
+	overflow_messages := make([]*EMessage, 0, 10)
 	messages := make([]*EMessage, 0, 10)
 	for {
 		if last_id == 0 {
@@ -143,19 +149,34 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 		}
 
 		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
-		messages = append(messages, emsg)
-
-		if len(messages) >= limit*2 {
-			copy(messages, messages[limit:])
-			messages = messages[:limit]
-			log.Warning("offline message overflow")
+		if msg.cmd == MSG_GROUP_IM {
+			im := msg.body.(*IMMessage)
+			count := groupMessages[im.receiver]
+			if count >= group_limit {
+				if len(overflow_messages) < limit {
+					overflow_messages = append(overflow_messages, emsg)
+				}
+			} else {
+				messages = append(messages, emsg)
+			}
+			groupMessages[im.receiver] = count + 1
+		} else {
+			messages = append(messages, emsg)
 		}
+		
 		last_id = off.prev_msgid
 	}
 
+	if len(messages) < limit && len(overflow_messages) > 0 {
+		overflow_count := limit - len(messages)
+		if overflow_count > len(overflow_messages) {
+			overflow_count = len(overflow_messages)
+		}
+		messages = append(messages, overflow_messages[:overflow_count]...)
+	}
+	
 	if len(messages) > limit {
-		messages = messages[len(messages)-limit:]
-		log.Warning("offline message overflow")
+		log.Warning("offline message overflow:", len(messages))
 	}
 	return messages, last_msgid
 }
