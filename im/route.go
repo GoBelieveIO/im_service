@@ -105,3 +105,7 @@ func (route *Route) IsOnline(uid int64) bool {
 	return false
 }
 
+
+func (route *Route) GetUserIDs() IntSet {
+	return NewIntSet()
+}

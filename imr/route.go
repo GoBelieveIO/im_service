@@ -65,6 +65,17 @@ func (route *Route) RemoveUserID(uid int64) {
 	delete(route.uids, uid)	
 }
 
+func (route *Route) GetUserIDs() IntSet {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+
+	uids := NewIntSet()
+	for uid, _ := range(route.uids) {
+		uids.Add(uid)
+	}
+	return uids
+}
+
 func (route *Route) ContainRoomID(room_id int64) bool {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()

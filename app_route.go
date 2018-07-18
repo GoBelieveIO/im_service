@@ -55,6 +55,18 @@ func (app_route *AppRoute) AddRoute(route *Route) {
 	app_route.apps[route.appid] = route
 }
 
+func (app_route *AppRoute) GetUsers() map[int64]IntSet {
+	app_route.mutex.Lock()
+	defer app_route.mutex.Unlock()
+
+	r := make(map[int64]IntSet)
+	for appid, route := range(app_route.apps) {
+		uids := route.GetUserIDs()
+		r[appid] = uids
+	}
+	return r
+}
+
 type ClientSet map[*Client]struct{}
 
 func NewClientSet() ClientSet {

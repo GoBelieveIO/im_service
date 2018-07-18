@@ -24,6 +24,7 @@ import "runtime"
 import "flag"
 import "fmt"
 import "time"
+import "net/http"
 import "math/rand"
 import log "github.com/golang/glog"
 import "github.com/gomodule/redigo/redis"
@@ -169,6 +170,28 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
+type loggingHandler struct {
+	handler http.Handler
+}
+
+func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log.Infof("http request:%s %s %s", r.RemoteAddr, r.Method, r.URL)
+	h.handler.ServeHTTP(w, r)
+}
+
+func StartHttpServer(addr string) {
+	http.HandleFunc("/online", GetOnlineStatus)
+	http.HandleFunc("/all_online", GetOnlineClients)
+
+	handler := loggingHandler{http.DefaultServeMux}
+	
+	err := http.ListenAndServe(addr, handler)
+	if err != nil {
+		log.Fatal("http server err:", err)
+	}
+}
+
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -190,5 +213,8 @@ func main() {
 	group_manager = NewGroupManager()
 	group_manager.Start()
 
+	if len(config.http_listen_address) > 0 {
+		go StartHttpServer(config.http_listen_address)
+	}
 	ListenClient()
 }

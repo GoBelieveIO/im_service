@@ -30,6 +30,7 @@ type RouteConfig struct {
 	redis_password      string
 	redis_db            int
 	is_push_system      bool
+	http_listen_address string
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -88,6 +89,6 @@ func read_route_cfg(cfg_path string) *RouteConfig {
 	db := get_opt_int(app_cfg, "redis_db")
 	config.redis_db = int(db)
 	config.is_push_system = get_opt_int(app_cfg, "is_push_system") == 1
-
+	config.http_listen_address = get_opt_string(app_cfg, "http_listen_address")
 	return config
 }
