@@ -116,16 +116,18 @@ func (channel *Channel) RemoveSubscribe(appid, uid int64, online bool) (int, int
 	return count&0xffff, count>>16&0xffff	
 }
 
-func (channel *Channel) GetAllSubscriber() []*AppUserID {
+func (channel *Channel) GetAllSubscriber() map[int64]*Subscriber {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 
-	subs := make([]*AppUserID, 0, 100)
+	subs := make(map[int64]*Subscriber)
 	for appid, s := range channel.subscribers {
-		for uid, _ := range s.uids {
-			id := &AppUserID{appid: appid, uid: uid}
-			subs = append(subs, id)
+		sub := NewSubscriber()
+		for uid, c := range s.uids {
+			sub.uids[uid] = c
 		}
+
+		subs[appid] = sub
 	}
 	return subs
 }
@@ -253,11 +255,22 @@ func (channel *Channel) PublishRoom(amsg *AppMessage) {
 
 func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 	subs := channel.GetAllSubscriber()
-	for _, id := range(subs) {
-		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
-		seq = seq + 1
-		msg.seq = seq
-		SendMessage(conn, msg)
+	for appid, sub := range(subs) {
+		for uid, count := range(sub.uids) {
+			//低16位表示总数量 高16位表示online的数量
+			c2 := count>>16&0xffff
+			on := 0
+			if c2 > 0 {
+				on = 1
+			}
+			
+			id := &SubscribeMessage{appid: appid, uid: uid, online:int8(on)}
+			msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+			
+			seq = seq + 1
+			msg.seq = seq
+			SendMessage(conn, msg)
+		}
 	}
 	return seq
 }

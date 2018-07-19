@@ -24,6 +24,7 @@ import "bytes"
 import "encoding/binary"
 import log "github.com/golang/glog"
 import "errors"
+import "encoding/hex"
 
 //平台号
 const PLATFORM_IOS = 1
@@ -111,7 +112,8 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int) *Message {
 	message.version = version
 	message.flag = flag
 	if !message.FromData(buff) {
-		log.Warning("parse error")
+		log.Warningf("parse error:%d, %d %d %d %s", cmd, seq, version,
+			flag, hex.EncodeToString(buff))
 		return nil
 	}
 	return message
