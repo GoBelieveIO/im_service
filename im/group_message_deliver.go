@@ -53,6 +53,15 @@ func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
 	storage := new(GroupMessageDeliver)
 
 	storage.root = root
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		err = os.Mkdir(root, 0755)
+		if err != nil {
+			log.Fatal("mkdir err:", err)
+		}
+	} else if err != nil {
+		log.Fatal("stat err:", err)
+	}
+
 	storage.wt = make(chan int64, 10)
 	
 	storage.openWriteFile()

@@ -24,6 +24,8 @@ import "log"
 import "strings"
 import "github.com/richmonkey/cfg"
 
+const DEFAULT_GROUP_DELIVER_COUNT = 4
+
 type Config struct {
 	port                int
 	mysqldb_datasource  string
@@ -51,6 +53,7 @@ type Config struct {
 	route_addrs         []string
 	group_route_addrs   []string //可选配置项， 超群群的route server
 
+	group_deliver_count int //群组消息投递并发数量,默认4
 	word_file           string //关键词字典文件
 }
 
@@ -161,6 +164,11 @@ func read_cfg(cfg_path string) *Config {
 				}
 			}
 		}
+	}
+
+	config.group_deliver_count = int(get_opt_int(app_cfg, "group_deliver_count"))
+	if config.group_deliver_count == 0 {
+		config.group_deliver_count = DEFAULT_GROUP_DELIVER_COUNT
 	}
 
 	config.word_file = get_opt_string(app_cfg, "word_file")

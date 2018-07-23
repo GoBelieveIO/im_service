@@ -25,6 +25,7 @@ import "time"
 import "runtime"
 import "math/rand"
 import "net/http"
+import "path"
 import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
@@ -53,7 +54,7 @@ var server_summary *ServerSummary
 
 var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
-var group_message_deliver *GroupMessageDeliver
+var group_message_delivers []*GroupMessageDeliver
 var filter *sensitive.Filter
 
 func init() {
@@ -148,6 +149,11 @@ func GetGroupChannel(group_id int64) *Channel{
 func GetRoomChannel(room_id int64) *Channel {
 	index := room_id%int64(len(route_channels))
 	return route_channels[index]
+}
+
+func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
+	index := group_id%int64(len(group_message_delivers))
+	return group_message_delivers[index]
 }
 
 func SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (int64, error) {
@@ -391,6 +397,7 @@ func main() {
 	
 	log.Infof("socket io address:%s tls_address:%s cert file:%s key file:%s",
 		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
+	log.Info("group deliver count:", config.group_deliver_count)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
@@ -463,8 +470,14 @@ func main() {
 	group_manager = NewGroupManager()
 	group_manager.Start()
 
-	group_message_deliver = NewGroupMessageDeliver(config.pending_root)
-	group_message_deliver.Start()
+	group_message_delivers = make([]*GroupMessageDeliver, config.group_deliver_count)
+	for i := 0; i < config.group_deliver_count; i++ {
+		q := fmt.Sprintf("q%d", i)
+		r := path.Join(config.pending_root, q)
+		deliver := NewGroupMessageDeliver(r)
+		deliver.Start()
+		group_message_delivers[i] = deliver
+	}
 	
 	go ListenRedis()
 	go SyncKeyService()

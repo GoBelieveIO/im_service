@@ -59,9 +59,9 @@ func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) {
 	}
 
 	gm.content = im.content
-	
+	deliver := GetGroupMessageDeliver(group.gid)
 	m := &Message{cmd:MSG_PENDING_GROUP_MESSAGE, body: gm}
-	group_message_deliver.SaveMessage(m)
+	deliver.SaveMessage(m)
 }
 
 func (client *GroupClient) HandleGroupIMMessage(message *Message) {
