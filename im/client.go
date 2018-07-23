@@ -248,7 +248,7 @@ func (client *Client) Write() {
 				log.Infof("client:%d socket closed", client.uid)
 				break
 			}
-			if msg.cmd == MSG_RT {
+			if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM{
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
 			seq++
@@ -285,7 +285,7 @@ func (client *Client) Write() {
 				log.Infof("client:%d socket closed", client.uid)
 				break
 			}
-			if msg.cmd == MSG_RT {
+			if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
 			seq++
