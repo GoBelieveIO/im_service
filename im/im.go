@@ -415,6 +415,7 @@ func main() {
 		dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
 		dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
 		dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
+		dispatcher.AddFunc("GetLatestMessage", GetLatestMessageInterface)
 
 		dc := dispatcher.NewFuncClient(c)
 

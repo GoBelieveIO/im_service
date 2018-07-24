@@ -215,7 +215,7 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 			continue
 		}
 
-		emsg := &EMessage{msgid:off.msgid, msg:msg}
+		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
 		messages = append(messages, emsg)
 		if len(messages) >= limit {
 			break

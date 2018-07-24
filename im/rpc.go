@@ -288,9 +288,31 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	log.Infof("appid:%d uid:%d limit:%d", appid, uid, limit)
-	
-	//todo implement rpc
-	messages := make([]EMessage, 0)
+
+	rpc := GetStorageRPCClient(uid)
+
+	s := &HistoryRequest{
+		AppID:appid, 
+		Uid:uid, 
+		Limit:int32(limit),
+	}
+
+	resp, err := rpc.Call("GetLatestMessage", s)
+	if err != nil {
+		log.Warning("get latest message err:", err)
+		WriteHttpError(400, "internal error", w)		
+		return
+	}
+
+	hm := resp.([]*HistoryMessage)
+	messages := make([]*EMessage, 0)
+	for _, msg := range(hm) {
+		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
+		m.FromData(msg.Raw)
+		e := &EMessage{msgid:msg.MsgID, device_id:msg.DeviceID, msg:m}
+		messages = append(messages, e)
+	}
+
 	if len(messages) > 0 {
 		//reverse
 		size := len(messages)
