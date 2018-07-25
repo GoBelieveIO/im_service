@@ -22,9 +22,15 @@ import "net"
 import log "github.com/golang/glog"
 
 
+type Push struct {
+	queue_name string
+	content []byte
+}
 
 type Client struct {
 	wt     chan *Message
+	
+	pwt     chan *Push
 	
 	conn   *net.TCPConn
 	app_route *AppRoute
@@ -32,7 +38,8 @@ type Client struct {
 
 func NewClient(conn *net.TCPConn) *Client {
 	client := new(Client)
-	client.conn = conn 
+	client.conn = conn
+	client.pwt = make(chan *Push, 6000)
 	client.wt = make(chan *Message, 10)
 	client.app_route = NewAppRoute()
 	return client
@@ -71,6 +78,7 @@ func (client *Client) Read() {
 		msg := client.read()
 		if msg == nil {
 			RemoveClient(client)
+			client.pwt <- nil
 			client.wt <- nil
 			break
 		}
@@ -252,6 +260,7 @@ func (client *Client) Write() {
 func (client *Client) Run() {
 	go client.Write()
 	go client.Read()
+	go client.Push()
 }
 
 
