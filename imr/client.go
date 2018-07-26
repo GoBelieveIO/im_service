@@ -39,7 +39,7 @@ type Client struct {
 func NewClient(conn *net.TCPConn) *Client {
 	client := new(Client)
 	client.conn = conn
-	client.pwt = make(chan *Push, 6000)
+	client.pwt = make(chan *Push, 10000)
 	client.wt = make(chan *Message, 10)
 	client.app_route = NewAppRoute()
 	return client

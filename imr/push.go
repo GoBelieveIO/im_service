@@ -113,16 +113,10 @@ func (client *Client) PublishSystemMessage(appid, receiver int64, content string
 }
 
 func (client *Client) PushChan(queue_name string, b []byte) {
-	begin := time.Now()
 	select {
 	case client.pwt <- &Push{queue_name, b}:
-		end := time.Now()
-		duration := end.Sub(begin)		
-		if duration > time.Millisecond*10 {
-			log.Warning("rpush message slow:%s", duration)
-		}
-	case <- time.After(time.Millisecond*PUSH_QUEUE_TIMEOUT):
-		log.Warning("rpush message timeout")
+	default:
+		log.Warning("rpush message timeout")		
 	}	
 }
 
@@ -142,7 +136,7 @@ func (client *Client) PushQueue(ps []*Push) {
 	if err != nil {
 		log.Info("multi rpush error:", err)
 	} else {
-		log.Infof("multi rpush:%d time:%s success", len(ps), duration)
+		log.Infof("mmulti rpush:%d time:%s success", len(ps), duration)
 	}
 
 	if  duration > time.Millisecond*PUSH_QUEUE_TIMEOUT {
@@ -153,7 +147,7 @@ func (client *Client) PushQueue(ps []*Push) {
 func (client *Client) Push() {
 	//单次入redis队列消息限制
 	const PUSH_LIMIT = 1000
-	const WAIT_TIMEOUT = 100
+	const WAIT_TIMEOUT = 500
 	
 	closed := false
 	ps := make([]*Push, 0, PUSH_LIMIT)
