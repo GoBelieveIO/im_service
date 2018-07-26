@@ -199,27 +199,31 @@ func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, er
 }
 
 func PushGroupMessage(appid int64, group_id int64, m *Message) {
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, msg:m}
+	now := time.Now().UnixNano()
+	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, timestamp:now, msg:m}
 	channel := GetGroupChannel(group_id)
 	channel.PublishGroup(amsg)
 }
 
 func PushMessage(appid int64, uid int64, m *Message) {
-	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:m}
+	now := time.Now().UnixNano()
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:m}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
 }
 
 
 func SendAppGroupMessage(appid int64, group_id int64, msg *Message) {
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, msg:msg}
+	now := time.Now().UnixNano()
+	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, timestamp:now, msg:msg}
 	channel := GetGroupChannel(group_id)
 	channel.PublishGroup(amsg)
 	DispatchGroupMessage(amsg)
 }
 
 func SendAppMessage(appid int64, uid int64, msg *Message) {
-	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, msg:msg}
+	now := time.Now().UnixNano()
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
 	DispatchAppMessage(amsg)
@@ -256,7 +260,12 @@ func FilterDirtyWord(msg *IMMessage) {
 }
 
 func DispatchAppMessage(amsg *AppMessage) {
-	log.Infof("dispatch app message:%s %d", Command(amsg.msg.cmd), amsg.msg.flag)
+	now := time.Now().UnixNano()
+	d := now - amsg.timestamp
+	log.Infof("dispatch app message:%s %d %d", Command(amsg.msg.cmd), amsg.msg.flag, d)
+	if d > int64(time.Second) {
+		log.Warning("dispatch app message slow...")
+	}
 
 	route := app_route.FindRoute(amsg.appid)
 	if route == nil {
@@ -269,7 +278,7 @@ func DispatchAppMessage(amsg *AppMessage) {
 		return
 	}
 	for c, _ := range(clients) {
-		c.EnqueueMessage(amsg.msg)
+		c.EnqueueNonBlockMessage(amsg.msg)
 	}
 }
 
@@ -284,12 +293,18 @@ func DispatchRoomMessage(amsg *AppMessage) {
 		return
 	}
 	for c, _ := range(clients) {
-		c.EnqueueMessage(amsg.msg)
+		c.EnqueueNonBlockMessage(amsg.msg)
 	}	
 }
 
 func DispatchGroupMessage(amsg *AppMessage) {
-	log.Infof("dispatch group message:%s %d", Command(amsg.msg.cmd), amsg.msg.flag)
+	now := time.Now().UnixNano()
+	d := now - amsg.timestamp
+	log.Infof("dispatch group message:%s %d %d", Command(amsg.msg.cmd), amsg.msg.flag, d)
+	if d > int64(time.Second) {
+		log.Warning("dispatch group message slow...")
+	}
+	
 	group := group_manager.FindGroup(amsg.receiver)
 	if group == nil {
 		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
@@ -310,7 +325,7 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		}
 
 		for c, _ := range(clients) {
-			c.EnqueueMessage(amsg.msg)
+			c.EnqueueNonBlockMessage(amsg.msg)
 		}
 	}
 }
