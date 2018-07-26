@@ -47,9 +47,7 @@ func NewClient(conn interface{}) *Client {
 		}
 	}
 
-	client.wt = make(chan *Message, 100)
-	client.ewt = make(chan *EMessage, 100)
-	client.owt = make(chan *EMessage, 100)
+	client.wt = make(chan *Message, 3000)
 
 	client.unacks = make(map[int]int64)
 	client.unackMessages = make(map[int]*EMessage)
@@ -206,8 +204,6 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.AddClient()
 
 	client.PeerClient.Login()
-	
-	close(client.owt)
 
 	CountDAU(client.appid, client.uid)
 	atomic.AddInt64(&server_summary.nclients, 1)
@@ -236,44 +232,6 @@ func (client *Client) HandleACK(ack *MessageACK) {
 func (client *Client) Write() {
 	seq := 0
 	running := true
-	loaded := false
-
-	//发送离线消息
-	for running && !loaded {
-		select {
-		case msg := <-client.wt:
-			if msg == nil {
-				client.close()
-				running = false
-				log.Infof("client:%d socket closed", client.uid)
-				break
-			}
-			if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM{
-				atomic.AddInt64(&server_summary.out_message_count, 1)
-			}
-			seq++
-
-			//以当前客户端所用版本号发送消息
-			vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
-			client.send(vmsg)
-		case emsg, ok := <- client.owt:
-			if !ok {
-				//离线消息读取完毕
-				loaded = true
-				break
-			}
-			seq++
-
-			emsg.msg.seq = seq
-
-			//以当前客户端所用版本号发送消息
-			msg := &Message{emsg.msg.cmd, seq, client.version, emsg.msg.flag, emsg.msg.body}
-			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-				atomic.AddInt64(&server_summary.out_message_count, 1)
-			}
-			client.send(msg)
-		}
-	}
 	
 	//发送在线消息
 	for running {
@@ -293,23 +251,6 @@ func (client *Client) Write() {
 			//以当前客户端所用版本号发送消息
 			vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
 			client.send(vmsg)
-		case emsg := <- client.ewt:
-			seq++
-
-			emsg.msg.seq = seq
-
-			//以当前客户端所用版本号发送消息
-			msg := &Message{ 
-				cmd:emsg.msg.cmd,
-				seq:seq,
-				version:client.version,
-				flag:emsg.msg.flag,
-				body:emsg.msg.body,
-			}
-			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-				atomic.AddInt64(&server_summary.out_message_count, 1)
-			}
-			client.send(msg)
 		}
 	}
 
@@ -322,8 +263,6 @@ func (client *Client) Write() {
 			running = false
 		case <- client.wt:
 			log.Warning("msg is dropped")
-		case <- client.ewt:
-			log.Warning("emsg is dropped")
 		}
 	}
 

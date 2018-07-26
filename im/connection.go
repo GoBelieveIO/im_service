@@ -38,8 +38,6 @@ type Connection struct {
 	
 	tc     int32 //write channel timeout count
 	wt     chan *Message
-	ewt    chan *EMessage //在线消息
-	owt    chan *EMessage //离线消息
 
 	//客户端协议版本号
 	version int
@@ -167,44 +165,6 @@ func (client *Connection) EnqueueMessage(msg *Message) bool {
 		atomic.AddInt32(&client.tc, 1)
 		log.Infof("send message to wt timed out:%d", client.uid)
 		return false
-	}
-}
-
-func (client *Connection) EnqueueEMessage(emsg *EMessage) {
-	closed := atomic.LoadInt32(&client.closed)
-	if closed > 0 {
-		log.Infof("can't send message to closed connection:%d", client.uid)
-		return
-	}
-
-	tc := atomic.LoadInt32(&client.tc)
-	if tc > 0 {
-		log.Infof("can't send message to blocked connection:%d", client.uid)
-		atomic.AddInt32(&client.tc, 1)
-		return
-	}
-	select {
-	case client.ewt <- emsg:
-		break
-	case <- time.After(60*time.Second):
-		atomic.AddInt32(&client.tc, 1)
-		log.Infof("send message to ewt timed out:%d", client.uid)
-	}
-}
-
-func (client *Connection) EnqueueOfflineMessage(emsg *EMessage) {
-	tc := atomic.LoadInt32(&client.tc)
-	if tc > 0 {
-		log.Infof("can't send message to blocked connection:%d", client.uid)
-		atomic.AddInt32(&client.tc, 1)
-		return
-	}
-	select {
-	case client.owt <- emsg:
-		break
-	case <- time.After(60*time.Second):
-		atomic.AddInt32(&client.tc, 1)
-		log.Infof("send message to owt timed out:%d", client.uid)
 	}
 }
 
