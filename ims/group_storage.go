@@ -148,7 +148,8 @@ func (storage *GroupStorage) createGroupIndex() {
 	for i := 0; i <= storage.block_NO; i++ {
 		file := storage.openReadFile(i)
 		if file == nil {
-			break
+			//历史消息被删除
+			continue
 		}
 
 		_, err := file.Seek(HEADER_SIZE, os.SEEK_SET)
