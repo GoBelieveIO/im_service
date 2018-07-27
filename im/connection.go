@@ -88,10 +88,12 @@ func (client *Connection) isSender(msg *Message, device_id int64) bool {
 	return false
 }
 
+//发送超级群消息
 func (client *Connection) SendGroupMessage(group_id int64, msg *Message) {
 	appid := client.appid
 
-	PushGroupMessage(appid, group_id, msg)
+	PublishGroupMessage(appid, group_id, msg)
+	
 	group := group_manager.FindGroup(group_id)
 	if group == nil {
 		log.Warningf("can't send group message, appid:%d uid:%d cmd:%s", appid, group_id, Command(msg.cmd))
@@ -124,7 +126,7 @@ func (client *Connection) SendGroupMessage(group_id int64, msg *Message) {
 func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 	appid := client.appid
 
-	PushMessage(appid, uid, msg)
+	PublishMessage(appid, uid, msg)
 
 	route := app_route.FindRoute(appid)
 	if route == nil {

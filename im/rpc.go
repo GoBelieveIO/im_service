@@ -76,7 +76,7 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 			}
 
 			//推送外部通知
-			PushGroupMessage(appid, member, m)
+			PushMessage(appid, member, m)
 
 			//发送同步的通知消息
 			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
@@ -100,7 +100,7 @@ func SendIMMessage(im *IMMessage, appid int64) {
 	}
 	
 	//推送外部通知
-	PushGroupMessage(appid, im.receiver, m)
+	PushMessage(appid, im.receiver, m)
 
 	//发送同步的通知消息
 	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
