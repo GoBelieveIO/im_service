@@ -165,14 +165,19 @@ func (client *Connection) EnqueueNonBlockMessage(msg *Message) bool {
 		return false
 	}
 
+	dropped := false
 	client.mutex.Lock()
 	if client.messages.Len() >= MESSAGE_QUEUE_LIMIT {
 		//队列阻塞，丢弃之前的消息
 		client.messages.Remove(client.messages.Front())
+		dropped = true
 	}
 	client.messages.PushBack(msg)
 	client.mutex.Unlock()
-
+	if dropped {
+		log.Info("message queue full, drop a message")
+	}
+	
 	//nonblock
 	select {
 	case client.lwt <- 1:
