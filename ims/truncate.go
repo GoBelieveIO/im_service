@@ -152,7 +152,7 @@ func truncateFile(file_path string) bool {
 		binary.Read(buffer, binary.BigEndian, &m)
 
 		if int(m) == MAGIC {
-			log.Infof("file size:%d offset:%d truncated:%d passed", file_size, file_size - offset, file_size - offset + 4)
+			log.Infof("file name:%s size:%d truncated:%d passed", file_path, file_size, file_size - offset + 4)
 			return true
 		}
 
