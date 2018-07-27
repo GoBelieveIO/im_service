@@ -122,7 +122,7 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 		if c == client.Client() {
 			continue
 		}
-		c.wt <- m
+		c.EnqueueNonBlockMessage(m)
 	}
 
 	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:m}

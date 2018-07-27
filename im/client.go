@@ -23,6 +23,7 @@ import "net"
 import "time"
 import "sync/atomic"
 import log "github.com/golang/glog"
+import "container/list"
 
 type Client struct {
 	Connection//必须放在结构体首部
@@ -47,10 +48,10 @@ func NewClient(conn interface{}) *Client {
 		}
 	}
 
-	client.wt = make(chan *Message, 3000)
-
-	client.unacks = make(map[int]int64)
-	client.unackMessages = make(map[int]*EMessage)
+	client.wt = make(chan *Message, 300)
+	client.lwt = make(chan int, 1)//only need 1
+	client.messages = list.New()
+	
 	atomic.AddInt64(&server_summary.nconnections, 1)
 
 	client.PeerClient = &PeerClient{&client.Connection}
@@ -228,6 +229,33 @@ func (client *Client) HandleACK(ack *MessageACK) {
 	log.Info("ack:", ack.seq)
 }
 
+//发送等待队列中的消息
+func (client *Client) SendMessages(seq int) int {
+	var messages *list.List
+	client.mutex.Lock()
+	if (client.messages.Len() == 0) {
+		client.mutex.Unlock()		
+		return seq
+	}
+	messages = client.messages
+	client.messages = list.New()
+	client.mutex.Unlock()
+
+	e := messages.Front();	
+	for e != nil {
+		msg := e.Value.(*Message)
+		if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+			atomic.AddInt64(&server_summary.out_message_count, 1)
+		}
+		seq++
+		//以当前客户端所用版本号发送消息
+		vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
+		client.send(vmsg)
+		
+		e = e.Next()
+	}
+	return seq
+}
 
 func (client *Client) Write() {
 	seq := 0
@@ -251,6 +279,9 @@ func (client *Client) Write() {
 			//以当前客户端所用版本号发送消息
 			vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
 			client.send(vmsg)
+		case <- client.lwt:
+			seq = client.SendMessages(seq)
+			break
 		}
 	}
 
