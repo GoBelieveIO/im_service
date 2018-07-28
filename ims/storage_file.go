@@ -46,6 +46,9 @@ type StorageFile struct {
 	block_NO  int      //write file block NO
 	file      *os.File //write
 	files     *lru.Cache//read, block files
+
+	last_id        int64   //peer&group message_index记录的最大消息id
+	last_saved_id  int64   //索引文件中最大的消息id	
 }
 
 func onFileEvicted(key lru.Key, value interface{}) {
@@ -160,6 +163,7 @@ func (storage *StorageFile) openReadFile(block_NO int) *os.File {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			log.Infof("message block file:%s nonexist", path)
 			return nil
 		} else {
 			log.Fatal(err)

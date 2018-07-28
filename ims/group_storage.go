@@ -35,20 +35,13 @@ type GroupID struct {
 
 type GroupStorage struct {
 	*StorageFile
-	message_index  map[GroupID]int64 //记录每个群组最近的消息ID	
+
+	message_index  map[GroupID]int64 //记录每个群组最近的消息ID
 }
 
 func NewGroupStorage(f *StorageFile) *GroupStorage {
 	storage := &GroupStorage{StorageFile:f}
 	storage.message_index = make(map[GroupID]int64)
-
-	r := storage.readGroupIndex()
-	if !r {
-		storage.createGroupIndex()
-	}
-	//程序退出时再生成Index
-	storage.removeGroupIndex()
-	
 	return storage
 }
 
@@ -70,6 +63,9 @@ func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id 
 func (storage *GroupStorage) setLastGroupMessageID(appid int64, gid int64, msgid int64) {
 	id := GroupID{appid, gid}
 	storage.message_index[id] = msgid
+	if msgid >	storage.last_id {
+		storage.last_id = msgid
+	}
 }
 
 func (storage *GroupStorage) SetLastGroupMessageID(appid int64, gid int64, msgid int64) {
@@ -173,6 +169,9 @@ func (storage *GroupStorage) createGroupIndex() {
 				off := msg.body.(*GroupOfflineMessage)
 				id := GroupID{off.appid, off.gid}
 				storage.message_index[id] = msgid
+				if msgid > storage.last_id {
+					storage.last_id = msgid
+				}
 			}
 		}
 
@@ -180,6 +179,59 @@ func (storage *GroupStorage) createGroupIndex() {
 	}
 	log.Info("create group message index end:", time.Now().UnixNano())
 }
+
+func (storage *GroupStorage) repairGroupIndex() {
+	log.Info("repair group message index begin:", time.Now().UnixNano())
+
+	first := storage.getBlockNO(storage.last_id)
+	off := storage.getBlockOffset(storage.last_id)
+	
+	for i := first; i <= storage.block_NO; i++ {
+		file := storage.openReadFile(i)
+		if file == nil {
+			//历史消息被删除
+			continue
+		}
+
+		offset := HEADER_SIZE
+		if i == first {
+			offset = off
+		}
+		
+		_, err := file.Seek(int64(offset), os.SEEK_SET)
+		if err != nil {
+			log.Warning("seek file err:", err)
+			file.Close()
+			break
+		}
+		for {
+			msgid, err := file.Seek(0, os.SEEK_CUR)
+			if err != nil {
+				log.Info("seek file err:", err)
+				break
+			}
+			msg := storage.ReadMessage(file)
+			if msg == nil {
+				break
+			}
+
+			if msg.cmd == MSG_GROUP_IM_LIST {
+				off := msg.body.(*GroupOfflineMessage)
+				id := GroupID{off.appid, off.gid}
+				block_NO := i
+				msgid = int64(block_NO)*BLOCK_SIZE + msgid
+				storage.message_index[id] = msgid
+				if msgid > storage.last_id {
+					storage.last_id = msgid
+				}
+			}
+		}
+
+		file.Close()
+	}
+	log.Info("repair group message index end:", time.Now().UnixNano())	
+}
+
 
 func (storage *GroupStorage) readGroupIndex() bool {
 	path := fmt.Sprintf("%s/group_index", storage.root)
@@ -212,6 +264,9 @@ func (storage *GroupStorage) readGroupIndex() bool {
 			binary.Read(buffer, binary.BigEndian, &msg_id)
 
 			storage.message_index[id] = msg_id
+			if msg_id > storage.last_id {
+				storage.last_id = msg_id
+			}
 		}
 	}
 	return true
@@ -227,8 +282,17 @@ func (storage *GroupStorage) removeGroupIndex() {
 	}
 }
 
+func (storage *GroupStorage) cloneGroupIndex() map[GroupID]int64 {
+	message_index := make(map[GroupID]int64)
+	for k, v := range(storage.message_index) {
+		message_index[k] = v
+	}
+	return message_index
+}
+
+
 //appid gid msgid = 24字节
-func (storage *GroupStorage) saveGroupIndex() {
+func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]int64) {
 	path := fmt.Sprintf("%s/group_index_t", storage.root)
 	log.Info("write group message index path:", path)
 	begin := time.Now().UnixNano()
@@ -241,7 +305,7 @@ func (storage *GroupStorage) saveGroupIndex() {
 
 	buffer := new(bytes.Buffer)
 	index := 0
-	for id, value := range(storage.message_index) {
+	for id, value := range(message_index) {
 		binary.Write(buffer, binary.BigEndian, id.appid)
 		binary.Write(buffer, binary.BigEndian, id.gid)
 		binary.Write(buffer, binary.BigEndian, value)

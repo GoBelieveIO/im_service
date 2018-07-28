@@ -108,6 +108,16 @@ func FlushLoop() {
 	}
 }
 
+//flush message index
+func FlushIndexLoop() {
+	//5 min
+	ticker := time.NewTicker(time.Second * 60 * 5)
+	for range ticker.C {
+		storage.FlushIndex()
+	}
+}
+
+
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
@@ -181,6 +191,7 @@ func main() {
 
 	//刷新storage file
 	go FlushLoop()
+	go FlushIndexLoop()
 	go waitSignal()
 
 	go ListenSyncClient()

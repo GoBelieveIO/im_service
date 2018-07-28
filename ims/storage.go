@@ -34,7 +34,31 @@ func NewStorage(root string) *Storage {
 	f := NewStorageFile(root)
 	ps := NewPeerStorage(f)
 	gs := NewGroupStorage(f)
-	return &Storage{f, ps, gs}
+
+	storage := &Storage{f, ps, gs}
+
+	r1 := storage.readPeerIndex()
+	r2 := storage.readGroupIndex()
+	storage.last_saved_id = storage.last_id
+	
+	if r1 {
+		storage.repairPeerIndex()		
+	}
+	if r2 {
+		storage.repairGroupIndex()
+	}
+	
+	if !r2 {
+		storage.createGroupIndex()
+	}
+
+	if !r1 {
+		storage.createPeerIndex()
+	}
+	
+	log.Infof("last id:%d last saved id:%d", storage.last_id, storage.last_saved_id)
+	storage.FlushIndex()
+	return storage
 }
 
 func (storage *Storage) NextMessageID() int64 {
@@ -193,11 +217,29 @@ func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *MessageB
 	return c
 }
 
-
 func (storage *Storage) SaveIndexFileAndExit() {
-	storage.mutex.Lock()
-	storage.savePeerIndex()
-	storage.saveGroupIndex()
-	
+	storage.flushIndex()
 	os.Exit(0)
+}
+
+func (storage *Storage) flushIndex() {
+	storage.mutex.Lock()
+	last_id := storage.last_id
+	peer_index := storage.clonePeerIndex()
+	group_index := storage.cloneGroupIndex()
+	storage.mutex.Unlock()
+
+	storage.savePeerIndex(peer_index)
+	storage.saveGroupIndex(group_index)
+	storage.last_saved_id = last_id	
+}
+
+func (storage *Storage) FlushIndex() {
+	do_flush := false
+	if storage.last_id - storage.last_saved_id > 2*BLOCK_SIZE {
+		do_flush = true
+	}
+	if do_flush {
+		storage.flushIndex()
+	}
 }
