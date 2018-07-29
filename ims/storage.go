@@ -47,13 +47,12 @@ func NewStorage(root string) *Storage {
 	if r2 {
 		storage.repairGroupIndex()
 	}
-	
-	if !r2 {
-		storage.createGroupIndex()
-	}
 
 	if !r1 {
 		storage.createPeerIndex()
+	}
+	if !r2 {
+		storage.createGroupIndex()
 	}
 	
 	log.Infof("last id:%d last saved id:%d", storage.last_id, storage.last_saved_id)
