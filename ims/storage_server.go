@@ -32,11 +32,6 @@ import "syscall"
 import "github.com/gomodule/redigo/redis"
 import "github.com/valyala/gorpc"
 
-//群离线消息数量限制,超过的部分会被丢弃
-const GROUP_OFFLINE_LIMIT = 100
-
-//离线消息返回的数量限制,超过2/3后丢弃普通群消息
-const PEER_OFFLINE_LIMIT = 3000
 
 var storage *Storage
 var config *StorageConfig
@@ -177,8 +172,9 @@ func main() {
 	}
 
 	config = read_storage_cfg(flag.Args()[0])
-	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t\n", 
-		config.rpc_listen, config.storage_root, config.sync_listen, config.master_address, config.is_push_system)
+	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t offline message limit:%d\n", 
+		config.rpc_listen, config.storage_root, config.sync_listen,
+		config.master_address, config.is_push_system, config.limit)
 
 	storage = NewStorage(config.storage_root)
 	

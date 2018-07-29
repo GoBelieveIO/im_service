@@ -23,6 +23,12 @@ import "strconv"
 import "log"
 import "github.com/richmonkey/cfg"
 
+//群离线消息数量限制,超过的部分会被丢弃
+const GROUP_OFFLINE_LIMIT = 100
+
+//离线消息返回的数量限制,超过2/3后丢弃普通群消息
+const PEER_OFFLINE_LIMIT = 3000
+
 type StorageConfig struct {
 	rpc_listen          string
 	storage_root        string
@@ -31,6 +37,7 @@ type StorageConfig struct {
 	sync_listen         string
 	master_address      string
 	is_push_system      bool
+	limit               int  //离线消息的数量限制
 }
 
 func get_int(app_cfg map[string]string, key string) int64 {
@@ -45,10 +52,10 @@ func get_int(app_cfg map[string]string, key string) int64 {
 	return n
 }
 
-func get_opt_int(app_cfg map[string]string, key string) int64 {
+func get_opt_int(app_cfg map[string]string, key string, default_value int64) int64 {
 	concurrency, present := app_cfg[key]
 	if !present {
-		return 0
+		return default_value
 	}
 	n, err := strconv.ParseInt(concurrency, 10, 64)
 	if err != nil {
@@ -87,7 +94,8 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.kefu_appid = get_int(app_cfg, "kefu_appid")
 	config.sync_listen = get_string(app_cfg, "sync_listen")
 	config.master_address = get_opt_string(app_cfg, "master_address")
-	config.is_push_system = get_opt_int(app_cfg, "is_push_system") == 1
+	config.is_push_system = get_opt_int(app_cfg, "is_push_system", 0) == 1
+	config.limit = int(get_opt_int(app_cfg, "limit", PEER_OFFLINE_LIMIT))
 	return config
 }
 
