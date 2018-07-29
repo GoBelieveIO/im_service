@@ -21,7 +21,7 @@
 package main
 
 func SyncMessage(addr string, sync_key *SyncHistory) *PeerHistoryMessage {
-	messages, last_msgid := storage.LoadHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, GROUP_OFFLINE_LIMIT, PEER_OFFLINE_LIMIT)
+	messages, last_msgid := storage.LoadHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, PEER_OFFLINE_LIMIT)
 
 	
 	historyMessages := make([]*HistoryMessage, 0, 10)

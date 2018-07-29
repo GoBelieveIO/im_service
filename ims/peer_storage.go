@@ -115,16 +115,13 @@ func (storage *PeerStorage) SetLastMessageID(appid int64, receiver int64, last_i
 
 
 //获取所有消息id大于sync_msgid的消息,
-//获取群最近100（group_limit）条离线消息
-//当所有离线消息总数没有超过3000（limit）条时,单个群离线消息会超过100条
-func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, sync_msgid int64, group_limit int, limit int) ([]*EMessage, int64) {
-	last_id, _ := storage.GetLastMessageID(appid, receiver)
-
-	//群离线消息计数
-	groupMessages := make(map[int64]int)
-	
+//limit:0 表示无限制
+//消息超过2/3*limit后，只获取点对点消息
+//总消息数限制在limit
+func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, sync_msgid int64,  limit int) ([]*EMessage, int64) {
 	var last_msgid int64
-	overflow_messages := make([]*EMessage, 0, 10)
+	limit1 := 2*limit/3
+	last_id, _ := storage.GetLastMessageID(appid, receiver)
 	messages := make([]*EMessage, 0, 10)
 	for {
 		if last_id == 0 {
@@ -135,10 +132,8 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 		if msg == nil {
 			break
 		}
-
 		
 		var off *OfflineMessage2
-		
 		if msg.cmd == MSG_OFFLINE {
 			off1 := msg.body.(*OfflineMessage)
 			off = &OfflineMessage2{
@@ -180,40 +175,30 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 			msg.cmd != MSG_CUSTOMER && 
 			msg.cmd != MSG_CUSTOMER_SUPPORT &&
 			msg.cmd != MSG_SYSTEM {
-			last_id = off.prev_msgid
+			if limit1 > 0 && len(messages) >= limit1 {
+				last_id = off.prev_peer_msgid
+			} else {
+				last_id = off.prev_msgid
+			}			
 			continue
 		}
 
 		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
-		if msg.cmd == MSG_GROUP_IM {
-			im := msg.body.(*IMMessage)
-			count := groupMessages[im.receiver]
-			if count >= group_limit {
-				if len(overflow_messages) < limit {
-					overflow_messages = append(overflow_messages, emsg)
-				}
-			} else {
-				messages = append(messages, emsg)
-			}
-			groupMessages[im.receiver] = count + 1
-		} else {
-			messages = append(messages, emsg)
-		}
+		messages = append(messages, emsg)
 		
-		last_id = off.prev_msgid
+		if limit > 0 && len(messages) >= limit {
+			break
+		}
+
+		if limit1 > 0 && len(messages) >= limit1 {
+			last_id = off.prev_peer_msgid
+		} else {
+			last_id = off.prev_msgid
+		}
 	}
 
-	if len(messages) < limit && len(overflow_messages) > 0 {
-		overflow_count := limit - len(messages)
-		if overflow_count > len(overflow_messages) {
-			overflow_count = len(overflow_messages)
-		}
-		messages = append(messages, overflow_messages[:overflow_count]...)
-	}
+	log.Infof("history message loaded:%d %d", len(messages), last_msgid)
 	
-	if len(messages) > limit {
-		log.Warning("offline message overflow:", len(messages))
-	}
 	return messages, last_msgid
 }
 

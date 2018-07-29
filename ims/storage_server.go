@@ -35,7 +35,7 @@ import "github.com/valyala/gorpc"
 //群离线消息数量限制,超过的部分会被丢弃
 const GROUP_OFFLINE_LIMIT = 100
 
-//个人离线消息返回的数量限制,个人消息不会被丢弃，普通群的离线消息会被丢弃
+//离线消息返回的数量限制,超过2/3后丢弃普通群消息
 const PEER_OFFLINE_LIMIT = 3000
 
 var storage *Storage
