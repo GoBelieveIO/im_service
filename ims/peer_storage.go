@@ -198,9 +198,11 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 	}
 
 	if len(messages) > 1000 {
-		log.Warningf("history message overflow:%d", len(messages))
+		log.Warningf("appid:%d uid:%d sync msgid:%d history message overflow:%d",
+			appid, receiver, sync_msgid, len(messages))
 	}
-	log.Infof("history message loaded:%d %d", len(messages), last_msgid)
+	log.Infof("appid:%d uid:%d sync msgid:%d history message loaded:%d %d",
+		appid, receiver, sync_msgid, len(messages), last_msgid)
 	
 	return messages, last_msgid
 }
