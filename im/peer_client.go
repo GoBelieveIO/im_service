@@ -112,14 +112,6 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	}
 
 	client.EnqueueMessage(&Message{cmd:MSG_SYNC_END, body:sk})
-
-
-	if ph.LastMsgID != sk.sync_key {
-		//离线消息数量超过单次限制
-		log.Warning("offline message overflow, send sync notify:", ph.LastMsgID)
-		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{ph.LastMsgID}}
-		client.EnqueueMessage(notify)
-	}
 }
 
 func (client *PeerClient) HandleSyncKey(sync_key *SyncKey) {
