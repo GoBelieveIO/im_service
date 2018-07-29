@@ -34,17 +34,24 @@ type UserID struct {
 	uid    int64
 }
 
+type UserIndex struct {
+	last_id int64	
+	last_peer_id int64
+}
+
+//在取离线消息时，可以对群组消息和点对点消息分别获取，
+//这样可以做到分别控制点对点消息和群组消息读取量，避免单次读取超量的离线消息
 type PeerStorage struct {
 	*StorageFile
 	
 	//消息索引全部放在内存中,在程序退出时,再全部保存到文件中，
 	//如果索引文件不存在或上次保存失败，则在程序启动的时候，从消息DB中重建索引，这需要遍历每一条消息
-	message_index  map[UserID]int64 //记录每个用户最近的消息ID
+	message_index  map[UserID]*UserIndex //记录每个用户最近的消息ID
 }
 
 func NewPeerStorage(f *StorageFile) *PeerStorage {
 	storage := &PeerStorage{StorageFile:f}
-	storage.message_index = make(map[UserID]int64);
+	storage.message_index = make(map[UserID]*UserIndex);
 	return storage
 }
 
@@ -53,54 +60,65 @@ func (storage *PeerStorage) SavePeerMessage(appid int64, uid int64, device_id in
 	defer storage.mutex.Unlock()
 	msgid := storage.saveMessage(msg)
 
-	last_id, _ := storage.getLastMessageID(appid, uid)
-	off := &OfflineMessage{appid:appid, receiver:uid, msgid:msgid, device_id:device_id, prev_msgid:last_id}
-	m := &Message{cmd:MSG_OFFLINE, body:off}
+	last_id, last_peer_id := storage.getLastMessageID(appid, uid)
+
+	off := &OfflineMessage2{appid:appid, receiver:uid, msgid:msgid, device_id:device_id, prev_msgid:last_id, prev_peer_msgid:last_peer_id}
+	
+	var flag int
+	if storage.isGroupMessage(msg) {
+		flag = MESSAGE_FLAG_GROUP
+	}
+	m := &Message{cmd:MSG_OFFLINE_V2, flag:flag, body:off}
 	last_id = storage.saveMessage(m)
 
-	storage.setLastMessageID(appid, uid, last_id)
+	if !storage.isGroupMessage(msg) {
+		last_peer_id = last_id
+	}
+	storage.setLastMessageID(appid, uid, last_id, last_peer_id)
 	return msgid
 }
 
 
 //获取最近离线消息ID
-func (storage *PeerStorage) getLastMessageID(appid int64, receiver int64) (int64, error) {
+func (storage *PeerStorage) getLastMessageID(appid int64, receiver int64) (int64, int64) {
 	id := UserID{appid, receiver}
-	return storage.message_index[id], nil;
+	if ui, ok := storage.message_index[id]; ok {
+		return ui.last_id, ui.last_peer_id
+	}
+	return 0, 0
 }
 
 //lock
-func (storage *PeerStorage) GetLastMessageID(appid int64, receiver int64) (int64, error) {
+func (storage *PeerStorage) GetLastMessageID(appid int64, receiver int64) (int64, int64) {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 	return storage.getLastMessageID(appid, receiver)
 }
 
 //设置最近离线消息ID
-func (storage *PeerStorage) setLastMessageID(appid int64, receiver int64, msg_id int64) {
+func (storage *PeerStorage) setLastMessageID(appid int64, receiver int64, last_id int64, last_peer_id int64) {
 	id := UserID{appid, receiver}
-	storage.message_index[id] = msg_id
-	if msg_id >	storage.last_id {
-		storage.last_id = msg_id
+	ui := &UserIndex{last_id, last_peer_id}
+	storage.message_index[id] = ui
+	
+	if last_id > storage.last_id {
+		storage.last_id = last_peer_id
 	}
 }
 
 //lock
-func (storage *PeerStorage) SetLastMessageID(appid int64, receiver int64, msg_id int64) {
+func (storage *PeerStorage) SetLastMessageID(appid int64, receiver int64, last_id int64, last_peer_id int64) {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
-	storage.setLastMessageID(appid, receiver, msg_id)
+	storage.setLastMessageID(appid, receiver, last_id, last_peer_id)
 }
 
 
-//获取所有消息id大于msgid的消息,
+//获取所有消息id大于sync_msgid的消息,
 //获取群最近100（group_limit）条离线消息
 //当所有离线消息总数没有超过3000（limit）条时,单个群离线消息会超过100条
-func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msgid int64, group_limit int, limit int) ([]*EMessage, int64) {
-	last_id, err := storage.GetLastMessageID(appid, receiver)
-	if err != nil {
-		return nil, 0
-	}
+func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, sync_msgid int64, group_limit int, limit int) ([]*EMessage, int64) {
+	last_id, _ := storage.GetLastMessageID(appid, receiver)
 
 	//群离线消息计数
 	groupMessages := make(map[int64]int)
@@ -117,19 +135,41 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 		if msg == nil {
 			break
 		}
-		if msg.cmd != MSG_OFFLINE {
+
+		
+		var off *OfflineMessage2
+		
+		if msg.cmd == MSG_OFFLINE {
+			off1 := msg.body.(*OfflineMessage)
+			off = &OfflineMessage2{
+				appid:off1.appid,
+				receiver:off1.receiver,
+				msgid:off1.msgid,
+				device_id:off1.device_id,
+				prev_msgid:off1.prev_msgid,
+				prev_peer_msgid:off1.prev_msgid,
+			}
+			
+			if last_msgid == 0 {
+				last_msgid = off.msgid
+			}
+			if off.msgid <= sync_msgid {
+				break
+			}
+		} else if msg.cmd == MSG_OFFLINE_V2 {
+			off = msg.body.(*OfflineMessage2)
+			if last_msgid == 0 {
+				last_msgid = off.msgid
+			}
+			if off.msgid <= sync_msgid {
+				break
+			}
+			
+		} else {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}
-		off := msg.body.(*OfflineMessage)
-		if last_msgid == 0 {
-			last_msgid = off.msgid
-		}
 		
-		if off.msgid <= msgid {
-			break
-		}
-
 		msg = storage.LoadMessage(off.msgid)
 		if msg == nil {
 			break
@@ -179,10 +219,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, msg
 
 
 func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limit int) []*EMessage {
-	last_id, err := storage.GetLastMessageID(appid, receiver)
-	if err != nil {
-		return nil
-	}
+	last_id, _ := storage.GetLastMessageID(appid, receiver)
 	messages := make([]*EMessage, 0, 10)
 	for {
 		if last_id == 0 {
@@ -221,6 +258,9 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 	return messages
 }
 
+func (client *PeerStorage) isGroupMessage(msg *Message) bool {
+	return msg.cmd == MSG_GROUP_IM || msg.flag & MESSAGE_FLAG_GROUP != 0
+}
 
 func (client *PeerStorage) isSender(msg *Message, appid int64, uid int64) bool {
 	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
@@ -250,10 +290,7 @@ func (client *PeerStorage) isSender(msg *Message, appid int64, uid int64) bool {
 
 
 func (storage *PeerStorage) GetNewCount(appid int64, uid int64, last_received_id int64) int {
-	last_id, err := storage.GetLastMessageID(appid, uid)
-	if err != nil {
-		return 0
-	}
+	last_id, _ := storage.GetLastMessageID(appid, uid)
 
 	count := 0
 	log.Infof("last id:%d last received id:%d", last_id, last_received_id)
@@ -319,13 +356,18 @@ func (storage *PeerStorage) createPeerIndex() {
 
 			if msg.cmd == MSG_OFFLINE {
 				off := msg.body.(*OfflineMessage)
-				id := UserID{off.appid, off.receiver}
 				block_NO := i
 				msgid = int64(block_NO)*BLOCK_SIZE + msgid
-				storage.message_index[id] = msgid
-				if msgid > storage.last_id {
-					storage.last_id = msgid
+				storage.setLastMessageID(off.appid, off.receiver, msgid, msgid)
+			} else if msg.cmd == MSG_OFFLINE_V2 {
+				off := msg.body.(*OfflineMessage2)
+				block_NO := i
+				msgid = int64(block_NO)*BLOCK_SIZE + msgid
+				last_peer_id := msgid
+				if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
+					_, last_peer_id = storage.getLastMessageID(off.appid, off.receiver)
 				}
+				storage.setLastMessageID(off.appid, off.receiver, msgid, last_peer_id)
 			}
 		}
 
@@ -372,11 +414,16 @@ func (storage *PeerStorage) repairPeerIndex() {
 
 			if msg.cmd == MSG_OFFLINE {
 				off := msg.body.(*OfflineMessage)
-				id := UserID{off.appid, off.receiver}				
-				storage.message_index[id] = msgid
-				if msgid > storage.last_id {
-					storage.last_id = msgid
+				storage.setLastMessageID(off.appid, off.receiver, msgid, msgid)
+			} else if msg.cmd == MSG_OFFLINE_V2 {
+				off := msg.body.(*OfflineMessage2)
+				block_NO := i
+				msgid = int64(block_NO)*BLOCK_SIZE + msgid
+				last_peer_id := msgid
+				if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
+					_, last_peer_id = storage.getLastMessageID(off.appid, off.receiver)
 				}
+				storage.setLastMessageID(off.appid, off.receiver, msgid, last_peer_id)
 			}
 		}
 
@@ -412,14 +459,12 @@ func (storage *PeerStorage) readPeerIndex() bool {
 		for i := 0; i < n/24; i++ {
 			id := UserID{}
 			var msg_id int64
+			var peer_msgid int64
 			binary.Read(buffer, binary.BigEndian, &id.appid)
 			binary.Read(buffer, binary.BigEndian, &id.uid)
 			binary.Read(buffer, binary.BigEndian, &msg_id)
-
-			storage.message_index[id] = msg_id
-			if msg_id > storage.last_id {
-				storage.last_id = msg_id
-			}
+			binary.Read(buffer, binary.BigEndian, &peer_msgid)
+			storage.setLastMessageID(id.appid, id.uid, msg_id, peer_msgid)
 		}
 	}
 	return true
@@ -436,8 +481,8 @@ func (storage *PeerStorage) removePeerIndex() {
 }
 
 
-func (storage *PeerStorage) clonePeerIndex() map[UserID]int64 {
-	message_index := make(map[UserID]int64)
+func (storage *PeerStorage) clonePeerIndex() map[UserID]*UserIndex {
+	message_index := make(map[UserID]*UserIndex)
 	for k, v := range(storage.message_index) {
 		message_index[k] = v
 	}
@@ -446,7 +491,7 @@ func (storage *PeerStorage) clonePeerIndex() map[UserID]int64 {
 
 
 //appid uid msgid = 24字节
-func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]int64 ) {
+func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]*UserIndex ) {
 	path := fmt.Sprintf("%s/peer_index_t", storage.root)
 	log.Info("write peer message index path:", path)
 	begin := time.Now().UnixNano()
@@ -462,7 +507,8 @@ func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]int64 ) {
 	for id, value := range(message_index) {
 		binary.Write(buffer, binary.BigEndian, id.appid)
 		binary.Write(buffer, binary.BigEndian, id.uid)
-		binary.Write(buffer, binary.BigEndian, value)
+		binary.Write(buffer, binary.BigEndian, value.last_id)
+		binary.Write(buffer, binary.BigEndian, value.last_peer_id)
 
 		index += 1
 		//batch write to file
@@ -506,6 +552,17 @@ func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]int64 ) {
 func (storage *PeerStorage) ExecMessage(msg *Message, msgid int64) {
 	if msg.cmd == MSG_OFFLINE {
 		off := msg.body.(*OfflineMessage)
-		storage.SetLastMessageID(off.appid, off.receiver, msgid)
+		storage.SetLastMessageID(off.appid, off.receiver, msgid, msgid)
+	} else if msg.cmd == MSG_OFFLINE_V2 {
+		off := msg.body.(*OfflineMessage2)
+		//注意defer的作用域是函数
+		storage.mutex.Lock()
+		defer storage.mutex.Unlock()
+		last_peer_id := msgid		
+		if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
+			_, last_peer_id = storage.getLastMessageID(off.appid, off.receiver)			
+		}
+		storage.setLastMessageID(off.appid, off.receiver, msgid, last_peer_id)
+		
 	}
 }

@@ -24,7 +24,7 @@ import log "github.com/golang/glog"
 
 
 
-//存储服务器消息
+//存储服务器命令消息 deprecated
 const MSG_SAVE_AND_ENQUEUE = 200
 const MSG_DEQUEUE = 201
 const MSG_LOAD_OFFLINE = 202
@@ -34,8 +34,6 @@ const MSG_LOAD_LATEST = 205
 const MSG_SAVE_AND_ENQUEUE_GROUP = 206
 const MSG_DEQUEUE_GROUP = 207
 const MSG_LOAD_HISTORY = 208
-
-
 const MSG_GET_OFFLINE_COUNT = 211
 const MSG_GET_GROUP_OFFLINE_COUNT = 212
 
@@ -45,11 +43,25 @@ const MSG_STORAGE_SYNC_BEGIN = 220
 const MSG_STORAGE_SYNC_MESSAGE = 221
 const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
+
 //内部文件存储使用
+
+//个人消息队列 代替MSG_OFFLINE
+const MSG_OFFLINE_V2 = 250  
+
+//im实例使用
 const MSG_PENDING_GROUP_MESSAGE = 251
+
+//超级群消息队列
 const MSG_GROUP_IM_LIST = 252
+
+//deprecated
 const MSG_GROUP_ACK_IN = 253
+
+//deprecated 兼容性
 const MSG_OFFLINE = 254
+
+//deprecated
 const MSG_ACK_IN = 255
 
 
@@ -61,13 +73,13 @@ func init() {
 	message_creators[MSG_RESULT] = func()IMessage{return new(MessageResult)}
 	message_creators[MSG_LOAD_LATEST] = func()IMessage{return new(LoadLatest)}
 	message_creators[MSG_LOAD_HISTORY] = func()IMessage{return new(LoadHistory)}
-	
 	message_creators[MSG_SAVE_AND_ENQUEUE_GROUP] = func()IMessage{return new(SAEMessage)}
 	message_creators[MSG_DEQUEUE_GROUP] = func()IMessage{return new(DQGroupMessage)}
 	message_creators[MSG_GET_OFFLINE_COUNT] = func()IMessage{return new(LoadOffline)}
 	message_creators[MSG_GET_GROUP_OFFLINE_COUNT] = func()IMessage{return new(LoadGroupOffline)}
+	
 
-
+	message_creators[MSG_OFFLINE_V2] = func()IMessage{return new (OfflineMessage2)}
 	message_creators[MSG_PENDING_GROUP_MESSAGE] = func()IMessage{return new (PendingGroupMessage)}
 	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(GroupOfflineMessage)}
@@ -85,15 +97,17 @@ func init() {
 	message_descriptions[MSG_RESULT] = "MSG_RESULT"
 	message_descriptions[MSG_LOAD_LATEST] = "MSG_LOAD_LATEST"
 	message_descriptions[MSG_LOAD_HISTORY] = "MSG_LOAD_HISTORY"
-
 	message_descriptions[MSG_SAVE_AND_ENQUEUE_GROUP] = "MSG_SAVE_AND_ENQUEUE_GROUP"
 	message_descriptions[MSG_DEQUEUE_GROUP] = "MSG_DEQUEUE_GROUP"
+	
 
 	message_descriptions[MSG_STORAGE_SYNC_BEGIN] = "MSG_STORAGE_SYNC_BEGIN"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE] = "MSG_STORAGE_SYNC_MESSAGE"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
 
+	message_descriptions[MSG_OFFLINE_V2] = "MSG_OFFLINE_V2"	
 	message_descriptions[MSG_PENDING_GROUP_MESSAGE] = "MSG_PENDING_GROUP_MESSAGE"
+	message_descriptions[MSG_GROUP_IM_LIST] = "MSG_GROUP_IM_LIST"
 
 }
 type SyncCursor struct {
@@ -212,12 +226,13 @@ func (batch *MessageBatch) FromData(buff []byte) bool {
 	return true
 }
 
+//兼容性
 type OfflineMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
 	device_id int64
-	prev_msgid  int64
+	prev_msgid  int64 
 }
 
 
@@ -246,6 +261,44 @@ func (off *OfflineMessage) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
 	return true
 }
+
+
+type OfflineMessage2 struct {
+	appid    int64
+	receiver int64
+	msgid    int64
+	device_id int64
+	prev_msgid  int64 	//个人消息队列(点对点消息，群组消息)
+	prev_peer_msgid int64 //点对点消息队列
+}
+
+
+func (off *OfflineMessage2) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, off.appid)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
+	binary.Write(buffer, binary.BigEndian, off.msgid)
+	binary.Write(buffer, binary.BigEndian, off.device_id)
+	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
+	binary.Write(buffer, binary.BigEndian, off.prev_peer_msgid)	
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (off *OfflineMessage2) FromData(buff []byte) bool {
+	if len(buff) < 48 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &off.appid)
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
+	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	binary.Read(buffer, binary.BigEndian, &off.device_id)
+	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
+	binary.Read(buffer, binary.BigEndian, &off.prev_peer_msgid)	
+	return true
+}
+
 
 type MessageACKIn struct {
 	appid    int64

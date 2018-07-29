@@ -103,6 +103,9 @@ const MESSAGE_FLAG_TEXT = 0x01
 //消息不持久化
 const MESSAGE_FLAG_UNPERSISTENT = 0x02
 
+//群组离线消息 MSG_OFFLINE使用
+const MESSAGE_FLAG_GROUP = 0x04
+
 func init() {
 	message_creators[MSG_AUTH] = func()IMessage {return new(Authentication)}
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
