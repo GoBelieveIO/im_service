@@ -26,6 +26,7 @@ import "runtime"
 import "math/rand"
 import "net/http"
 import "path"
+import "sync/atomic"
 import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
@@ -54,6 +55,9 @@ var server_summary *ServerSummary
 
 var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
+
+//round-robin
+var current_deliver_index uint64
 var group_message_delivers []*GroupMessageDeliver
 var filter *sensitive.Filter
 
@@ -152,7 +156,8 @@ func GetRoomChannel(room_id int64) *Channel {
 }
 
 func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
-	index := group_id%int64(len(group_message_delivers))
+	deliver_index := atomic.AddUint64(&current_deliver_index, 1)
+	index := deliver_index%uint64(len(group_message_delivers))
 	return group_message_delivers[index]
 }
 
