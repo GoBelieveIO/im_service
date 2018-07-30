@@ -33,7 +33,8 @@ type StorageConfig struct {
 	rpc_listen          string
 	storage_root        string
 	kefu_appid          int64
-
+	http_listen_address string
+	
 	sync_listen         string
 	master_address      string
 	is_push_system      bool
@@ -90,6 +91,7 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	}
 
 	config.rpc_listen = get_string(app_cfg, "rpc_listen")
+	config.http_listen_address = get_opt_string(app_cfg, "http_listen_address")
 	config.storage_root = get_string(app_cfg, "storage_root")
 	config.kefu_appid = get_int(app_cfg, "kefu_appid")
 	config.sync_listen = get_string(app_cfg, "sync_listen")
