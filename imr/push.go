@@ -40,6 +40,7 @@ func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
 	v["sender"] = im.sender
 	v["receiver"] = im.receiver
 	v["content"] = im.content
+	v["time"] = im.timestamp
 
 	b, _ := json.Marshal(v)
 	var queue_name string
