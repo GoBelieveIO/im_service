@@ -248,6 +248,6 @@ func (client *Connection) close() {
 		conn.Close()
 	} else if _, ok := client.conn.(engineio.Conn); ok {
 		//bug:https://github.com/googollee/go-engine.io/issues/34
-		//conn.Close()
+		conn.Close()
 	}
 }
