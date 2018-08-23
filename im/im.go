@@ -78,18 +78,19 @@ func Listen(f func(net.Conn), port int) {
 	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
 	listen, err := net.Listen("tcp", listen_addr)
 	if err != nil {
-		fmt.Println("初始化失败", err.Error())
+		log.Errorf("listen err:%s", err)
 		return
 	}
 	tcp_listener, ok := listen.(*net.TCPListener)
 	if !ok {
-		fmt.Println("listen error")
+		log.Error("listen err")
 		return
 	}
 
 	for {
 		client, err := tcp_listener.AcceptTCP()
 		if err != nil {
+			log.Errorf("accept err:%s", err)
 			return
 		}
 		f(client)
@@ -539,4 +540,5 @@ func main() {
 		config.cert_file, config.key_file)
 
 	ListenClient()
+	log.Infof("exit")
 }
