@@ -33,6 +33,13 @@ import "github.com/valyala/gorpc"
 import "github.com/importcjj/sensitive"
 import "github.com/bitly/go-simplejson"
 
+var (
+    VERSION    string
+    BUILD_TIME string
+    GO_VERSION string
+	GIT_COMMIT_ID string
+	GIT_BRANCH string
+)
 
 //storage server,  peer, group, customer message
 var rpc_clients []*gorpc.DispatcherClient
@@ -425,6 +432,7 @@ func SyncKeyService() {
 }
 
 func main() {
+	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -432,7 +440,7 @@ func main() {
 		fmt.Println("usage: im config")
 		return
 	}
-
+	
 	config = read_cfg(flag.Args()[0])
 	log.Infof("port:%d\n", config.port)
 

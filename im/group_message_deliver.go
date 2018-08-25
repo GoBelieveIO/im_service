@@ -32,7 +32,7 @@ import log "github.com/golang/glog"
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
-const VERSION = 1 << 16 //1.0
+const F_VERSION = 1 << 16 //1.0
 
 //后台发送普通群消息
 //普通群消息首先保存到临时文件中，之后按照保存到文件中的顺序依次派发
@@ -257,7 +257,7 @@ func (storage *GroupMessageDeliver) WriteHeader(file *os.File) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	var v int32 = VERSION
+	var v int32 = F_VERSION
 	err = binary.Write(file, binary.BigEndian, v)
 	if err != nil {
 		log.Fatalln(err)

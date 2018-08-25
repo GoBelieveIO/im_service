@@ -34,6 +34,14 @@ import "github.com/gomodule/redigo/redis"
 import "github.com/valyala/gorpc"
 
 
+var (
+    VERSION    string
+    BUILD_TIME string
+    GO_VERSION string
+	GIT_COMMIT_ID string
+	GIT_BRANCH string
+)
+
 var storage *Storage
 var config *StorageConfig
 var master *Master
@@ -187,6 +195,8 @@ func ListenRPCClient() {
 }
 
 func main() {
+	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
+	
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
