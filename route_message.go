@@ -22,7 +22,6 @@ import "bytes"
 import "encoding/binary"
 
 //路由服务器消息
-const MSG_PUBLISH_OFFLINE = 128
 const MSG_SUBSCRIBE = 130
 const MSG_UNSUBSCRIBE = 131
 const MSG_PUBLISH = 132
@@ -39,15 +38,13 @@ func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(SubscribeMessage)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
-	message_creators[MSG_PUBLISH_OFFLINE] = func()IMessage{return new(AppMessage)}
-
+	
 	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(AppMessage)}
 	
 	message_creators[MSG_SUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
 	message_creators[MSG_UNSUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
 	message_creators[MSG_PUBLISH_ROOM] = func()IMessage{return new(AppMessage)}
 
-	message_descriptions[MSG_PUBLISH_OFFLINE] = "MSG_PUBLISH_OFFLINE"
 	message_descriptions[MSG_SUBSCRIBE] = "MSG_SUBSCRIBE"
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
 	message_descriptions[MSG_PUBLISH] = "MSG_PUBLISH"
