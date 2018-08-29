@@ -184,11 +184,6 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
-func (client *PeerClient) HandleInputing(inputing *MessageInputing) {
-	msg := &Message{cmd: MSG_INPUTING, body: inputing}
-	client.SendMessage(inputing.receiver, msg)
-	log.Infof("inputting sender:%d receiver:%d", inputing.sender, inputing.receiver)
-}
 
 func (client *PeerClient) HandleUnreadCount(u *MessageUnreadCount) {
 	SetUserUnreadCount(client.appid, client.uid, u.count)
@@ -213,8 +208,6 @@ func (client *PeerClient) HandleMessage(msg *Message) {
 	switch msg.cmd {
 	case MSG_IM:
 		client.HandleIMMessage(msg)
-	case MSG_INPUTING:
-		client.HandleInputing(msg.body.(*MessageInputing))
 	case MSG_RT:
 		client.HandleRTMessage(msg)
 	case MSG_UNREAD_COUNT:
