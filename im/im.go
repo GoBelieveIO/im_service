@@ -27,6 +27,7 @@ import "math/rand"
 import "net/http"
 import "path"
 import "sync/atomic"
+import "crypto/tls"
 import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
@@ -76,10 +77,17 @@ func init() {
 }
 
 func handle_client(conn net.Conn) {
-	log.Infoln("handle_client")
+	log.Infoln("handle new connection")
 	client := NewClient(conn)
 	client.Run()
 }
+
+func handle_ssl_client(conn net.Conn) {
+	log.Infoln("handle new ssl connection")
+	client := NewClient(conn)
+	client.Run()
+}
+
 
 func Listen(f func(net.Conn), port int) {
 	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
@@ -107,6 +115,30 @@ func Listen(f func(net.Conn), port int) {
 func ListenClient() {
 	Listen(handle_client, config.port)
 }
+
+func ListenSSL(port int, cert_file, key_file string) {
+	cert, err := tls.LoadX509KeyPair(cert_file, key_file)
+	if err != nil {
+		log.Fatal("load cert err:", err)
+		return
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}}
+	addr := fmt.Sprintf(":%d", port)
+	listen, err := tls.Listen("tcp", addr, config)
+	if err != nil {
+		log.Fatal("ssl listen err:", err)
+	}
+
+	log.Infof("ssl listen...")
+	for {
+		conn, err := listen.Accept()
+		if err != nil {
+			log.Fatal("ssl accept err:", err)
+		}
+		handle_ssl_client(conn)
+	}
+}
+
 
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
@@ -547,6 +579,9 @@ func main() {
 	go StartSocketIO(config.socket_io_address, config.tls_address, 
 		config.cert_file, config.key_file)
 
+	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
+		go ListenSSL(config.ssl_port, config.cert_file, config.key_file)
+	}
 	ListenClient()
 	log.Infof("exit")
 }
