@@ -23,6 +23,10 @@ import "encoding/json"
 import "net/url"
 import "strconv"
 import log "github.com/golang/glog"
+import "io/ioutil"
+import (
+	"github.com/bitly/go-simplejson"
+)
 
 
 func WriteHttpObj(data map[string]interface{}, w http.ResponseWriter) {
@@ -123,3 +127,60 @@ func GetOnlineStatus(w http.ResponseWriter, req *http.Request) {
 	
 	WriteHttpObj(resp, w)
 }
+
+
+//获取多个用户在线状态
+func GetOnlineStatusX(w http.ResponseWriter, req *http.Request) {
+	log.Info("get GetOnlineStatusX")
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid query param", w)
+		return
+	}
+
+
+
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	obj, err := simplejson.NewJson(body)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	//members := NewIntSet()
+	marray, err := obj.Get("members").Array()
+	resp := make(map[string]interface{})
+	for _, m := range marray {
+		if _, ok := m.(json.Number); ok {
+
+
+			member, err := m.(json.Number).Int64()
+			if err != nil {
+				log.Info("error:", err)
+				WriteHttpError(400, "invalid json format", w)
+				return
+			}
+
+			i := strconv.FormatInt(member,10)
+			online := IsUserOnline(appid, member)
+			resp[i] = online
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	b, _ := json.Marshal(resp)
+	w.Write(b)
+
+	//WriteHttpObj(resp, b)
+}
+
