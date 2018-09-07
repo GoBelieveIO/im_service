@@ -526,7 +526,7 @@ func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]*UserIndex )
 	}
 	err = file.Sync()
 	if err != nil {
-		log.Infof("sync file err:", err)
+		log.Info("sync file err:", err)
 	}
 
 	path2 := fmt.Sprintf("%s/peer_index", storage.root)
