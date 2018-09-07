@@ -170,32 +170,51 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 
 //个人消息／普通群消息／客服消息
 func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
+	if uid < 0 {
+		uid = -uid
+	}
 	index := uid%int64(len(rpc_clients))
 	return rpc_clients[index]
 }
 
 //超级群消息
 func GetGroupStorageRPCClient(group_id int64) *gorpc.DispatcherClient {
+	if group_id < 0 {
+		group_id = -group_id
+	}
 	index := group_id%int64(len(group_rpc_clients))
 	return group_rpc_clients[index]
 }
 
 func GetChannel(uid int64) *Channel{
+	if uid < 0 {
+		uid = -uid
+	}
 	index := uid%int64(len(route_channels))
 	return route_channels[index]
 }
 
 func GetGroupChannel(group_id int64) *Channel{
+	if group_id < 0 {
+		group_id = -group_id
+	}
 	index := group_id%int64(len(group_route_channels))
 	return group_route_channels[index]
 }
 
 func GetRoomChannel(room_id int64) *Channel {
+	if room_id < 0 {
+		room_id = -room_id
+	}
 	index := room_id%int64(len(route_channels))
 	return route_channels[index]
 }
 
 func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
+	if group_id < 0 {
+		group_id = -group_id
+	}
+	
 	deliver_index := atomic.AddUint64(&current_deliver_index, 1)
 	index := deliver_index%uint64(len(group_message_delivers))
 	return group_message_delivers[index]
