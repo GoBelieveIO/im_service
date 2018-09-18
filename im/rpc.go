@@ -615,6 +615,95 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 }
 
+
+func SendCustomerSupportMessage(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	obj, err := simplejson.NewJson(body)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	customer_appid, err := obj.Get("customer_appid").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return		
+	}
+
+	customer_id, err := obj.Get("customer_id").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	store_id, err := obj.Get("store_id").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+	seller_id, err := obj.Get("seller_id").Int64()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+	
+	content, err := obj.Get("content").String()
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return
+	}
+
+
+	cm := &CustomerMessage{}
+	cm.customer_appid = customer_appid
+	cm.customer_id = customer_id
+	cm.store_id = store_id
+	cm.seller_id = seller_id
+	cm.content = content
+	cm.timestamp = int32(time.Now().Unix())
+
+	m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
+
+
+	msgid, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
+ 	if err != nil {
+		log.Warning("save message error:", err)
+		WriteHttpError(500, "internal server error", w)
+		return
+	}
+	
+	msgid2, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
+ 	if err != nil {
+		log.Warning("save message error:", err)
+		WriteHttpError(500, "internal server error", w)
+		return
+	}
+	
+	PushMessage(cm.customer_appid, cm.customer_id, m)
+	
+	//发送给自己的其它登录点	
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	SendAppMessage(config.kefu_appid, cm.seller_id, notify)
+
+	//发送同步的通知消息
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
+
+	w.WriteHeader(200)	
+}
+
 func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
