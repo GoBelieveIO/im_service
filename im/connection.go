@@ -39,7 +39,8 @@ type Connection struct {
 	forbidden int32 //是否被禁言
 	notification_on bool //桌面在线时是否通知手机端
 	online bool
-	
+
+	sync_count int64 //点对点消息同步计数，用于判断是否是首次同步
 	tc     int32 //write channel timeout count
 	wt     chan *Message
 	lwt    chan int
