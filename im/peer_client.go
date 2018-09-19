@@ -57,7 +57,6 @@ func (client *PeerClient) Logout() {
 	}
 }
 
-
 func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	if client.uid == 0 {
 		return
@@ -89,8 +88,11 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	ph := resp.(*PeerHistoryMessage)
 	messages := ph.Messages
 
+	msgs := make([]*Message, 0, len(messages) + 2)
+	
 	sk := &SyncKey{last_id}
-	client.EnqueueMessage(&Message{cmd:MSG_SYNC_BEGIN, body:sk})
+	msgs = append(msgs, &Message{cmd:MSG_SYNC_BEGIN, body:sk})
+	
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		log.Info("message:", msg.MsgID, Command(msg.Cmd))
@@ -103,8 +105,7 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
 			continue
 		}
-		
-		client.EnqueueMessage(m)
+		msgs = append(msgs, m)
 	}
 
 
@@ -113,7 +114,9 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		log.Warningf("client last id:%d server last id:%d", last_id, ph.LastMsgID)
 	}
 
-	client.EnqueueMessage(&Message{cmd:MSG_SYNC_END, body:sk})
+	msgs = append(msgs, &Message{cmd:MSG_SYNC_END, body:sk})
+
+	client.EnqueueMessages(msgs)
 }
 
 func (client *PeerClient) HandleSyncKey(sync_key *SyncKey) {

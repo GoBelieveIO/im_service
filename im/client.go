@@ -50,6 +50,8 @@ func NewClient(conn interface{}) *Client {
 
 	client.wt = make(chan *Message, 300)
 	client.lwt = make(chan int, 1)//only need 1
+	//'10'对于用户拥有非常多的超级群，读线程还是有可能会阻塞
+	client.pwt = make(chan []*Message, 10)
 	client.messages = list.New()
 	
 	atomic.AddInt64(&server_summary.nconnections, 1)
@@ -277,9 +279,21 @@ func (client *Client) Write() {
 			//以当前客户端所用版本号发送消息
 			vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
 			client.send(vmsg)
+		case messages := <- client.pwt:
+			for _, msg := range(messages) {
+				if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+					atomic.AddInt64(&server_summary.out_message_count, 1)
+				}
+				seq++
+
+				//以当前客户端所用版本号发送消息
+				vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
+				client.send(vmsg)
+			}
 		case <- client.lwt:
 			seq = client.SendMessages(seq)
 			break
+
 		}
 	}
 
