@@ -220,12 +220,26 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 		if msg == nil {
 			break
 		}
-		if msg.cmd != MSG_OFFLINE {
+		if msg.cmd != MSG_OFFLINE && msg.cmd != MSG_OFFLINE_V2 {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}
-		off := msg.body.(*OfflineMessage)
-		msg = storage.LoadMessage(off.msgid)
+		var msgid int64
+		var device_id int64
+		var prev_msgid int64
+		if msg.cmd == MSG_OFFLINE {
+			off := msg.body.(*OfflineMessage)
+			msgid = off.msgid
+			device_id = off.device_id
+			prev_msgid = off.prev_msgid
+		} else {
+			off := msg.body.(*OfflineMessage2)
+			msgid = off.msgid
+			device_id = off.device_id
+			prev_msgid = off.prev_msgid
+		}
+		
+		msg = storage.LoadMessage(msgid)
 		if msg == nil {
 			break
 		}
@@ -234,16 +248,16 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 			msg.cmd != MSG_IM && 
 			msg.cmd != MSG_CUSTOMER && 
 			msg.cmd != MSG_CUSTOMER_SUPPORT {
-			last_id = off.prev_msgid
+			last_id = prev_msgid
 			continue
 		}
 
-		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
+		emsg := &EMessage{msgid:msgid, device_id:device_id, msg:msg}
 		messages = append(messages, emsg)
 		if len(messages) >= limit {
 			break
 		}
-		last_id = off.prev_msgid
+		last_id = prev_msgid
 	}
 	return messages
 }
