@@ -183,6 +183,7 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func StartHttpServer(addr string) {
 	http.HandleFunc("/online", GetOnlineStatus)
 	http.HandleFunc("/all_online", GetOnlineClients)
+	http.HandleFunc("/get_online_status", GetOnlineStatusX)
 
 	handler := loggingHandler{http.DefaultServeMux}
 	
