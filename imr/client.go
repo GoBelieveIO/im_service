@@ -19,7 +19,10 @@
 
 package main
 import "net"
-import log "github.com/golang/glog"
+import (
+	log "github.com/golang/glog"
+	"encoding/json"
+)
 
 
 type Push struct {
@@ -113,12 +116,30 @@ func (client *Client) HandleSubscribe(id *SubscribeMessage) {
 	route := client.app_route.FindOrAddRoute(id.appid)
 	on := id.online != 0
 	route.AddUserID(id.uid, on)
+
+	client.SetUserOffline(id.uid, id.appid, 1)
+}
+
+
+func (client *Client) SetUserOffline(uid int64, appid int64, online int) {
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["uid"] = uid
+	v["online"] = online
+
+	b, _ := json.Marshal(v)
+	var queue_name string
+	queue_name = "im_user_offline_queue"
+
+	client.PushChan(queue_name, b)
 }
 
 func (client *Client) HandleUnsubscribe(id *AppUserID) {
 	log.Infof("unsubscribe appid:%d uid:%d", id.appid, id.uid)
 	route := client.app_route.FindOrAddRoute(id.appid)
 	route.RemoveUserID(id.uid)
+
+	client.SetUserOffline(id.uid, id.appid, 0)
 }
 
 
