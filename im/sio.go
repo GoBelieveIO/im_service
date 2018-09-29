@@ -51,7 +51,8 @@ func StartSocketIO(address string, tls_address string,
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	server.SetMaxConnection(2000000)
+	
 	go func() {
 		for {
 			conn, err := server.Accept()

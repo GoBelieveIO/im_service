@@ -27,18 +27,29 @@ import "flag"
 import "math/rand"
 import log "github.com/golang/glog"
 import "os"
+import "net/http"
 import "os/signal"
 import "syscall"
 import "github.com/gomodule/redigo/redis"
 import "github.com/valyala/gorpc"
 
 
+var (
+    VERSION    string
+    BUILD_TIME string
+    GO_VERSION string
+	GIT_COMMIT_ID string
+	GIT_BRANCH string
+)
+
 var storage *Storage
 var config *StorageConfig
 var master *Master
 var mutex   sync.Mutex
+var server_summary *ServerSummary
 
 func init() {
+	server_summary = NewServerSummary()
 }
 
 
@@ -142,6 +153,27 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 }
 
 
+type loggingHandler struct {
+	handler http.Handler
+}
+
+func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log.Infof("http request:%s %s %s", r.RemoteAddr, r.Method, r.URL)
+	h.handler.ServeHTTP(w, r)
+}
+
+func StartHttpServer(addr string) {
+	http.HandleFunc("/summary", Summary)
+	http.HandleFunc("/stack", Stack)
+
+	handler := loggingHandler{http.DefaultServeMux}
+	
+	err := http.ListenAndServe(addr, handler)
+	if err != nil {
+		log.Fatal("http server err:", err)
+	}
+}
+
 
 func ListenRPCClient() {
 	dispatcher := gorpc.NewDispatcher()
@@ -163,6 +195,8 @@ func ListenRPCClient() {
 }
 
 func main() {
+	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
+	
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -175,7 +209,8 @@ func main() {
 	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t offline message limit:%d\n", 
 		config.rpc_listen, config.storage_root, config.sync_listen,
 		config.master_address, config.is_push_system, config.limit)
-
+	log.Infof("http listen address:%s", config.http_listen_address)
+	
 	storage = NewStorage(config.storage_root)
 	
 	master = NewMaster()
@@ -189,7 +224,11 @@ func main() {
 	go FlushLoop()
 	go FlushIndexLoop()
 	go waitSignal()
-
+	
+	if len(config.http_listen_address) > 0 {
+		go StartHttpServer(config.http_listen_address)
+	}
+	
 	go ListenSyncClient()
 	ListenRPCClient()
 }

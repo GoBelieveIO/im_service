@@ -28,6 +28,7 @@ const DEFAULT_GROUP_DELIVER_COUNT = 4
 
 type Config struct {
 	port                int
+	ssl_port            int
 	mysqldb_datasource  string
 	mysqldb_appdatasource  string
 	pending_root        string
@@ -107,6 +108,7 @@ func read_cfg(cfg_path string) *Config {
 	}
 
 	config.port = get_int(app_cfg, "port")
+	config.ssl_port = int(get_opt_int(app_cfg, "ssl_port"))
 	config.http_listen_address = get_string(app_cfg, "http_listen_address")
 	config.rpc_listen_address = get_string(app_cfg, "rpc_listen_address")
 	config.redis_address = get_string(app_cfg, "redis_address")

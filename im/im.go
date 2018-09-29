@@ -26,12 +26,21 @@ import "runtime"
 import "math/rand"
 import "net/http"
 import "path"
+import "sync/atomic"
+import "crypto/tls"
 import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
 import "github.com/importcjj/sensitive"
 import "github.com/bitly/go-simplejson"
 
+var (
+    VERSION    string
+    BUILD_TIME string
+    GO_VERSION string
+	GIT_COMMIT_ID string
+	GIT_BRANCH string
+)
 
 //storage server,  peer, group, customer message
 var rpc_clients []*gorpc.DispatcherClient
@@ -54,6 +63,9 @@ var server_summary *ServerSummary
 
 var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
+
+//round-robin
+var current_deliver_index uint64
 var group_message_delivers []*GroupMessageDeliver
 var filter *sensitive.Filter
 
@@ -65,27 +77,35 @@ func init() {
 }
 
 func handle_client(conn net.Conn) {
-	log.Infoln("handle_client")
+	log.Infoln("handle new connection")
 	client := NewClient(conn)
 	client.Run()
 }
+
+func handle_ssl_client(conn net.Conn) {
+	log.Infoln("handle new ssl connection")
+	client := NewClient(conn)
+	client.Run()
+}
+
 
 func Listen(f func(net.Conn), port int) {
 	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
 	listen, err := net.Listen("tcp", listen_addr)
 	if err != nil {
-		fmt.Println("初始化失败", err.Error())
+		log.Errorf("listen err:%s", err)
 		return
 	}
 	tcp_listener, ok := listen.(*net.TCPListener)
 	if !ok {
-		fmt.Println("listen error")
+		log.Error("listen err")
 		return
 	}
 
 	for {
 		client, err := tcp_listener.AcceptTCP()
 		if err != nil {
+			log.Errorf("accept err:%s", err)
 			return
 		}
 		f(client)
@@ -95,6 +115,30 @@ func Listen(f func(net.Conn), port int) {
 func ListenClient() {
 	Listen(handle_client, config.port)
 }
+
+func ListenSSL(port int, cert_file, key_file string) {
+	cert, err := tls.LoadX509KeyPair(cert_file, key_file)
+	if err != nil {
+		log.Fatal("load cert err:", err)
+		return
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}}
+	addr := fmt.Sprintf(":%d", port)
+	listen, err := tls.Listen("tcp", addr, config)
+	if err != nil {
+		log.Fatal("ssl listen err:", err)
+	}
+
+	log.Infof("ssl listen...")
+	for {
+		conn, err := listen.Accept()
+		if err != nil {
+			log.Fatal("ssl accept err:", err)
+		}
+		handle_ssl_client(conn)
+	}
+}
+
 
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
@@ -126,33 +170,53 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 
 //个人消息／普通群消息／客服消息
 func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
+	if uid < 0 {
+		uid = -uid
+	}
 	index := uid%int64(len(rpc_clients))
 	return rpc_clients[index]
 }
 
 //超级群消息
 func GetGroupStorageRPCClient(group_id int64) *gorpc.DispatcherClient {
+	if group_id < 0 {
+		group_id = -group_id
+	}
 	index := group_id%int64(len(group_rpc_clients))
 	return group_rpc_clients[index]
 }
 
 func GetChannel(uid int64) *Channel{
+	if uid < 0 {
+		uid = -uid
+	}
 	index := uid%int64(len(route_channels))
 	return route_channels[index]
 }
 
 func GetGroupChannel(group_id int64) *Channel{
+	if group_id < 0 {
+		group_id = -group_id
+	}
 	index := group_id%int64(len(group_route_channels))
 	return group_route_channels[index]
 }
 
 func GetRoomChannel(room_id int64) *Channel {
+	if room_id < 0 {
+		room_id = -room_id
+	}
 	index := room_id%int64(len(route_channels))
 	return route_channels[index]
 }
 
 func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
-	index := group_id%int64(len(group_message_delivers))
+	if group_id < 0 {
+		group_id = -group_id
+	}
+	
+	deliver_index := atomic.AddUint64(&current_deliver_index, 1)
+	index := deliver_index%uint64(len(group_message_delivers))
 	return group_message_delivers[index]
 }
 
@@ -383,6 +447,7 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_notification", SendNotification)
 	http.HandleFunc("/post_room_message", SendRoomMessage)
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
+	http.HandleFunc("/post_customer_support_message", SendCustomerSupportMessage)
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
 	http.HandleFunc("/init_message_queue", InitMessageQueue)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
@@ -419,6 +484,7 @@ func SyncKeyService() {
 }
 
 func main() {
+	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -426,7 +492,7 @@ func main() {
 		fmt.Println("usage: im config")
 		return
 	}
-
+	
 	config = read_cfg(flag.Args()[0])
 	log.Infof("port:%d\n", config.port)
 
@@ -533,5 +599,9 @@ func main() {
 	go StartSocketIO(config.socket_io_address, config.tls_address, 
 		config.cert_file, config.key_file)
 
+	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
+		go ListenSSL(config.ssl_port, config.cert_file, config.key_file)
+	}
 	ListenClient()
+	log.Infof("exit")
 }

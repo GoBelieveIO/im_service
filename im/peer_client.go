@@ -84,7 +84,8 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		log.Warning("sync message err:", err)
 		return
 	}
-
+	client.sync_count += 1
+	
 	ph := resp.(*PeerHistoryMessage)
 	messages := ph.Messages
 
@@ -97,8 +98,9 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
 
+		//连接成功后的首次同步，自己发送的消息也下发给客户端
 		//过滤掉所有自己在当前设备发出的消息
-		if client.isSender(m, msg.DeviceID) {
+		if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
 			continue
 		}
 		
@@ -184,11 +186,6 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
-func (client *PeerClient) HandleInputing(inputing *MessageInputing) {
-	msg := &Message{cmd: MSG_INPUTING, body: inputing}
-	client.SendMessage(inputing.receiver, msg)
-	log.Infof("inputting sender:%d receiver:%d", inputing.sender, inputing.receiver)
-}
 
 func (client *PeerClient) HandleUnreadCount(u *MessageUnreadCount) {
 	SetUserUnreadCount(client.appid, client.uid, u.count)
@@ -213,8 +210,6 @@ func (client *PeerClient) HandleMessage(msg *Message) {
 	switch msg.cmd {
 	case MSG_IM:
 		client.HandleIMMessage(msg)
-	case MSG_INPUTING:
-		client.HandleInputing(msg.body.(*MessageInputing))
 	case MSG_RT:
 		client.HandleRTMessage(msg)
 	case MSG_UNREAD_COUNT:

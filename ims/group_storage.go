@@ -336,7 +336,7 @@ func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]int64) {
 	}
 	err = file.Sync()
 	if err != nil {
-		log.Infof("sync file err:", err)
+		log.Info("sync file err:", err)
 	}
 
 	path2 := fmt.Sprintf("%s/group_index", storage.root)

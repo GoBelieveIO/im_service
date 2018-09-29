@@ -2,13 +2,13 @@ all:im_bin ims_bin imr_bin
 
 
 im_bin:
-	make -C im
+	cd im && make
 
 ims_bin:
-	make -C ims
+	cd ims && make
 
 imr_bin:
-	make -C imr
+	cd imr && make
 
 
 install:all

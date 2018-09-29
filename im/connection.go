@@ -39,7 +39,8 @@ type Connection struct {
 	forbidden int32 //是否被禁言
 	notification_on bool //桌面在线时是否通知手机端
 	online bool
-	
+
+	sync_count int64 //点对点消息同步计数，用于判断是否是首次同步
 	tc     int32 //write channel timeout count
 	wt     chan *Message
 	lwt    chan int
@@ -246,8 +247,8 @@ func (client *Connection) send(msg *Message) {
 func (client *Connection) close() {
 	if conn, ok := client.conn.(net.Conn); ok {
 		conn.Close()
-	} else if _, ok := client.conn.(engineio.Conn); ok {
+	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		//bug:https://github.com/googollee/go-engine.io/issues/34
-		//conn.Close()
+		conn.Close()
 	}
 }

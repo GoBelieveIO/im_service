@@ -125,8 +125,6 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandleAuthToken(msg.body.(*AuthenticationToken), msg.version)
 	case MSG_ACK:
 		client.HandleACK(msg.body.(*MessageACK))
-	case MSG_HEARTBEAT:
-		// nothing to do
 	case MSG_PING:
 		client.HandlePing()
 	}

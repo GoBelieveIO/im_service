@@ -23,10 +23,6 @@ import "bytes"
 import "encoding/binary"
 import "fmt"
 
-//deprecated
-const MSG_HEARTBEAT = 1
-const MSG_AUTH = 2
-
 const MSG_AUTH_STATUS = 3
 //persistent
 const MSG_IM = 4
@@ -40,18 +36,10 @@ const MSG_RST = 6
 const MSG_GROUP_NOTIFICATION = 7
 const MSG_GROUP_IM = 8
 
-//deprecated
-const MSG_PEER_ACK = 9
-const MSG_INPUTING = 10
-
-//deprecated
-const MSG_SUBSCRIBE_ONLINE_STATE = 11
-const MSG_ONLINE_STATE = 12
-
 const MSG_PING = 13
 const MSG_PONG = 14
 const MSG_AUTH_TOKEN = 15
-const MSG_LOGIN_POINT = 16
+
 const MSG_RT = 17
 const MSG_ENTER_ROOM = 18
 const MSG_LEAVE_ROOM = 19
@@ -107,17 +95,11 @@ const MESSAGE_FLAG_UNPERSISTENT = 0x02
 const MESSAGE_FLAG_GROUP = 0x04
 
 func init() {
-	message_creators[MSG_AUTH] = func()IMessage {return new(Authentication)}
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
 	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
 
-	message_creators[MSG_PEER_ACK] = func()IMessage{return new(IgnoreMessage)}
-	message_creators[MSG_INPUTING] = func()IMessage{return new(MessageInputing)}
-	message_creators[MSG_SUBSCRIBE_ONLINE_STATE] = func()IMessage{return new(IgnoreMessage)}
-	message_creators[MSG_ONLINE_STATE] = func()IMessage{return new(IgnoreMessage)}
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
 
-	message_creators[MSG_LOGIN_POINT] = func()IMessage{return new(IgnoreMessage)}
 	message_creators[MSG_RT] = func()IMessage{return new(RTMessage)}
 	message_creators[MSG_ENTER_ROOM] = func()IMessage{return new(Room)}
 	message_creators[MSG_LEAVE_ROOM] = func()IMessage{return new(Room)}
@@ -151,20 +133,14 @@ func init() {
 
 	vmessage_creators[MSG_AUTH_STATUS] = func()IVersionMessage{return new(AuthenticationStatus)}
 
-	message_descriptions[MSG_AUTH] = "MSG_AUTH"
 	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
 	message_descriptions[MSG_IM] = "MSG_IM"
 	message_descriptions[MSG_ACK] = "MSG_ACK"
 	message_descriptions[MSG_GROUP_NOTIFICATION] = "MSG_GROUP_NOTIFICATION"
 	message_descriptions[MSG_GROUP_IM] = "MSG_GROUP_IM"
-	message_descriptions[MSG_PEER_ACK] = "MSG_PEER_ACK"
-	message_descriptions[MSG_INPUTING] = "MSG_INPUTING"
-	message_descriptions[MSG_SUBSCRIBE_ONLINE_STATE] = "MSG_SUBSCRIBE_ONLINE_STATE"
-	message_descriptions[MSG_ONLINE_STATE] = "MSG_ONLINE_STATE"
 	message_descriptions[MSG_PING] = "MSG_PING"
 	message_descriptions[MSG_PONG] = "MSG_PONG"
 	message_descriptions[MSG_AUTH_TOKEN] = "MSG_AUTH_TOKEN"
-	message_descriptions[MSG_LOGIN_POINT] = "MSG_LOGIN_POINT"
 	message_descriptions[MSG_RT] = "MSG_RT"
 	message_descriptions[MSG_ENTER_ROOM] = "MSG_ENTER_ROOM"
 	message_descriptions[MSG_LEAVE_ROOM] = "MSG_LEAVE_ROOM"
@@ -265,27 +241,6 @@ func (ignore *IgnoreMessage) FromData(buff []byte) bool {
 }
 
 
-
-
-type Authentication struct {
-	uid         int64
-}
-
-func (auth *Authentication) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, auth.uid)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (auth *Authentication) FromData(buff []byte) bool {
-	if len(buff) < 8 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &auth.uid)
-	return true
-}
 
 type AuthenticationToken struct {
 	token       string
@@ -487,30 +442,6 @@ func (ack *MessageACK) ToData() []byte {
 func (ack *MessageACK) FromData(buff []byte) bool {
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &ack.seq)
-	return true
-}
-
-
-type MessageInputing struct {
-	sender   int64
-	receiver int64
-}
-
-func (inputing *MessageInputing) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, inputing.sender)
-	binary.Write(buffer, binary.BigEndian, inputing.receiver)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (inputing *MessageInputing) FromData(buff []byte) bool {
-	if len(buff) < 16 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &inputing.sender)
-	binary.Read(buffer, binary.BigEndian, &inputing.receiver)
 	return true
 }
 

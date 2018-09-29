@@ -33,7 +33,7 @@ import "github.com/GoBelieveIO/im_service/lru"
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
-const VERSION = 1 << 16 //1.0
+const F_VERSION = 1 << 16 //1.0
 
 const BLOCK_SIZE = 128*1024*1024
 const LRU_SIZE = 128
@@ -278,7 +278,7 @@ func (storage *StorageFile) WriteHeader(file *os.File) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	var v int32 = VERSION
+	var v int32 = F_VERSION
 	err = binary.Write(file, binary.BigEndian, v)
 	if err != nil {
 		log.Fatalln(err)

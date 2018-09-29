@@ -124,8 +124,6 @@ func GetOnlineStatus(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	b, _ := json.Marshal(resp)
 	w.Write(b)
-	
-	WriteHttpObj(resp, w)
 }
 
 

@@ -9,6 +9,7 @@ import uuid
 import base64
 import md5
 import sys
+import ssl
 from protocol import *
 
 KEFU_APP_ID = 1453
@@ -21,6 +22,7 @@ APP_SECRET = '0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1'
 HOST = "127.0.0.1"
 URL = "http://dev.api.gobelieve.io"
 
+SSL = True
 
 def _login(appid, app_secret, uid):
     url = URL + "/auth/grant"
@@ -45,8 +47,14 @@ def kefu_login(uid):
 
 def _connect_server(token, port):
     seq = 0
-    address = (HOST, port)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if SSL:
+        address = (HOST, 24430)
+        sock_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock = ssl.wrap_socket(sock_fd)
+    else:
+        address = (HOST, port)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
     print "connect address:", address
     sock.connect(address)
     auth = AuthenticationToken()
