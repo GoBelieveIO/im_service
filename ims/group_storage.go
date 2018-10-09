@@ -244,7 +244,8 @@ func (storage *GroupStorage) readGroupIndex() bool {
 		return false
 	}
 	defer file.Close()
-	data := make([]byte, 24*1000)
+	const INDEX_SIZE = 24
+	data := make([]byte, INDEX_SIZE*1000)
 
 	for {
 		n, err := file.Read(data)
@@ -254,9 +255,9 @@ func (storage *GroupStorage) readGroupIndex() bool {
 			}
 			break
 		}
-		n = n - n%24
+		n = n - n%INDEX_SIZE
 		buffer := bytes.NewBuffer(data[:n])
-		for i := 0; i < n/24; i++ {
+		for i := 0; i < n/INDEX_SIZE; i++ {
 			id := GroupID{}
 			var msg_id int64
 			binary.Read(buffer, binary.BigEndian, &id.appid)
