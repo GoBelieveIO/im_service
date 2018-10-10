@@ -176,7 +176,9 @@ func (client *GroupClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 				continue
 			}
 		}
-
+		if client.isSender(m, msg.DeviceID) {
+			m.flag |= MESSAGE_FLAG_SELF
+		}
 		client.EnqueueMessage(m)
 	}
 

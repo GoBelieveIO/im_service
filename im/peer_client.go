@@ -113,6 +113,9 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 				continue
 			}
 		}
+		if client.isSender(m, msg.DeviceID) {
+			m.flag |= MESSAGE_FLAG_SELF
+		}
 		msgs = append(msgs, m)
 	}
 

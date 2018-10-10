@@ -94,6 +94,9 @@ const MESSAGE_FLAG_UNPERSISTENT = 0x02
 //群组离线消息 MSG_OFFLINE使用
 const MESSAGE_FLAG_GROUP = 0x04
 
+//离线消息由当前登录的用户在当前设备发出
+const MESSAGE_FLAG_SELF = 0x08
+
 func init() {
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
 	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
