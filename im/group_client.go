@@ -92,6 +92,12 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 		log.Warningf("sender:%d is not group member", msg.sender)
 		return
 	}
+
+	if group.GetMemberMute(msg.sender) {
+		log.Warningf("sender:%d is mute in group", msg.sender)
+		return
+	}
+	
 	if group.super {
 		client.HandleSuperGroupMessage(msg)
 	} else {

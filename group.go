@@ -29,11 +29,11 @@ type Group struct {
 	appid   int64
 	super   bool //超大群
 	mutex   sync.Mutex
-	//key:成员id value:入群时间
-	members map[int64]int
+	//key:成员id value:入群时间|(mute<<31)
+	members map[int64]int64
 }
 
-func NewGroup(gid int64, appid int64, members map[int64]int) *Group {
+func NewGroup(gid int64, appid int64, members map[int64]int64) *Group {
 	group := new(Group)
 	group.appid = appid
 	group.gid = gid
@@ -42,7 +42,7 @@ func NewGroup(gid int64, appid int64, members map[int64]int) *Group {
 	return group
 }
 
-func NewSuperGroup(gid int64, appid int64, members map[int64]int) *Group {
+func NewSuperGroup(gid int64, appid int64, members map[int64]int64) *Group {
 	group := new(Group)
 	group.appid = appid
 	group.gid = gid
@@ -52,14 +52,14 @@ func NewSuperGroup(gid int64, appid int64, members map[int64]int) *Group {
 }
 
 
-func (group *Group) Members() map[int64]int {
+func (group *Group) Members() map[int64]int64 {
 	return group.members
 }
 
 
-func (group *Group) cloneMembers() map[int64]int {
+func (group *Group) cloneMembers() map[int64]int64 {
 	members := group.members
-	n := make(map[int64]int)
+	n := make(map[int64]int64)
 	for k, v := range members {
 		n[k] = v
 	}
@@ -73,7 +73,7 @@ func (group *Group) AddMember(uid int64, timestamp int) {
 	defer group.mutex.Unlock()
 
 	members := group.cloneMembers()
-	members[uid] = timestamp
+	members[uid] = int64(timestamp)
 	group.members = members
 }
 
@@ -89,6 +89,22 @@ func (group *Group) RemoveMember(uid int64) {
 	group.members = members
 }
 
+func (group *Group) SetMemberMute(uid int64, mute bool) {
+	group.mutex.Lock()
+	defer group.mutex.Unlock()
+
+	var m int64
+	if mute {
+		m = 1
+	} else {
+		m = 0
+	}
+
+	if val, ok := group.members[uid]; ok {
+		group.members[uid] = (val & 0x7FFFFFFF) | (m << 31)
+	}
+}
+
 func (group *Group) IsMember(uid int64) bool {
 	_, ok := group.members[uid]
 	return ok
@@ -96,7 +112,12 @@ func (group *Group) IsMember(uid int64) bool {
 
 func (group *Group) GetMemberTimestamp(uid int64) int {
 	ts, _ := group.members[uid]
-	return ts
+	return int(ts & 0x7FFFFFFF)
+}
+
+func (group *Group) GetMemberMute(uid int64) bool {
+	t, _ := group.members[uid]
+	return int((t >> 31)&0x01) != 0
 }
 
 func (group *Group) IsEmpty() bool {
@@ -198,21 +219,22 @@ func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
 	return groups, nil
 }
 
-func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int, error) {
-	stmtIns, err := db.Prepare("SELECT uid, timestamp FROM group_member WHERE group_id=?")
+func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int64, error) {
+	stmtIns, err := db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=?")
 	if err != nil {
 		log.Info("error:", err)
 		return nil, err
 	}
 
 	defer stmtIns.Close()
-	members := make(map[int64]int)
+	members := make(map[int64]int64)
 	rows, err := stmtIns.Query(group_id)
 	for rows.Next() {
 		var uid int64
-		var timestamp int
-		rows.Scan(&uid, &timestamp)
-		members[uid] = timestamp
+		var timestamp int64
+		var mute int64
+		rows.Scan(&uid, &timestamp, &mute)
+		members[uid] = timestamp|(mute<<31)
 	}
 	return members, nil
 }
