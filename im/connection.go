@@ -245,7 +245,7 @@ func (client *Connection) EnqueueMessages(msgs []*Message) bool {
 func (client *Connection) read() *Message {
 	if conn, ok := client.conn.(net.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
-		return ReceiveMessage(conn)
+		return ReceiveClientMessage(conn)
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		return ReadEngineIOMessage(conn)
 	}

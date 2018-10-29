@@ -121,6 +121,6 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 
 func ReadBinaryMesage(b []byte) *Message {
 	reader := bytes.NewReader(b)
-	return ReceiveMessage(reader)
+	return ReceiveClientMessage(reader)
 }
 

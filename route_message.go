@@ -102,7 +102,7 @@ func (amsg *AppMessage) FromData(buff []byte) bool {
 
 	var l int16
 	binary.Read(buffer, binary.BigEndian, &l)
-	if int(l) > buffer.Len() {
+	if int(l) > buffer.Len() || l < 0 {
 		return false
 	}
 
