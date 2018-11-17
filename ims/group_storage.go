@@ -350,9 +350,9 @@ func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]int64) {
 	log.Info("flush group index end:", end, " used:", end - begin)
 }
 
-func (storage *GroupStorage) ExecMessage(msg *Message, msgid int64) {
+func (storage *GroupStorage) execMessage(msg *Message, msgid int64) {
 	if msg.cmd == MSG_GROUP_IM_LIST {
 		off := msg.body.(*GroupOfflineMessage)
-		storage.SetLastGroupMessageID(off.appid, off.gid, msgid)
+		storage.setLastGroupMessageID(off.appid, off.gid, msgid)
 	}
 }

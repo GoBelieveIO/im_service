@@ -70,9 +70,15 @@ func (storage *Storage) NextMessageID() int64 {
 	return offset + int64(storage.block_NO)*BLOCK_SIZE
 }
 
+func (storage *Storage) execMessage(msg *Message, msgid int64) {
+	storage.PeerStorage.execMessage(msg, msgid)
+	storage.GroupStorage.execMessage(msg, msgid)
+}
+
 func (storage *Storage) ExecMessage(msg *Message, msgid int64) {
-	storage.PeerStorage.ExecMessage(msg, msgid)
-	storage.GroupStorage.ExecMessage(msg, msgid)
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	storage.execMessage(msg, msgid)
 }
 
 func (storage *Storage) SaveSyncMessageBatch(mb *MessageBatch) error {
@@ -125,18 +131,18 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 	}
 
 	storage.WriteMessage(storage.file, emsg.msg)
-	storage.ExecMessage(emsg.msg, emsg.msgid)
+	storage.execMessage(emsg.msg, emsg.msgid)
 	log.Info("save sync message:", emsg.msgid)
 	return nil
 }
 
-func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *MessageBatch {
+func (storage *Storage) LoadSyncMessagesInBackground(cursor int64) chan *MessageBatch {
 	c := make(chan *MessageBatch, 10)
 	go func() {
 		defer close(c)
 
-		block_NO := storage.getBlockNO(msgid)
-		offset := storage.getBlockOffset(msgid)
+		block_NO := storage.getBlockNO(cursor)
+		offset := storage.getBlockOffset(cursor)
 
 		n := block_NO
 		for {
@@ -182,7 +188,7 @@ func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *MessageB
 			const BATCH_COUNT = 5000
 			batch := &MessageBatch{msgs:make([]*Message, 0, BATCH_COUNT)}
 			for {
-				msgid, err := file.Seek(0, os.SEEK_CUR)
+				position, err := file.Seek(0, os.SEEK_CUR)
 				if err != nil {
 					log.Info("seek file err:", err)
 					break
@@ -191,7 +197,7 @@ func (storage *Storage) LoadSyncMessagesInBackground(msgid int64) chan *MessageB
 				if msg == nil {
 					break
 				}
-
+				msgid := storage.getMsgId(n, int(position))
 				if batch.first_id == 0 {
 					batch.first_id = msgid
 				}

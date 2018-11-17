@@ -554,15 +554,15 @@ func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]*UserIndex )
 	log.Info("flush peer index end:", end, " used:", end - begin)
 }
 
-func (storage *PeerStorage) ExecMessage(msg *Message, msgid int64) {
+
+
+
+func (storage *PeerStorage) execMessage(msg *Message, msgid int64) {
 	if msg.cmd == MSG_OFFLINE {
 		off := msg.body.(*OfflineMessage)
-		storage.SetLastMessageID(off.appid, off.receiver, msgid, msgid)
+		storage.setLastMessageID(off.appid, off.receiver, msgid, msgid)
 	} else if msg.cmd == MSG_OFFLINE_V2 {
 		off := msg.body.(*OfflineMessage2)
-		//注意defer的作用域是函数
-		storage.mutex.Lock()
-		defer storage.mutex.Unlock()
 		last_peer_id := msgid		
 		if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
 			_, last_peer_id = storage.getLastMessageID(off.appid, off.receiver)			
