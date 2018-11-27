@@ -32,6 +32,8 @@ func (client *RoomClient) Logout() {
 	if client.room_id > 0 {
 		channel := GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
+		route := app_route.FindOrAddRoute(client.appid)
+		route.RemoveRoomClient(client.room_id, client.Client())		
 	}
 }
 
