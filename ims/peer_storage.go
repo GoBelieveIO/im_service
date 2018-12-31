@@ -115,12 +115,11 @@ func (storage *PeerStorage) SetLastMessageID(appid int64, receiver int64, last_i
 
 
 //获取所有消息id大于sync_msgid的消息,
-//limit:0 表示无限制
-//消息超过2/3*limit后，只获取点对点消息
+//group_limit&limit:0 表示无限制
+//消息超过group_limit后，只获取点对点消息
 //总消息数限制在limit
-func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, sync_msgid int64,  limit int) ([]*EMessage, int64) {
+func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, sync_msgid int64,  group_limit int, limit int) ([]*EMessage, int64) {
 	var last_msgid int64
-	limit1 := 2*limit/3
 	last_id, _ := storage.GetLastMessageID(appid, receiver)
 	messages := make([]*EMessage, 0, 10)
 	for {
@@ -144,26 +143,18 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 				prev_msgid:off1.prev_msgid,
 				prev_peer_msgid:off1.prev_msgid,
 			}
-			
-			if last_msgid == 0 {
-				last_msgid = off.msgid
-			}
-			if off.msgid <= sync_msgid {
-				break
-			}
 		} else if msg.cmd == MSG_OFFLINE_V2 {
 			off = msg.body.(*OfflineMessage2)
-			if last_msgid == 0 {
-				last_msgid = off.msgid
-			}
-			if off.msgid <= sync_msgid {
-				break
-			}
-			
 		} else {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}
+		if last_msgid == 0 {
+			last_msgid = off.msgid
+		}
+		if off.msgid <= sync_msgid {
+			break
+		}		
 		
 		msg = storage.LoadMessage(off.msgid)
 		if msg == nil {
@@ -175,7 +166,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 			msg.cmd != MSG_CUSTOMER && 
 			msg.cmd != MSG_CUSTOMER_SUPPORT &&
 			msg.cmd != MSG_SYSTEM {
-			if limit1 > 0 && len(messages) >= limit1 {
+			if group_limit > 0 && len(messages) >= group_limit {
 				last_id = off.prev_peer_msgid
 			} else {
 				last_id = off.prev_msgid
@@ -190,7 +181,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 			break
 		}
 
-		if limit1 > 0 && len(messages) >= limit1 {
+		if group_limit > 0 && len(messages) >= group_limit {
 			last_id = off.prev_peer_msgid
 		} else {
 			last_id = off.prev_msgid

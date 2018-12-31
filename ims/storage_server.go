@@ -206,9 +206,9 @@ func main() {
 	}
 
 	config = read_storage_cfg(flag.Args()[0])
-	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t offline message limit:%d\n", 
+	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t group limit:%d offline message limit:%d\n", 
 		config.rpc_listen, config.storage_root, config.sync_listen,
-		config.master_address, config.is_push_system, config.limit)
+		config.master_address, config.is_push_system, config.group_limit, config.limit)
 	log.Infof("http listen address:%s", config.http_listen_address)
 	
 	storage = NewStorage(config.storage_root)
