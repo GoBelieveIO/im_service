@@ -23,11 +23,13 @@ import "strconv"
 import "log"
 import "github.com/richmonkey/cfg"
 
-//群离线消息数量限制,超过的部分会被丢弃
+//超级群离线消息数量限制,超过的部分会被丢弃
 const GROUP_OFFLINE_LIMIT = 100
 
-//离线消息返回的数量限制,超过2/3后丢弃普通群消息
-const PEER_OFFLINE_LIMIT = 3000
+//离线消息返回的数量限制
+const OFFLINE_DEFAULT_LIMIT = 3000
+
+const GROUP_OFFLINE_DEFAULT_LIMIT = 0
 
 type StorageConfig struct {
 	rpc_listen          string
@@ -38,6 +40,7 @@ type StorageConfig struct {
 	sync_listen         string
 	master_address      string
 	is_push_system      bool
+	group_limit         int  //普通群离线消息的数量限制
 	limit               int  //离线消息的数量限制
 }
 
@@ -97,7 +100,8 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.sync_listen = get_string(app_cfg, "sync_listen")
 	config.master_address = get_opt_string(app_cfg, "master_address")
 	config.is_push_system = get_opt_int(app_cfg, "is_push_system", 0) == 1
-	config.limit = int(get_opt_int(app_cfg, "limit", PEER_OFFLINE_LIMIT))
+	config.limit = int(get_opt_int(app_cfg, "limit", OFFLINE_DEFAULT_LIMIT))
+	config.group_limit = int(get_opt_int(app_cfg, "group_limit", GROUP_OFFLINE_DEFAULT_LIMIT))
 	return config
 }
 

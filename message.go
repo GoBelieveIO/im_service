@@ -94,6 +94,9 @@ const MESSAGE_FLAG_UNPERSISTENT = 0x02
 //群组离线消息 MSG_OFFLINE使用
 const MESSAGE_FLAG_GROUP = 0x04
 
+//离线消息由当前登录的用户在当前设备发出
+const MESSAGE_FLAG_SELF = 0x08
+
 func init() {
 	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
 	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
@@ -163,6 +166,26 @@ func init() {
 
 	message_descriptions[MSG_NOTIFICATION] = "MSG_NOTIFICATION"
 	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
+
+
+
+	external_messages[MSG_AUTH_TOKEN] = true;
+	external_messages[MSG_IM] = true;
+	external_messages[MSG_ACK] = true;
+	external_messages[MSG_GROUP_IM] = true;
+	external_messages[MSG_PING] = true;	
+	external_messages[MSG_PONG] = true;
+	external_messages[MSG_RT] = true;
+	external_messages[MSG_ENTER_ROOM] = true;
+	external_messages[MSG_LEAVE_ROOM] = true;
+	external_messages[MSG_ROOM_IM] = true;
+	external_messages[MSG_UNREAD_COUNT] = true;
+	external_messages[MSG_CUSTOMER] = true;
+	external_messages[MSG_CUSTOMER_SUPPORT] = true;
+	external_messages[MSG_SYNC] = true;
+	external_messages[MSG_SYNC_GROUP] = true;
+	external_messages[MSG_SYNC_KEY] = true;
+	external_messages[MSG_GROUP_SYNC_KEY] = true;
 }
 
 

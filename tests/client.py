@@ -22,7 +22,7 @@ APP_SECRET = '0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1'
 HOST = "127.0.0.1"
 URL = "http://dev.api.gobelieve.io"
 
-SSL = True
+SSL = False
 
 def _login(appid, app_secret, uid):
     url = URL + "/auth/grant"

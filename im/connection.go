@@ -44,6 +44,8 @@ type Connection struct {
 	tc     int32 //write channel timeout count
 	wt     chan *Message
 	lwt    chan int
+	//离线消息
+	pwt    chan []*Message
 	
 	//客户端协议版本号
 	version int
@@ -213,11 +215,37 @@ func (client *Connection) EnqueueMessage(msg *Message) bool {
 }
 
 
+
+func (client *Connection) EnqueueMessages(msgs []*Message) bool {
+	closed := atomic.LoadInt32(&client.closed)
+	if closed > 0 {
+		log.Infof("can't send messages to closed connection:%d", client.uid)
+		return false
+	}
+
+	tc := atomic.LoadInt32(&client.tc)
+	if tc > 0 {
+		log.Infof("can't send messages to blocked connection:%d", client.uid)
+		atomic.AddInt32(&client.tc, 1)
+		return false
+	}
+	select {
+	case client.pwt <- msgs:
+		return true
+	case <- time.After(60*time.Second):
+		atomic.AddInt32(&client.tc, 1)
+		log.Infof("send messages to pwt timed out:%d", client.uid)
+		return false
+	}
+}
+
+
+
 // 根据连接类型获取消息
 func (client *Connection) read() *Message {
 	if conn, ok := client.conn.(net.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
-		return ReceiveMessage(conn)
+		return ReceiveClientMessage(conn)
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		return ReadEngineIOMessage(conn)
 	}

@@ -181,6 +181,10 @@ func (storage *StorageFile) openReadFile(block_NO int) *os.File {
 	return file
 }
 
+func (storage *StorageFile) getMsgId(block_NO int, offset int) int64 {
+	return int64(block_NO)*BLOCK_SIZE + int64(offset)
+}
+
 func (storage *StorageFile) getBlockNO(msg_id int64) int {
 	return int(msg_id/BLOCK_SIZE)
 }

@@ -92,6 +92,12 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 		log.Warningf("sender:%d is not group member", msg.sender)
 		return
 	}
+
+	if group.GetMemberMute(msg.sender) {
+		log.Warningf("sender:%d is mute in group", msg.sender)
+		return
+	}
+	
 	if group.super {
 		client.HandleSuperGroupMessage(msg)
 	} else {
@@ -164,12 +170,21 @@ func (client *GroupClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
 		
-		//连接成功后的首次同步，自己发送的消息也下发给客户端
-		//过滤掉所有自己在当前设备发出的消息
-		if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
-			continue
+		if config.sync_self {
+			//连接成功后的首次同步，自己发送的消息也下发给客户端
+			//过滤掉所有自己在当前设备发出的消息
+			if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
+				continue
+			}
+		} else {
+			//过滤掉所有自己在当前设备发出的消息
+			if client.isSender(m, msg.DeviceID) {
+				continue
+			}
 		}
-
+		if client.isSender(m, msg.DeviceID) {
+			m.flag |= MESSAGE_FLAG_SELF
+		}
 		client.EnqueueMessage(m)
 	}
 

@@ -234,6 +234,37 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
 	}
 }
 
+func (group_manager *GroupManager) HandleMute(data string) {
+	arr := strings.Split(data, ",")
+	if len(arr) != 3 {
+		log.Info("message error:", data)
+		return
+	}
+	gid, err := strconv.ParseInt(arr[0], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+	uid, err := strconv.ParseInt(arr[1], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+	mute, err := strconv.ParseInt(arr[2], 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		return
+	}
+
+	group := group_manager.FindGroup(gid)
+	if group != nil {
+		group.SetMemberMute(uid, mute != 0)
+		log.Infof("set group member gid:%d uid:%d mute:%d", gid, uid, mute)
+	} else {
+		log.Infof("can't find group:%d\n", gid)
+	}
+}
+
 //保证action id的顺序性
 func (group_manager *GroupManager) parseAction(data string) (bool, int64, int64, string) {
 	arr := strings.SplitN(data, ":", 3)
@@ -276,7 +307,9 @@ func (group_manager *GroupManager) handleAction(data string, channel string) {
 			group_manager.HandleMemberRemove(content)
 		} else if channel == "group_upgrade" {
 			group_manager.HandleUpgrade(content)
-		} 
+		} else if channel == "group_member_mute" {
+			group_manager.HandleMute(content)
+		}
 		group_manager.action_id = action_id
 	}	
 }
@@ -396,7 +429,7 @@ func (group_manager *GroupManager) RunOnce() bool {
 
 	psc := redis.PubSubConn{c}
 	psc.Subscribe("group_create", "group_disband", "group_member_add",
-		"group_member_remove", "group_upgrade", group_manager.ping)
+		"group_member_remove", "group_upgrade", "group_member_mute", group_manager.ping)
 	
 	group_manager.checkActionID()
 	for {
@@ -406,7 +439,8 @@ func (group_manager *GroupManager) RunOnce() bool {
 				v.Channel == "group_disband" ||
 				v.Channel == "group_member_add"	||
 				v.Channel == "group_member_remove" ||
-				v.Channel == "group_upgrade" {
+				v.Channel == "group_upgrade" ||
+				v.Channel == "group_member_mute" {
 				group_manager.handleAction(string(v.Data), v.Channel)
 			} else if v.Channel == group_manager.ping {
 				//check dirty

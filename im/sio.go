@@ -51,7 +51,6 @@ func StartSocketIO(address string, tls_address string,
 	if err != nil {
 		log.Fatal(err)
 	}
-	server.SetMaxConnection(2000000)
 	
 	go func() {
 		for {
@@ -88,7 +87,7 @@ func handlerEngineIOClient(conn engineio.Conn) {
 }
 
 func SendEngineIOBinaryMessage(conn engineio.Conn, msg *Message) {
-	w, err := conn.NextWriter(engineio.MessageBinary)
+	w, err := conn.NextWriter(engineio.BINARY)
 	if err != nil {
 		log.Info("get next writer fail")
 		return
@@ -112,7 +111,7 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 		return nil
 	}
 	r.Close()
-	if t == engineio.MessageText {
+	if t == engineio.TEXT {
 		return nil
 	} else {
 		return ReadBinaryMesage(b)
@@ -121,6 +120,6 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 
 func ReadBinaryMesage(b []byte) *Message {
 	reader := bytes.NewReader(b)
-	return ReceiveMessage(reader)
+	return ReceiveClientMessage(reader)
 }
 

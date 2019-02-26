@@ -57,7 +57,6 @@ func (client *PeerClient) Logout() {
 	}
 }
 
-
 func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	if client.uid == 0 {
 		return
@@ -89,8 +88,11 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	ph := resp.(*PeerHistoryMessage)
 	messages := ph.Messages
 
+	msgs := make([]*Message, 0, len(messages) + 2)
+	
 	sk := &SyncKey{last_id}
-	client.EnqueueMessage(&Message{cmd:MSG_SYNC_BEGIN, body:sk})
+	msgs = append(msgs, &Message{cmd:MSG_SYNC_BEGIN, body:sk})
+	
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		log.Info("message:", msg.MsgID, Command(msg.Cmd))
@@ -98,13 +100,23 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
 
-		//连接成功后的首次同步，自己发送的消息也下发给客户端
-		//过滤掉所有自己在当前设备发出的消息
-		if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
-			continue
+		if config.sync_self {
+			//连接成功后的首次同步，自己发送的消息也下发给客户端
+			//之后的同步则过滤掉所有自己在当前设备发出的消息
+			//这是为了解决服务端已经发出消息，但是对发送端的消息ack丢失的问题
+			if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
+				continue
+			}
+		} else {
+			//过滤掉所有自己在当前设备发出的消息
+			if client.isSender(m, msg.DeviceID) {
+				continue
+			}
 		}
-		
-		client.EnqueueMessage(m)
+		if client.isSender(m, msg.DeviceID) {
+			m.flag |= MESSAGE_FLAG_SELF
+		}
+		msgs = append(msgs, m)
 	}
 
 
@@ -113,7 +125,9 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		log.Warningf("client last id:%d server last id:%d", last_id, ph.LastMsgID)
 	}
 
-	client.EnqueueMessage(&Message{cmd:MSG_SYNC_END, body:sk})
+	msgs = append(msgs, &Message{cmd:MSG_SYNC_END, body:sk})
+
+	client.EnqueueMessages(msgs)
 }
 
 func (client *PeerClient) HandleSyncKey(sync_key *SyncKey) {

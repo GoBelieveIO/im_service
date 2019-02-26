@@ -17,6 +17,7 @@ CREATE TABLE `group_member` (
   `uid` bigint(20) NOT NULL DEFAULT '0',
   `timestamp` int(11) DEFAULT NULL COMMENT '入群时间,单位：秒',
   `nickname` varchar(255) DEFAULT NULL COMMENT '群内昵称',
+  `mute` tinyint(1) DEFAULT '0' COMMENT '群内禁言',
   PRIMARY KEY (`group_id`,`uid`),
   KEY `idx_group_member_uid` (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;

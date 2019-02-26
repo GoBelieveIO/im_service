@@ -43,6 +43,8 @@ var message_creators map[int]MessageCreator = make(map[int]MessageCreator)
 type VersionMessageCreator func()IVersionMessage
 var vmessage_creators map[int]VersionMessageCreator = make(map[int]VersionMessageCreator)
 
+//true client->server
+var external_messages [256]bool;
 
 
 func WriteHeader(len int32, seq int32, cmd byte, version byte, flag byte, buffer io.Writer) {
@@ -86,7 +88,7 @@ func SendMessage(conn io.Writer, msg *Message) error {
 	return nil
 }
 
-func ReceiveLimitMessage(conn io.Reader, limit_size int) *Message {
+func ReceiveLimitMessage(conn io.Reader, limit_size int, external bool) *Message {
 	buff := make([]byte, 12)
 	_, err := io.ReadFull(conn, buff)
 	if err != nil {
@@ -99,6 +101,14 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int) *Message {
 		log.Info("invalid len:", length)
 		return nil
 	}
+
+	//0 <= cmd <= 255
+	//收到客户端非法消息，断开链接
+	if external && !external_messages[cmd] {
+		log.Warning("invalid external message cmd:", Command(cmd))
+		return nil
+	}
+	
 	buff = make([]byte, length)
 	_, err = io.ReadFull(conn, buff)
 	if err != nil {
@@ -121,12 +131,17 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int) *Message {
 
 
 func ReceiveMessage(conn io.Reader) *Message {
-	return ReceiveLimitMessage(conn, 32*1024)
+	return ReceiveLimitMessage(conn, 32*1024, false)
+}
+
+//接受客户端消息(external messages)
+func ReceiveClientMessage(conn io.Reader) *Message {
+	return ReceiveLimitMessage(conn, 32*1024, true)
 }
 
 //消息大小限制在1M
-func ReceiveStorageMessage(conn io.Reader) *Message {
-	return ReceiveLimitMessage(conn, 1024*1024)
+func ReceiveStorageSyncMessage(conn io.Reader) *Message {
+	return ReceiveLimitMessage(conn, 32*1024*1024, false)
 }
 
 
