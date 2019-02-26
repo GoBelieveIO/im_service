@@ -51,19 +51,20 @@
   version = "v2.0.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:324591cd9122f94cc39a87bd44ec71153672c239e2cff5743bfad96b60be3749"
+  digest = "1:6b7e9b1e2f944a0c84f29943f705954d2d8cfbf6477c37a10d0c80acdbc2445f"
   name = "github.com/googollee/go-engine.io"
   packages = [
     ".",
-    "message",
-    "parser",
-    "polling",
+    "base",
+    "packet",
+    "payload",
     "transport",
-    "websocket",
+    "transport/polling",
+    "transport/websocket",
   ]
   pruneopts = "UT"
-  revision = "3c3145340e676971209507021a435520c2700d92"
+  revision = "cc5b8c07e074e97f6bc6f4c6dbc03cf06267e6e0"
+  version = "v1.4.1"
 
 [[projects]]
   digest = "1:c79fb010be38a59d657c48c6ba1d003a8aa651fa56b579d959d74573b7dff8e1"
