@@ -22,6 +22,9 @@ package main
 import (
 	log "github.com/golang/glog"
 	"github.com/googollee/go-engine.io"
+	"github.com/googollee/go-engine.io/transport"
+	"github.com/googollee/go-engine.io/transport/websocket"
+	"github.com/googollee/go-engine.io/transport/polling"
 	"io/ioutil"
 	"net/http"
 	"bytes"
@@ -45,9 +48,22 @@ func (s *SIOServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.server.ServeHTTP(w, req)
 }
 
+//enable cors
+func CheckOrigin(r *http.Request) bool {
+	return true
+}
+
 func StartSocketIO(address string, tls_address string, 
 	cert_file string, key_file string) {
-	server, err := engineio.NewServer(nil)
+
+	options := &engineio.Options{}
+	trans := &websocket.Transport{CheckOrigin:CheckOrigin}
+	options.Transports = []transport.Transport{
+		polling.Default,
+		trans,
+	}
+
+	server, err := engineio.NewServer(options)
 	if err != nil {
 		log.Fatal(err)
 	}
