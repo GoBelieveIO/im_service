@@ -243,6 +243,7 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 
 	batch_count := limit/BATCH_SIZE
 	if batch_count == 0 {
+		//as if default limit==BATCH_SIZE
 		batch_count = 1
 	}
 	
@@ -261,18 +262,21 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		if msg.cmd != MSG_OFFLINE_V3 {
 			break
 		}
+		off3 := msg.body.(*OfflineMessage3)		
+		if off3.msgid <= sync_msgid {
+			break
+		}
+		
 		batch_ids = append(batch_ids, last_batch_id)		
-		off3 := msg.body.(*OfflineMessage3)
 		last_batch_id = off3.prev_batch_msgid
 	}
 
 	var last_id int64
-	if len(batch_ids) > batch_count {
-		index := len(batch_ids) - 1 - batch_count
+	if len(batch_ids) >= batch_count {
+		index := len(batch_ids) - batch_count
 		last_id = batch_ids[index]
-		//as if < (batch_count+1)*BATCH_SIZE
+		//as if <= batch_count*BATCH_SIZE
 		limit = 0
-		
 	} else if msg_index != nil {
 		last_id = msg_index.last_id
 	}
