@@ -126,8 +126,13 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	}
 
 	msgs = append(msgs, &Message{cmd:MSG_SYNC_END, body:sk})
-
+	
 	client.EnqueueMessages(msgs)
+	
+	if ph.HasMore {
+		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{ph.LastMsgID+1}}
+		client.EnqueueMessage(notify)
+	}
 }
 
 func (client *PeerClient) HandleSyncKey(sync_key *SyncKey) {

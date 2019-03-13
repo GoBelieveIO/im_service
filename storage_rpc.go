@@ -45,6 +45,7 @@ type HistoryMessage struct {
 type PeerHistoryMessage struct {
 	Messages []*HistoryMessage
 	LastMsgID int64
+	HasMore   bool
 }
 
 type GroupHistoryMessage PeerHistoryMessage

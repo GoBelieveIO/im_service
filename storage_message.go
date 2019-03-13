@@ -45,8 +45,11 @@ const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
 
 //内部文件存储使用
+//个人消息队列 代替MSG_OFFLINE_V2
+const MSG_OFFLINE_V3 = 249
 
 //个人消息队列 代替MSG_OFFLINE
+//deprecated  兼容性
 const MSG_OFFLINE_V2 = 250  
 
 //im实例使用
@@ -78,7 +81,7 @@ func init() {
 	message_creators[MSG_GET_OFFLINE_COUNT] = func()IMessage{return new(LoadOffline)}
 	message_creators[MSG_GET_GROUP_OFFLINE_COUNT] = func()IMessage{return new(LoadGroupOffline)}
 	
-
+	message_creators[MSG_OFFLINE_V3] = func()IMessage{return new (OfflineMessage3)}
 	message_creators[MSG_OFFLINE_V2] = func()IMessage{return new (OfflineMessage2)}
 	message_creators[MSG_PENDING_GROUP_MESSAGE] = func()IMessage{return new (PendingGroupMessage)}
 	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
@@ -104,7 +107,8 @@ func init() {
 	message_descriptions[MSG_STORAGE_SYNC_BEGIN] = "MSG_STORAGE_SYNC_BEGIN"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE] = "MSG_STORAGE_SYNC_MESSAGE"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
-
+	
+	message_descriptions[MSG_OFFLINE_V3] = "MSG_OFFLINE_V3"	
 	message_descriptions[MSG_OFFLINE_V2] = "MSG_OFFLINE_V2"	
 	message_descriptions[MSG_PENDING_GROUP_MESSAGE] = "MSG_PENDING_GROUP_MESSAGE"
 	message_descriptions[MSG_GROUP_IM_LIST] = "MSG_GROUP_IM_LIST"
@@ -298,6 +302,48 @@ func (off *OfflineMessage2) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.prev_peer_msgid)	
 	return true
 }
+
+
+type OfflineMessage3 struct {
+	appid    int64
+	receiver int64
+	msgid    int64      //消息本体的id
+	device_id int64
+	seq_id   int64      //个人消息队列的消息序号
+	prev_msgid  int64 	//个人消息队列(点对点消息，群组消息)
+	prev_peer_msgid int64 //点对点消息队列
+	prev_batch_msgid int64 //0<-1000<-2000<-3000...构成一个消息队列
+}
+
+
+func (off *OfflineMessage3) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, off.appid)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
+	binary.Write(buffer, binary.BigEndian, off.msgid)
+	binary.Write(buffer, binary.BigEndian, off.device_id)
+	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
+	binary.Write(buffer, binary.BigEndian, off.prev_peer_msgid)
+	binary.Write(buffer, binary.BigEndian, off.prev_batch_msgid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (off *OfflineMessage3) FromData(buff []byte) bool {
+	if len(buff) < 56 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &off.appid)
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
+	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	binary.Read(buffer, binary.BigEndian, &off.device_id)
+	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
+	binary.Read(buffer, binary.BigEndian, &off.prev_peer_msgid)
+	binary.Read(buffer, binary.BigEndian, &off.prev_batch_msgid)
+	return true
+}
+
 
 
 type MessageACKIn struct {
