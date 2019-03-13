@@ -309,7 +309,6 @@ type OfflineMessage3 struct {
 	receiver int64
 	msgid    int64      //消息本体的id
 	device_id int64
-	seq_id   int64      //个人消息队列的消息序号
 	prev_msgid  int64 	//个人消息队列(点对点消息，群组消息)
 	prev_peer_msgid int64 //点对点消息队列
 	prev_batch_msgid int64 //0<-1000<-2000<-3000...构成一个消息队列
