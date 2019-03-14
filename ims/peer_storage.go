@@ -30,6 +30,7 @@ import log "github.com/golang/glog"
 
 
 const BATCH_SIZE = 1000
+const PEER_INDEX_FILE_NAME = "peer_index.v2"
 
 type UserID struct {
 	appid  int64
@@ -665,7 +666,7 @@ func (storage *PeerStorage) repairPeerIndex() {
 
 
 func (storage *PeerStorage) readPeerIndex() bool {
-	path := fmt.Sprintf("%s/peer_index", storage.root)
+	path := fmt.Sprintf("%s/%s", storage.root, PEER_INDEX_FILE_NAME)
 	log.Info("read message index path:", path)
 	file, err := os.Open(path)
 	if err != nil {
@@ -708,7 +709,7 @@ func (storage *PeerStorage) readPeerIndex() bool {
 }
 
 func (storage *PeerStorage) removePeerIndex() {
-	path := fmt.Sprintf("%s/peer_index", storage.root)
+	path := fmt.Sprintf("%s/%s", storage.root, PEER_INDEX_FILE_NAME)
 	err := os.Remove(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -777,7 +778,7 @@ func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]*UserIndex )
 		log.Info("sync file err:", err)
 	}
 
-	path2 := fmt.Sprintf("%s/peer_index", storage.root)
+	path2 := fmt.Sprintf("%s/%s", storage.root, PEER_INDEX_FILE_NAME)
 	err = os.Rename(path, path2)
 	if err != nil {
 		log.Fatal("rename peer index file err:", err)
