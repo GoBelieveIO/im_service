@@ -69,11 +69,7 @@
 [[constraint]]
   name = "google.golang.org/grpc"
   version = "1.14.0"
-
-[prune]
-  go-tests = true
-  unused-packages = true
-
+  source = "https://github.com/grpc/grpc-go.git"
 
 [[constraint]]
   name = "github.com/gorilla/websocket"
@@ -82,4 +78,9 @@
 [[constraint]]
   name = "github.com/googollee/go-engine.io"
   revision = "3c3145340e676971209507021a435520c2700d92"
+
+
+[prune]
+  go-tests = true
+  unused-packages = true
 

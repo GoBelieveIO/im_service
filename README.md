@@ -20,47 +20,17 @@
 
    git clone https://github.com/GoBelieveIO/im_service.git
 
-3. 编译proto文件（可选）
+3. 安装依赖
 
    cd im_service
 
-   //注意需要翻墙
-
-   go get google.golang.org/grpc
-
-   go get -u github.com/golang/protobuf/{proto,protoc-gen-go}
-
-   export PATH=$PATH:$GOPATH/bin
-
-   protoc -Irpc/ rpc/rpc.proto --go_out=plugins=grpc:rpc
-
-   python -m grpc.tools.protoc -Irpc --python_out=rpc/ --grpc_python_out=rpc/ rpc/rpc.proto
+   dep ensure
 
 4. 编译
 
    cd im_service
     
    mkdir bin
-    
-   go get github.com/bitly/go-simplejson
-    
-   go get github.com/golang/glog
-    
-   go get github.com/go-sql-driver/mysql
-
-   go get github.com/gomodule/redigo/redis
-    
-   go get github.com/googollee/go-engine.io
-    
-   go get github.com/richmonkey/cfg
-    
-   go get github.com/importcjj/sensitive
-   
-   go get github.com/valyala/gorpc
-    
-   //注意需要翻墙(可选)
-    
-   go get google.golang.org/grpc
     
    make install
     
