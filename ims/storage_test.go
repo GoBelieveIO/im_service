@@ -95,7 +95,7 @@ func Test_SyncBatch(t *testing.T) {
 	hasMore := true
 	loop := 0
 	for hasMore {
-		messages, last_msgid, m := storage.LoadHistoryMessagesV3(appid, receiver, last_id, 0, 1000)
+		messages, last_msgid, m := storage.LoadHistoryMessagesV3(appid, receiver, last_id, 1000, 4000)
 		latest := messages[0]
 		im2 := latest.msg.body.(*IMMessage)
 		log.Println("loop:", loop, "sender:", im2.sender, " receiver:", im2.receiver, " content:", string(im2.content))

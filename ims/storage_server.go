@@ -206,10 +206,20 @@ func main() {
 	}
 
 	config = read_storage_cfg(flag.Args()[0])
-	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t group limit:%d offline message limit:%d\n", 
+	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t group limit:%d offline message limit:%d hard limit:%d\n", 
 		config.rpc_listen, config.storage_root, config.sync_listen,
-		config.master_address, config.is_push_system, config.group_limit, config.limit)
+		config.master_address, config.is_push_system, config.group_limit,
+		config.limit, config.hard_limit)
 	log.Infof("http listen address:%s", config.http_listen_address)
+
+	if config.limit == 0 {
+		log.Error("config limit is 0")
+		return
+	}
+	if config.hard_limit > 0 && config.hard_limit/config.limit < 2 {
+		log.Errorf("config limit:%d, hard limit:%d invalid, hard limit/limit must gte 2", config.limit, config.hard_limit)
+		return
+	}
 	
 	storage = NewStorage(config.storage_root)
 	

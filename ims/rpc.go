@@ -24,7 +24,7 @@ import "sync/atomic"
 
 func SyncMessage(addr string, sync_key *SyncHistory) *PeerHistoryMessage {
 	atomic.AddInt64(&server_summary.nrequests, 1)		
-	messages, last_msgid, hasMore := storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, config.group_limit, config.limit)
+	messages, last_msgid, hasMore := storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, config.limit, config.hard_limit)
 	
 	historyMessages := make([]*HistoryMessage, 0, 10)
 	for _, emsg := range(messages) {

@@ -230,7 +230,10 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 }
 
 //加载离线消息
-func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, sync_msgid int64,  group_limit int, limit int) ([]*EMessage, int64, bool) {
+//limit 单次加载限制
+//hard_limit 总量限制
+//hard_limit == 0 or ( hard_limit >= BATCH_SIZE and hard_limit > limit)
+func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, sync_msgid int64, limit int, hard_limit int) ([]*EMessage, int64, bool) {
 	var last_msgid int64
 	var last_offline_msgid int64
 	
@@ -241,6 +244,8 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		last_batch_id = msg_index.last_batch_id
 	}
 
+	hard_batch_count := hard_limit/BATCH_SIZE
+	
 	batch_count := limit/BATCH_SIZE
 	if batch_count == 0 {
 		//as if default limit==BATCH_SIZE
@@ -269,24 +274,34 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		
 		batch_ids = append(batch_ids, last_batch_id)		
 		last_batch_id = off3.prev_batch_msgid
+
+		if hard_batch_count > 0 && len(batch_ids) >= hard_batch_count {
+			break
+		}
 	}
 
+	//只获取点对点消息
+	var is_peer bool
 	var last_id int64
-	if len(batch_ids) >= batch_count {
+	if hard_batch_count > 0 && len(batch_ids) >= hard_batch_count && hard_batch_count >= batch_count {
 		index := len(batch_ids) - batch_count
 		last_id = batch_ids[index]
-		//as if <= batch_count*BATCH_SIZE
-		limit = 0
+		//离线消息总数超过hard_limit时，首先加载数量不超过limit的点对点消息
+		//尽量保证点对点消息的投递
+		is_peer = true
+	} else if len(batch_ids) >= batch_count {
+		index := len(batch_ids) - batch_count
+		last_id = batch_ids[index]
 	} else if msg_index != nil {
 		last_id = msg_index.last_id
 	}
 	
 	messages := make([]*EMessage, 0, 10)
 	for {
-		if last_id == 0 {
+		if last_id <= sync_msgid {
 			break
 		}
-
+		
 		msg := storage.LoadMessage(last_id)
 		if msg == nil {
 			break
@@ -337,7 +352,11 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 			msg.cmd != MSG_CUSTOMER && 
 			msg.cmd != MSG_CUSTOMER_SUPPORT &&
 			msg.cmd != MSG_SYSTEM {
-			last_id = off.prev_msgid
+			if is_peer {
+				last_id = off.prev_peer_msgid
+			} else {
+				last_id = off.prev_msgid
+			}
 			continue
 		}
 
@@ -347,8 +366,12 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		if limit > 0 && len(messages) >= limit {
 			break
 		}
-		
-		last_id = off.prev_msgid
+
+		if is_peer {
+			last_id = off.prev_peer_msgid
+		} else {
+			last_id = off.prev_msgid
+		}
 	}
 
 	if len(messages) > 1000 {
@@ -358,14 +381,14 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 
 	var hasMore bool
 	if msg_index != nil && last_offline_msgid > 0 &&
-		last_offline_msgid < msg_index.last_id && len(messages) > 0 {
+		last_offline_msgid < msg_index.last_id {
 		hasMore = true
 	}
 
-	log.Infof("appid:%d uid:%d sync msgid:%d history message loaded:%d %d, last_id:%d, %d last batch id:%d last seq id:%d has more:%t",
+	log.Infof("appid:%d uid:%d sync msgid:%d history message loaded:%d %d, last_id:%d, %d last batch id:%d last seq id:%d has more:%t is peer:%t",
 		appid, receiver, sync_msgid, len(messages), last_msgid,
 		last_offline_msgid, msg_index.last_id, msg_index.last_batch_id,
-		msg_index.last_seq_id, hasMore)
+		msg_index.last_seq_id, hasMore, is_peer)
 	
 	return messages, last_msgid, hasMore
 }

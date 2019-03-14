@@ -31,6 +31,9 @@ const OFFLINE_DEFAULT_LIMIT = 3000
 
 const GROUP_OFFLINE_DEFAULT_LIMIT = 0
 
+//unlimit
+const OFFLINE_DEFAULT_HARD_LIMIT = 0
+
 type StorageConfig struct {
 	rpc_listen          string
 	storage_root        string
@@ -41,7 +44,8 @@ type StorageConfig struct {
 	master_address      string
 	is_push_system      bool
 	group_limit         int  //普通群离线消息的数量限制
-	limit               int  //离线消息的数量限制
+	limit               int  //单次离线消息的数量限制
+	hard_limit          int  //离线消息总的数量限制
 }
 
 func get_int(app_cfg map[string]string, key string) int64 {
@@ -102,6 +106,7 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.is_push_system = get_opt_int(app_cfg, "is_push_system", 0) == 1
 	config.limit = int(get_opt_int(app_cfg, "limit", OFFLINE_DEFAULT_LIMIT))
 	config.group_limit = int(get_opt_int(app_cfg, "group_limit", GROUP_OFFLINE_DEFAULT_LIMIT))
+	config.hard_limit = int(get_opt_int(app_cfg, "hard_limit", OFFLINE_DEFAULT_HARD_LIMIT))
 	return config
 }
 
