@@ -42,12 +42,17 @@ type Config struct {
 	http_listen_address string
 	rpc_listen_address  string
 	
-	//engine io
+	//engine io listen address
+	//todo remove engine io
 	socket_io_address   string
-	
 	tls_address         string
+	
 	cert_file           string
 	key_file            string
+
+	//websocket listen address
+	ws_address          string
+	wss_address         string
 
 	storage_rpc_addrs   []string
 	group_storage_rpc_addrs   []string	
@@ -121,8 +126,13 @@ func read_cfg(cfg_path string) *Config {
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
 	config.socket_io_address = get_string(app_cfg, "socket_io_address")
 	config.tls_address = get_opt_string(app_cfg, "tls_address")
+
+	config.ws_address = get_string(app_cfg, "ws_address")
+	config.wss_address = get_opt_string(app_cfg, "wss_address")
+	
 	config.cert_file = get_opt_string(app_cfg, "cert_file")
 	config.key_file = get_opt_string(app_cfg, "key_file")
+
 	
 	config.kefu_appid = get_opt_int(app_cfg, "kefu_appid")
 

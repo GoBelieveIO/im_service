@@ -226,6 +226,7 @@
     "github.com/googollee/go-engine.io/transport/polling",
     "github.com/googollee/go-engine.io/transport/websocket",
     "github.com/gorilla/mux",
+    "github.com/gorilla/websocket",
     "github.com/importcjj/sensitive",
     "github.com/richmonkey/cfg",
     "github.com/valyala/gorpc",

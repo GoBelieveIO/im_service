@@ -25,6 +25,7 @@ import "sync"
 import "sync/atomic"
 import log "github.com/golang/glog"
 import "github.com/googollee/go-engine.io"
+import "github.com/gorilla/websocket"
 import "container/list"
 
 const CLIENT_TIMEOUT = (60 * 6)
@@ -248,6 +249,9 @@ func (client *Connection) read() *Message {
 		return ReceiveClientMessage(conn)
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		return ReadEngineIOMessage(conn)
+	} else if conn, ok := client.conn.(*websocket.Conn); ok {
+		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
+		return ReadWebsocketMessage(conn)
 	}
 	return nil
 }
@@ -268,6 +272,18 @@ func (client *Connection) send(msg *Message) {
 		}
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		SendEngineIOBinaryMessage(conn, msg)
+	} else if conn, ok := client.conn.(*websocket.Conn); ok {
+		tc := atomic.LoadInt32(&client.tc)
+		if tc > 0 {
+			log.Info("can't write data to blocked websocket")
+			return
+		}
+		conn.SetWriteDeadline(time.Now().Add(60 * time.Second))
+		err := SendWebsocketBinaryMessage(conn, msg)
+		if err != nil {
+			atomic.AddInt32(&client.tc, 1)
+			log.Info("send msg:", Command(msg.cmd),  " websocket err:", err)
+		}
 	}
 }
 
@@ -277,6 +293,8 @@ func (client *Connection) close() {
 		conn.Close()
 	} else if conn, ok := client.conn.(engineio.Conn); ok {
 		//bug:https://github.com/googollee/go-engine.io/issues/34
+		conn.Close()
+	} else if conn, ok := client.conn.(*websocket.Conn); ok {
 		conn.Close()
 	}
 }

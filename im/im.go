@@ -507,6 +507,7 @@ func main() {
 	
 	log.Infof("socket io address:%s tls_address:%s cert file:%s key file:%s",
 		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
+	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
 	log.Info("group deliver count:", config.group_deliver_count)
 	log.Info("sync self:", config.sync_self)
 	
@@ -598,6 +599,8 @@ func main() {
 	StartRPCServer(config.rpc_listen_address)
 
 	go StartSocketIO(config.socket_io_address, config.tls_address, 
+		config.cert_file, config.key_file)
+	go StartWSServer(config.ws_address, config.wss_address, 
 		config.cert_file, config.key_file)
 
 	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
