@@ -22,9 +22,6 @@ package main
 import (
 	log "github.com/golang/glog"
 	"github.com/googollee/go-engine.io"
-	"github.com/googollee/go-engine.io/transport"
-	wb "github.com/googollee/go-engine.io/transport/websocket"
-	"github.com/googollee/go-engine.io/transport/polling"
 	"github.com/gorilla/websocket"
 	"io/ioutil"
 	"net/http"
@@ -49,22 +46,11 @@ func (s *SIOServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	s.server.ServeHTTP(w, req)
 }
 
-//enable cors
-func CheckOrigin(r *http.Request) bool {
-	return true
-}
 
 func StartSocketIO(address string, tls_address string, 
 	cert_file string, key_file string) {
-
-	options := &engineio.Options{}
-	trans := &wb.Transport{CheckOrigin:CheckOrigin}
-	options.Transports = []transport.Transport{
-		polling.Default,
-		trans,
-	}
-
-	server, err := engineio.NewServer(options)
+	
+	server, err := engineio.NewServer(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -104,12 +90,12 @@ func handlerEngineIOClient(conn engineio.Conn) {
 }
 
 func SendEngineIOBinaryMessage(conn engineio.Conn, msg *Message) {
-	w, err := conn.NextWriter(engineio.BINARY)
+	w, err := conn.NextWriter(engineio.MessageBinary)
 	if err != nil {
 		log.Info("get next writer fail")
 		return
 	}
-	log.Info("message version:", msg.version)
+	log.Info("message version:", msg.version, msg.cmd)
 	err = SendMessage(w, msg)
 	if err != nil {
 		log.Info("engine io write error")
@@ -128,7 +114,7 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 		return nil
 	}
 	r.Close()
-	if t == engineio.TEXT {
+	if t == engineio.MessageText {
 		return nil
 	} else {
 		return ReadBinaryMesage(b)
@@ -142,7 +128,14 @@ func ReadBinaryMesage(b []byte) *Message {
 
 
 
+
 //websocket server
+
+func CheckOrigin(r *http.Request) bool {
+	// allow all connections by default
+	return true
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
