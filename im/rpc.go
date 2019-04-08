@@ -476,7 +476,10 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request){
 		return
 	}
 
-	last_id := GetSyncKey(appid, uid)
+	last_id, err := strconv.ParseInt(m.Get("sync_key"), 10, 64)
+	if err != nil {
+		last_id = GetSyncKey(appid, uid)		
+	}
 	sync_key := SyncHistory{AppID:appid, Uid:uid, LastMsgID:last_id}
 	
 	dc := GetStorageRPCClient(uid)
@@ -490,7 +493,7 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request){
 	}
 	count := resp.(int64)
 
-	log.Infof("get offline appid:%d uid:%d count:%d", appid, uid, count)
+	log.Infof("get offline appid:%d uid:%d sync_key:%d count:%d", appid, uid, last_id, count)
 	obj := make(map[string]interface{})
 	obj["count"] = count
 	WriteHttpObj(obj, w)

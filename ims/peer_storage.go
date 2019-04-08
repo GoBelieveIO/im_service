@@ -71,13 +71,14 @@ func (storage *PeerStorage) SavePeerMessage(appid int64, uid int64, device_id in
 	last_batch_id := user_index.last_batch_id
 	last_seq_id := user_index.last_seq_id
 	
-	off := &OfflineMessage3{appid:appid, receiver:uid, msgid:msgid, device_id:device_id, prev_msgid:last_id, prev_peer_msgid:last_peer_id, prev_batch_msgid:last_batch_id}
+	off := &OfflineMessage4{appid:appid, receiver:uid, msgid:msgid, device_id:device_id, seq_id:last_seq_id + 1,
+		prev_msgid:last_id, prev_peer_msgid:last_peer_id, prev_batch_msgid:last_batch_id}
 	
 	var flag int
 	if storage.isGroupMessage(msg) {
 		flag = MESSAGE_FLAG_GROUP
 	}
-	m := &Message{cmd:MSG_OFFLINE_V3, flag:flag, body:off}
+	m := &Message{cmd:MSG_OFFLINE_V4, flag:flag, body:off}
 	last_id = storage.saveMessage(m)
 
 	if !storage.isGroupMessage(msg) {
@@ -176,6 +177,16 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 				device_id:off3.device_id,
 				prev_msgid:off3.prev_msgid,
 				prev_peer_msgid:off3.prev_peer_msgid,
+			}
+		} else if msg.cmd == MSG_OFFLINE_V4 {
+			off4 := msg.body.(*OfflineMessage4)
+			off = &OfflineMessage2{
+				appid:off4.appid,
+				receiver:off4.receiver,
+				msgid:off4.msgid,
+				device_id:off4.device_id,
+				prev_msgid:off4.prev_msgid,
+				prev_peer_msgid:off4.prev_peer_msgid,
 			}
 		} else {
 			log.Warning("invalid message cmd:", msg.cmd)
@@ -330,7 +341,17 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 				device_id:off3.device_id,
 				prev_msgid:off3.prev_msgid,
 				prev_peer_msgid:off3.prev_msgid,
-			}			
+			}
+		} else if msg.cmd == MSG_OFFLINE_V4 {
+			off4 := msg.body.(*OfflineMessage4)
+			off = &OfflineMessage2{
+				appid:off4.appid,
+				receiver:off4.receiver,
+				msgid:off4.msgid,
+				device_id:off4.device_id,
+				prev_msgid:off4.prev_msgid,
+				prev_peer_msgid:off4.prev_peer_msgid,
+			}
 		} else {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
@@ -425,6 +446,11 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 			msgid = off.msgid
 			device_id = off.device_id
 			prev_msgid = off.prev_msgid
+		} else if msg.cmd == MSG_OFFLINE_V4 {
+			off := msg.body.(*OfflineMessage4)
+			msgid = off.msgid
+			device_id = off.device_id
+			prev_msgid = off.prev_msgid
 		} else {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
@@ -485,42 +511,81 @@ func (client *PeerStorage) isSender(msg *Message, appid int64, uid int64) bool {
 
 
 func (storage *PeerStorage) GetNewCount(appid int64, uid int64, last_received_id int64) int {
-	last_id, _ := storage.GetLastMessageID(appid, uid)
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+	
+	user_index := storage.getPeerIndex(appid, uid)
+	last_seq_id := user_index.last_seq_id
 
-	count := 0
-	log.Infof("last id:%d last received id:%d", last_id, last_received_id)
-
-	msgid := last_id
-	for ; msgid > 0; {
-		msg := storage.LoadMessage(msgid)
-		if msg == nil {
-			log.Warningf("load message:%d error\n", msgid)
-			break
-		}
-		if msg.cmd != MSG_OFFLINE {
-			log.Warning("invalid message cmd:", Command(msg.cmd))
-			break
-		}
-		off := msg.body.(*OfflineMessage)
-
-		if off.msgid == 0 || off.msgid <= last_received_id {
-			break
-		}
-
-		msg = storage.LoadMessage(off.msgid)
-		if msg == nil {
-			break
-		}
-
-		if !storage.isSender(msg, appid, uid) {
-			count += 1
-			break
-		}
-		msgid = off.prev_msgid
+	if last_received_id == 0 {
+		return int(last_seq_id)
+	}
+	
+	blockNO := storage.getBlockNO(last_received_id)
+	blockOffSet := storage.getBlockOffset(last_received_id)
+	
+	file := storage.getFile(blockNO)
+	if file == nil {
+		log.Warning("can not get file", blockNO)
+		return 0
 	}
 
-	return count
+	_, err := file.Seek(int64(blockOffSet), os.SEEK_SET)
+	if err != nil {
+		log.Warning("seek file err:", err)
+		return 0
+	}
+	
+	m := storage.ReadMessage(file)
+	if m == nil {
+		log.Warning("read message failure")
+		return 0
+	}
+
+	off_m := storage.ReadMessage(file)
+	if off_m == nil {
+		file = storage.getFile(blockNO + 1)
+		if file == nil {
+			log.Warning("can not get file", blockNO + 1)			
+			return 0;
+		}
+
+		_, err := file.Seek(HEADER_SIZE, os.SEEK_SET)		
+		if err != nil {
+			log.Warning("seek file err:", err)
+			return 0
+		}
+
+		off_m = storage.ReadMessage(file)
+		if off_m == nil {
+			log.Warning("read message failure")
+			return 0
+		}
+	}
+
+	if off_m.cmd != MSG_OFFLINE_V4 {
+		log.Warning("msg cmd:", Command(off_m.cmd))
+		return 0;
+	}
+
+	off := off_m.body.(*OfflineMessage4)
+
+	if off.msgid != last_received_id {
+		log.Warning("invalid offline message:", off.msgid, last_received_id)
+		return 0
+	}
+
+	if off.appid != appid || off.receiver != uid {
+		log.Warningf("invalid appid %d != %d or uid %d != %d", off.appid, appid, off.receiver, uid)
+		return 0
+	}
+	if last_seq_id < off.seq_id {
+		return 0		
+	}
+	
+	return int(last_seq_id - off.seq_id)
 }
+
 
 func (storage *PeerStorage) createPeerIndex() {
 	log.Info("create message index begin:", time.Now().UnixNano())
@@ -579,6 +644,22 @@ func (storage *PeerStorage) createPeerIndex() {
 				
 				ui := &UserIndex{msgid, last_peer_id, last_batch_id, last_seq_id}
 				storage.setPeerIndex(off.appid, off.receiver, ui)
+			} else if msg.cmd == MSG_OFFLINE_V4 {
+				off := msg.body.(*OfflineMessage4)
+				last_peer_id := msgid
+
+				index := storage.getPeerIndex(off.appid, off.receiver)
+				if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
+					last_peer_id = index.last_peer_id
+				}
+				last_batch_id := index.last_batch_id
+				last_seq_id := index.last_seq_id + 1
+				if last_seq_id%BATCH_SIZE == 0 {
+					last_batch_id = msgid
+				}
+				
+				ui := &UserIndex{msgid, last_peer_id, last_batch_id, last_seq_id}
+				storage.setPeerIndex(off.appid, off.receiver, ui)				
 			}
 		}
 
@@ -643,6 +724,21 @@ func (storage *PeerStorage) repairPeerIndex() {
 				storage.setPeerIndex(off.appid, off.receiver, ui)				
 			} else if msg.cmd == MSG_OFFLINE_V3 {
 				off := msg.body.(*OfflineMessage3)
+				last_peer_id := msgid
+
+				index := storage.getPeerIndex(off.appid, off.receiver)
+				if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
+					last_peer_id = index.last_peer_id
+				}
+				last_batch_id := index.last_batch_id
+				last_seq_id := index.last_seq_id + 1
+				if last_seq_id%BATCH_SIZE == 0 {
+					last_batch_id = msgid
+				}
+				ui := &UserIndex{msgid, last_peer_id, last_batch_id, last_seq_id}
+				storage.setPeerIndex(off.appid, off.receiver, ui)
+			} else if msg.cmd == MSG_OFFLINE_V4 {
+				off := msg.body.(*OfflineMessage4)
 				last_peer_id := msgid
 
 				index := storage.getPeerIndex(off.appid, off.receiver)
@@ -819,5 +915,21 @@ func (storage *PeerStorage) execMessage(msg *Message, msgid int64) {
 		
 		ui := &UserIndex{msgid, last_peer_id, last_batch_id, last_seq_id}
 		storage.setPeerIndex(off.appid, off.receiver, ui)
+	} else if msg.cmd == MSG_OFFLINE_V4 {
+		off := msg.body.(*OfflineMessage4)
+		last_peer_id := msgid
+
+		index := storage.getPeerIndex(off.appid, off.receiver)
+		if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
+			last_peer_id = index.last_peer_id
+		}
+		last_batch_id := index.last_batch_id
+		last_seq_id := index.last_seq_id + 1
+		if last_seq_id%BATCH_SIZE == 0 {
+			last_batch_id = msgid
+		}
+		
+		ui := &UserIndex{msgid, last_peer_id, last_batch_id, last_seq_id}
+		storage.setPeerIndex(off.appid, off.receiver, ui)		
 	}
 }

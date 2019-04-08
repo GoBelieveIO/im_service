@@ -109,3 +109,30 @@ func Test_SyncBatch(t *testing.T) {
 func Test_PeerIndex(t *testing.T) {
 	storage.flushIndex()
 }
+
+
+func Test_NewCount(t *testing.T) {
+	receiver := int64(2)
+	
+	content := "test"
+	im := &IMMessage{sender:1, receiver:receiver, content:content}
+	msg := &Message{cmd:MSG_IM, body:im}	
+	last_id := storage.SavePeerMessage(appid, im.receiver, device_id, msg)
+
+	for i := 0; i < 5000; i++ {
+		content = fmt.Sprintf("test:%d", i)		
+		im = &IMMessage{sender:1, receiver:receiver, content:content}
+		msg = &Message{cmd:MSG_IM, body:im}
+		storage.SavePeerMessage(appid, im.receiver, device_id, msg)
+	}
+
+	count := storage.GetNewCount(appid, receiver, last_id)
+	if count != 5000 {
+        t.Errorf("new count = %d; expected %d", count, 5000)
+ 	} else {
+		log.Println("last id:", last_id, " new count:", count)
+	}
+
+	count = storage.GetNewCount(appid, receiver, 0)
+	log.Println("last id:", 0, " new count:", count)	
+}
