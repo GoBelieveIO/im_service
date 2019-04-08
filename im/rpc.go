@@ -477,7 +477,7 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request){
 	}
 
 	last_id, err := strconv.ParseInt(m.Get("sync_key"), 10, 64)
-	if err != nil {
+	if err != nil || last_id == 0 {
 		last_id = GetSyncKey(appid, uid)		
 	}
 	sync_key := SyncHistory{AppID:appid, Uid:uid, LastMsgID:last_id}
