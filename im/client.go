@@ -159,13 +159,13 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	appid, uid, fb, on, err := client.AuthToken(login.token)
 	if err != nil {
 		log.Infof("auth token:%s err:%s", login.token, err)
-		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
+		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1}}
 		client.EnqueueMessage(msg)
 		return
 	}
 	if  uid == 0 {
 		log.Info("auth token uid==0")
-		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
+		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1}}
 		client.EnqueueMessage(msg)
 		return
 	}
@@ -174,7 +174,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		client.device_ID, err = GetDeviceID(login.device_id, int(login.platform_id))
 		if err != nil {
 			log.Info("auth token uid==0")
-			msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1, 0}}
+			msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1}}
 			client.EnqueueMessage(msg)
 			return
 		}
@@ -199,7 +199,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		login.token, client.appid, client.uid, client.device_id,
 		client.device_ID, client.forbidden, client.notification_on, client.online)
 
-	msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{0, client.public_ip}}
+	msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{0}}
 	client.EnqueueMessage(msg)
 
 	client.AddClient()

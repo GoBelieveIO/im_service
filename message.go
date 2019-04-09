@@ -134,7 +134,7 @@ func init() {
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
 	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
 
-	vmessage_creators[MSG_AUTH_STATUS] = func()IVersionMessage{return new(AuthenticationStatus)}
+	message_creators[MSG_AUTH_STATUS] = func()IMessage{return new(AuthenticationStatus)}
 
 	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
 	message_descriptions[MSG_IM] = "MSG_IM"
@@ -320,31 +320,21 @@ func (auth *AuthenticationToken) FromData(buff []byte) bool {
 
 type AuthenticationStatus struct {
 	status int32
-	ip int32 //兼容版本0
 }
 
-func (auth *AuthenticationStatus) ToData(version int) []byte {
+func (auth *AuthenticationStatus) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, auth.status)
-	if version == 0 {
-		binary.Write(buffer, binary.BigEndian, auth.ip)
-	}
 	buf := buffer.Bytes()
 	return buf
 }
 
-func (auth *AuthenticationStatus) FromData(version int, buff []byte) bool {
+func (auth *AuthenticationStatus) FromData(buff []byte) bool {
 	if len(buff) < 4 {
 		return false
 	}
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &auth.status)
-	if version == 0 {
-		if len(buff) < 8 {
-			return false
-		}
-		binary.Read(buffer, binary.BigEndian, &auth.ip)
-	}
 	return true
 }
 
