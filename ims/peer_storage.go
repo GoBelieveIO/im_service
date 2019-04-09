@@ -292,10 +292,6 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 	
 	messages := make([]*EMessage, 0, 10)
 	for {
-		if last_id <= sync_msgid {
-			break
-		}
-		
 		msg := storage.LoadMessage(last_id)
 		if msg == nil {
 			break
@@ -360,7 +356,7 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		hasMore = true
 	}
 
-	log.Infof("appid:%d uid:%d sync msgid:%d history message loaded:%d %d, last_id:%d, %d last batch id:%d last seq id:%d has more:%t is peer:%t",
+	log.Infof("appid:%d uid:%d sync msgid:%d history message loaded:%d %d, last_id:%d, %d last batch id:%d last seq id:%d has more:%t only peer:%t",
 		appid, receiver, sync_msgid, len(messages), last_msgid,
 		last_offline_msgid, msg_index.last_id, msg_index.last_batch_id,
 		msg_index.last_seq_id, hasMore, is_peer)
