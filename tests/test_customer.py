@@ -38,14 +38,14 @@ def send_customer_message(uid, seller_id):
     m.store_id = 1
     m.seller_id = seller_id
     m.content = json.dumps({"text":"test"})
-    m.persistent = False    
+    m.persistent = True
     seq += 1
     send_message(MSG_CUSTOMER, seq, m, sock)
     print "send customer message success"
     task += 1
 
     
-def recv_customer_support_message_client(uid, port=24000):
+def recv_customer_support_message_client(uid, port=23000):
     global task
     def handle_message(cmd, s, msg):
         if cmd == MSG_CUSTOMER_SUPPORT:
@@ -69,7 +69,7 @@ def send_customer_support_message(seller_id, customer_id):
     m.store_id = 1
     m.seller_id = seller_id
     m.content = json.dumps({"text":"test"})
-    m.persistent = False
+    m.persistent = True
     seq += 1
     send_message(MSG_CUSTOMER_SUPPORT, seq, m, sock)
     print "send customer support message success"
