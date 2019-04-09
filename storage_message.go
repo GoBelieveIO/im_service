@@ -63,7 +63,7 @@ func init() {
 	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
 	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(IgnoreMessage)}
 
-	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage)}
+	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage1)}
 	message_creators[MSG_ACK_IN] = func()IMessage{return new(IgnoreMessage)}
 
 	message_creators[MSG_STORAGE_SYNC_BEGIN] = func()IMessage{return new(SyncCursor)}
@@ -197,17 +197,33 @@ func (batch *MessageBatch) FromData(buff []byte) bool {
 	return true
 }
 
-//兼容性
+
+type IOfflineMessage interface {
+	body() *OfflineMessage
+}
+
 type OfflineMessage struct {
 	appid    int64
 	receiver int64
-	msgid    int64
+	msgid    int64 //消息本体的id
 	device_id int64
-	prev_msgid  int64 
+	seq_id   int64      //v4 消息序号, 1,2,3...
+	prev_msgid  int64 //个人消息队列(点对点消息，群组消息)
+	prev_peer_msgid int64 //v2 点对点消息队列 
+	prev_batch_msgid int64 //v3 0<-1000<-2000<-3000...构成一个消息队列	
+}
+
+func (off *OfflineMessage) body() *OfflineMessage {
+	return off
 }
 
 
-func (off *OfflineMessage) ToData() []byte {
+type OfflineMessage1 struct {
+	OfflineMessage
+}
+
+
+func (off *OfflineMessage1) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, off.appid)
 	binary.Write(buffer, binary.BigEndian, off.receiver)
@@ -218,7 +234,7 @@ func (off *OfflineMessage) ToData() []byte {
 	return buf
 }
 
-func (off *OfflineMessage) FromData(buff []byte) bool {
+func (off *OfflineMessage1) FromData(buff []byte) bool {
 	if len(buff) < 32 {
 		return false
 	}
@@ -230,17 +246,14 @@ func (off *OfflineMessage) FromData(buff []byte) bool {
 		binary.Read(buffer, binary.BigEndian, &off.device_id)
 	}
 	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
+
+	off.prev_peer_msgid = off.prev_msgid
 	return true
 }
 
 
 type OfflineMessage2 struct {
-	appid    int64
-	receiver int64
-	msgid    int64
-	device_id int64
-	prev_msgid  int64 	//个人消息队列(点对点消息，群组消息)
-	prev_peer_msgid int64 //点对点消息队列
+	OfflineMessage
 }
 
 
@@ -272,15 +285,8 @@ func (off *OfflineMessage2) FromData(buff []byte) bool {
 
 
 type OfflineMessage3 struct {
-	appid    int64
-	receiver int64
-	msgid    int64      //消息本体的id
-	device_id int64
-	prev_msgid  int64 	//个人消息队列(点对点消息，群组消息)
-	prev_peer_msgid int64 //点对点消息队列
-	prev_batch_msgid int64 //0<-1000<-2000<-3000...构成一个消息队列
+	OfflineMessage
 }
-
 
 func (off *OfflineMessage3) ToData() []byte {
 	buffer := new(bytes.Buffer)
@@ -311,16 +317,8 @@ func (off *OfflineMessage3) FromData(buff []byte) bool {
 }
 
 type OfflineMessage4 struct {
-	appid    int64
-	receiver int64
-	msgid    int64      //消息本体的id
-	device_id int64
-	seq_id   int64      //消息序号, 1,2,3...
-	prev_msgid  int64 	//个人消息队列(点对点消息，群组消息)
-	prev_peer_msgid int64 //点对点消息队列
-	prev_batch_msgid int64 //0<-1000<-2000<-3000...构成一个消息队列
+	OfflineMessage
 }
-
 
 func (off *OfflineMessage4) ToData() []byte {
 	buffer := new(bytes.Buffer)
@@ -351,9 +349,6 @@ func (off *OfflineMessage4) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.prev_batch_msgid)
 	return true
 }
-
-
-
 
 
 
