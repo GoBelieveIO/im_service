@@ -167,28 +167,22 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 
 	rs := relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
 	if !rs.IsMyFriend() {
-		if client.version > 1 {
-			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_NOT_MY_FRIEND}}
-			client.EnqueueMessage(ack)
-		}
+		ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_NOT_MY_FRIEND}}
+		client.EnqueueMessage(ack)
 		log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
 		return
 	}
 
 	if !rs.IsYourFriend() {
-		if client.version > 1 {
-			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_NOT_YOUR_FRIEND}}
-			client.EnqueueMessage(ack)
-		}
+		ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_NOT_YOUR_FRIEND}}
+		client.EnqueueMessage(ack)
 		log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
 		return
 	}
 
 	if !rs.IsInYourBlacklist() {
-		if client.version > 1 {		
-			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_IN_YOUR_BLACKLIST}}
-			client.EnqueueMessage(ack)
-		}
+		ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_IN_YOUR_BLACKLIST}}
+		client.EnqueueMessage(ack)
 		log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
 		return
 	}

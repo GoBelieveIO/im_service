@@ -257,7 +257,17 @@ func (client *Connection) read() *Message {
 }
 
 // 根据连接类型发送消息
-func (client *Connection) send(msg *Message) {
+func (client *Connection) send(m *Message) {
+	msg := m
+	if msg.version != client.version {
+		msg = &Message{
+			cmd:m.cmd,
+			seq:m.seq,
+			version:client.version,
+			flag:m.flag,
+			body:m.body,
+		}
+	}
 	if conn, ok := client.conn.(net.Conn); ok {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {
