@@ -97,10 +97,20 @@ const MESSAGE_FLAG_GROUP = 0x04
 //离线消息由当前登录的用户在当前设备发出
 const MESSAGE_FLAG_SELF = 0x08
 
-func init() {
-	message_creators[MSG_ACK] = func()IMessage{return new(MessageACK)}
-	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
 
+
+const ACK_SUCCESS = 0
+
+const ACK_NOT_MY_FRIEND = 1
+const ACK_NOT_YOUR_FRIEND = 2
+const ACK_IN_YOUR_BLACKLIST = 3
+
+const ACK_NOT_GROUP_MEMBER = 64
+
+//version1:IMMessage添加时间戳字段
+//version2:MessageACK添加status字段
+func init() {
+	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
 
 	message_creators[MSG_RT] = func()IMessage{return new(RTMessage)}
@@ -113,7 +123,6 @@ func init() {
 
 	message_creators[MSG_CUSTOMER] = func()IMessage{return new(CustomerMessage)}
 	message_creators[MSG_CUSTOMER_SUPPORT] = func()IMessage{return new(CustomerMessage)}
-
 
 	message_creators[MSG_SYNC] = func()IMessage{return new(SyncKey)}
 	message_creators[MSG_SYNC_BEGIN] = func()IMessage{return new(SyncKey)}
@@ -131,11 +140,14 @@ func init() {
 	
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
+	message_creators[MSG_AUTH_STATUS] = func()IMessage{return new(AuthenticationStatus)}
+
+	
+	vmessage_creators[MSG_ACK] = func()IVersionMessage{return new(MessageACK)}	
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
 	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
 
-	message_creators[MSG_AUTH_STATUS] = func()IMessage{return new(AuthenticationStatus)}
-
+	
 	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
 	message_descriptions[MSG_IM] = "MSG_IM"
 	message_descriptions[MSG_ACK] = "MSG_ACK"
@@ -443,18 +455,25 @@ func (im *IMMessage) FromData(version int, buff []byte) bool {
 
 type MessageACK struct {
 	seq int32
+	status int8
 }
 
-func (ack *MessageACK) ToData() []byte {
+func (ack *MessageACK) ToData(version int) []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, ack.seq)
+	if version > 1 {
+		binary.Write(buffer, binary.BigEndian, ack.status)
+	}
 	buf := buffer.Bytes()
 	return buf
 }
 
-func (ack *MessageACK) FromData(buff []byte) bool {
+func (ack *MessageACK) FromData(version int, buff []byte) bool {
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &ack.seq)
+	if version > 1 {
+		binary.Read(buffer, binary.BigEndian, &ack.status)
+	}
 	return true
 }
 

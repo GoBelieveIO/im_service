@@ -131,5 +131,5 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 	channel := GetRoomChannel(client.room_id)
 	channel.PublishRoom(amsg)
 
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
 }

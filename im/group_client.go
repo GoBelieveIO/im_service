@@ -89,6 +89,10 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	}
 
 	if !group.IsMember(msg.sender) {
+		if client.version > 1 {		
+			ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq), status:ACK_NOT_GROUP_MEMBER}}
+			client.EnqueueMessage(ack)
+		}
 		log.Warningf("sender:%d is not group member", msg.sender)
 		return
 	}
@@ -103,7 +107,7 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	} else {
 		client.HandleGroupMessage(msg, group)
 	}
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send group message ack error")

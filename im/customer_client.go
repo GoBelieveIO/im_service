@@ -59,7 +59,7 @@ func (client *CustomerClient) HandleCustomerSupportMessage(msg *Message) {
 	if (msg.flag & MESSAGE_FLAG_UNPERSISTENT) > 0 {
 		log.Info("customer support message unpersistent")		
 		SendAppMessage(cm.customer_appid, cm.customer_id, msg)
-		ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
 		client.EnqueueMessage(ack)
 		return
 	}
@@ -87,7 +87,7 @@ func (client *CustomerClient) HandleCustomerSupportMessage(msg *Message) {
 	client.SendMessage(client.uid, notify)
 
 
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
 	client.EnqueueMessage(ack)
 }
 
@@ -117,7 +117,7 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 	if (msg.flag & MESSAGE_FLAG_UNPERSISTENT) > 0 {
 		log.Info("customer message unpersistent")
 		SendAppMessage(config.kefu_appid, cm.seller_id, msg)
-		ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
 		client.EnqueueMessage(ack)		
 		return
 	}
@@ -147,7 +147,7 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 	client.SendMessage(client.uid, notify)
 
 
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(msg.seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
 	client.EnqueueMessage(ack)
 }
 

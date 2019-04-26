@@ -197,7 +197,7 @@ func receive(uid int64, limit int,  sem chan int) {
 			sync_count++
 			
 			seq++
-			ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{int32(msg.seq)}}
+			ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{seq:int32(msg.seq)}}
 			SendMessage(conn, ack)			
 		} else if msg.cmd == MSG_SYNC_BEGIN {
 			sync_count = 0
