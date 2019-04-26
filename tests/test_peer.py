@@ -14,6 +14,9 @@ from client import *
 
 task = 0
 
+SENDER = 1
+RECEIVER = 2
+
 def send_client(uid, receiver, msg_type):
     global task
     sock, seq =  connect_server(uid, 23000)
@@ -225,13 +228,13 @@ def recv_system_message_client(uid):
 def TestCluster():
     global task
     task = 0
-    t3 = threading.Thread(target=recv_message_client, args=(13635273142, 24000))
+    t3 = threading.Thread(target=recv_message_client, args=(RECEIVER, 24000))
     t3.setDaemon(True)
     t3.start()
     
     time.sleep(1)
 
-    t2 = threading.Thread(target=send_client, args=(13635273143,13635273142, MSG_IM))
+    t2 = threading.Thread(target=send_client, args=(SENDER,RECEIVER, MSG_IM))
     t2.setDaemon(True)
     t2.start()
 
@@ -244,13 +247,13 @@ def TestRTSendAndRecv():
     global task
     task = 0
  
-    t3 = threading.Thread(target=recv_rt_message_client, args=(13635273142,))
+    t3 = threading.Thread(target=recv_rt_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
     
-    t2 = threading.Thread(target=send_rt_client, args=(13635273143,13635273142))
+    t2 = threading.Thread(target=send_rt_client, args=(SENDER,RECEIVER))
     t2.setDaemon(True)
     t2.start()
     
@@ -262,13 +265,13 @@ def TestSendAndRecv():
     global task
     task = 0
  
-    t3 = threading.Thread(target=recv_message_client, args=(13635273142,))
+    t3 = threading.Thread(target=recv_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
     
     time.sleep(1)
     
-    t2 = threading.Thread(target=send_client, args=(13635273143,13635273142, MSG_IM))
+    t2 = threading.Thread(target=send_client, args=(SENDER,RECEIVER, MSG_IM))
     t2.setDaemon(True)
     t2.start()
     
@@ -279,13 +282,13 @@ def TestSendAndRecv():
 def TestHttpSendAndRecv():
     global task
     task = 0
-    t3 = threading.Thread(target=recv_message_client, args=(13635273142,))
+    t3 = threading.Thread(target=recv_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
     
     time.sleep(1)
     
-    t2 = threading.Thread(target=send_http_peer_message, args=(13635273143,13635273142))
+    t2 = threading.Thread(target=send_http_peer_message, args=(SENDER,RECEIVER))
     t2.setDaemon(True)
     t2.start()
     
@@ -298,13 +301,13 @@ def TestHttpSendAndRecv():
 def TestOffline():
     global task
     task = 0
-    t2 = threading.Thread(target=send_client, args=(13635273143,13635273142, MSG_IM))
+    t2 = threading.Thread(target=send_client, args=(SENDER,RECEIVER, MSG_IM))
     t2.setDaemon(True)
     t2.start()
     
     time.sleep(1)
 
-    t3 = threading.Thread(target=recv_message_client, args=(13635273142,))
+    t3 = threading.Thread(target=recv_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
 
@@ -315,7 +318,7 @@ def TestOffline():
 
 
 def TestTimeout():
-    sock, seq = connect_server(13635273142, 23000)
+    sock, seq = connect_server(RECEIVER, 23000)
     print "waiting timeout"
     while True:
         r = sock.recv(1024)
@@ -324,7 +327,7 @@ def TestTimeout():
             break
 
 def TestPingPong():
-    uid = 13635273142
+    uid = RECEIVER
     sock, seq =  connect_server(uid, 23000)
     seq += 1
     send_message(MSG_PING, seq, None, sock)
@@ -342,13 +345,13 @@ def _TestRoomMessage(port):
     task = 0
  
     room_id = 1
-    t3 = threading.Thread(target=recv_room_message_client, args=(13635273143, room_id, port))
+    t3 = threading.Thread(target=recv_room_message_client, args=(SENDER, room_id, port))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
     
-    t2 = threading.Thread(target=send_room_message_client, args=(13635273142, room_id))
+    t2 = threading.Thread(target=send_room_message_client, args=(RECEIVER, room_id))
     t2.setDaemon(True)
     t2.start()
     
@@ -369,13 +372,13 @@ def TestSystemMessage():
     task = 0
  
     room_id = 1
-    t3 = threading.Thread(target=recv_system_message_client, args=(13635273142, ))
+    t3 = threading.Thread(target=recv_system_message_client, args=(RECEIVER, ))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
     
-    t2 = threading.Thread(target=send_system_message, args=(13635273142, ))
+    t2 = threading.Thread(target=send_system_message, args=(RECEIVER, ))
     t2.setDaemon(True)
     t2.start()
     
@@ -389,13 +392,13 @@ def TestNotification():
     task = 0
  
     room_id = 1
-    t3 = threading.Thread(target=recv_notification_client, args=(13635273142, ))
+    t3 = threading.Thread(target=recv_notification_client, args=(RECEIVER, ))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
     
-    t2 = threading.Thread(target=send_notificaton, args=(13635273142, ))
+    t2 = threading.Thread(target=send_notificaton, args=(RECEIVER, ))
     t2.setDaemon(True)
     t2.start()
     
