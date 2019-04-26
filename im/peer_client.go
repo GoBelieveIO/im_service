@@ -164,6 +164,15 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
 		return
 	}
+
+	rs := relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
+
+	if !rs.IsMyFriend() || !rs.IsYourFriend() || rs.IsInYourBlacklist() {
+		log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
+		return
+	}
+
+	
 	if message.flag & MESSAGE_FLAG_TEXT != 0 {
 		FilterDirtyWord(msg)
 	}

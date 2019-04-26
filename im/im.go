@@ -64,6 +64,9 @@ var server_summary *ServerSummary
 var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
 
+var relationship_pool *RelationshipPool
+var redis_channel *RedisChannel
+
 //round-robin
 var current_deliver_index uint64
 var group_message_delivers []*GroupMessageDeliver
@@ -74,6 +77,8 @@ func init() {
 	server_summary = NewServerSummary()
 	sync_c = make(chan *SyncHistory, 100)
 	group_sync_c = make(chan *SyncGroupHistory, 100)
+	relationship_pool = NewRelationshipPool()
+	redis_channel = NewRedisChannel()
 }
 
 func handle_client(conn net.Conn) {
@@ -594,6 +599,11 @@ func main() {
 	
 	go ListenRedis()
 	go SyncKeyService()
+	
+	redis_channel.AddSubscriber(relationship_pool)
+	go relationship_pool.RecycleLoop()
+	redis_channel.Start()
+	
 	
 	go StartHttpServer(config.http_listen_address)
 	StartRPCServer(config.rpc_listen_address)
