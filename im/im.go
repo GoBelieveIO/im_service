@@ -599,10 +599,12 @@ func main() {
 	
 	go ListenRedis()
 	go SyncKeyService()
-	
-	redis_channel.AddSubscriber(relationship_pool)
-	go relationship_pool.RecycleLoop()
-	redis_channel.Start()
+
+	if config.friend_permission {
+		redis_channel.AddSubscriber(relationship_pool)
+		go relationship_pool.RecycleLoop()
+		redis_channel.Start()
+	}
 	
 	
 	go StartHttpServer(config.http_listen_address)
