@@ -267,34 +267,42 @@ func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, er
 	return msgid, nil
 }
 
-//超级群，离线消息推送
+//群消息通知(apns, gcm...)
 func PushGroupMessage(appid int64, group_id int64, m *Message) {
-	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, timestamp:now, msg:m}
-
-	group := group_manager.FindGroup(amsg.receiver)
+	group := group_manager.FindGroup(group_id)
 	if group == nil {
-		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
+		log.Warningf("can't push group message, appid:%d group id:%d", appid, group_id)
 		return
 	}
 	
-	channels := make(map[*Channel]struct{})
+	channels := make(map[*Channel][]int64)
 	members := group.Members()
 	for member := range members {
+		//不对自身推送
+		if im, ok := m.body.(*IMMessage); ok {
+			if im.sender == member {
+				continue
+			}
+		}
 		channel := GetChannel(member)
 		if _, ok := channels[channel]; !ok {
-			channels[channel] = struct{}{}
+			channels[channel] = []int64{member}
+		} else {
+			receivers := channels[channel]
+			receivers = append(receivers, member)
+			channels[channel] = receivers
 		}
 	}
 
-	for channel, _ := range channels {
-		channel.Publish(amsg)
+	for channel, receivers := range channels {
+		channel.Push(appid, receivers, m)
 	}
 }
 
 //离线消息推送
-func PushMessage(appid int64, uid int64, m *Message) {
-	PublishMessage(appid, uid, m)
+func PushMessage(appid int64, uid int64, m *Message) {	
+	channel := GetChannel(uid)
+	channel.Push(appid, []int64{uid}, m)
 }
 
 func PublishMessage(appid int64, uid int64, m *Message) {

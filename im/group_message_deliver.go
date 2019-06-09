@@ -337,7 +337,7 @@ func (storage *GroupMessageDeliver) openReadFile() *os.File {
 //device_ID 发送者的设备ID
 func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender int64, device_ID int64, msg *Message) bool {
 
-	PushMessage(appid, uid, msg)
+	PublishMessage(appid, uid, msg)
 
 	route := app_route.FindRoute(appid)
 	if route == nil {
@@ -368,20 +368,17 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) bo
 	
 	members := gm.members
 	for _, member := range members {
-		
 		msgid, err := SaveMessage(gm.appid, member, gm.device_ID, m)
 		if err != nil {
 			log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
 			return false
 		}
 
-		if msg.sender != member {
-			PushMessage(gm.appid, member, m)
-		}
 		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
 		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
 	}
 
+	PushGroupMessage(gm.appid, gm.gid, m)
 	return true
 }
 

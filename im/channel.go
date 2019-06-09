@@ -179,6 +179,12 @@ func (channel *Channel) PublishGroup(amsg *AppMessage) {
 	channel.wt <- msg
 }
 
+func (channel *Channel) Push(appid int64, receivers []int64, msg *Message) {
+	p := &BatchPushMessage{appid:appid, receivers:receivers, msg:msg}	
+	m := &Message{cmd: MSG_PUSH, body:p}
+	channel.wt <- m
+}
+
 //返回添加前的计数
 func (channel *Channel) AddSubscribeRoom(appid, room_id int64) int {
 	channel.mutex.Lock()
