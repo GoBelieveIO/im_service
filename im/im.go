@@ -118,13 +118,7 @@ func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, er
 }
 
 //群消息通知(apns, gcm...)
-func PushGroupMessage(appid int64, group_id int64, m *Message) {
-	group := group_manager.FindGroup(group_id)
-	if group == nil {
-		log.Warningf("can't push group message, appid:%d group id:%d", appid, group_id)
-		return
-	}
-	
+func PushGroupMessage(appid int64, group *Group, m *Message) {
 	channels := make(map[*Channel][]int64)
 	members := group.Members()
 	for member := range members {
@@ -230,8 +224,12 @@ func DispatchGroupMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch group message slow...")
 	}
-	
-	group := group_manager.FindGroup(amsg.receiver)
+
+	deliver := GetGroupMessageDeliver(amsg.receiver)
+	deliver.DispatchMessage(amsg)
+}
+
+func DispatchMessageToGroup(amsg *AppMessage, group *Group) {
 	if group == nil {
 		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
 		return

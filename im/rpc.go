@@ -49,7 +49,8 @@ func SendGroupNotification(appid int64, gid int64,
 
 func SendGroupIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, body:im}
-	group := group_manager.FindGroup(im.receiver)
+	deliver := GetGroupMessageDeliver(im.receiver)
+	group := deliver.LoadGroup(im.receiver)	
 	if group == nil {
 		log.Warning("can't find group:", im.receiver)
 		return
@@ -61,27 +62,31 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 		}
 
 		//推送外部通知
-		PushGroupMessage(appid, im.receiver, m)
+		PushGroupMessage(appid, group, m)
 
 		//发送同步的通知消息
 		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:im.receiver, sync_key:msgid}}
 		SendAppGroupMessage(appid, im.receiver, notify)
 
 	} else {
+		gm := &PendingGroupMessage{}
+		gm.appid = appid
+		gm.sender = im.sender	
+		gm.device_ID = 0
+		gm.gid = im.receiver
+		gm.timestamp = im.timestamp
 		members := group.Members()
-		for member := range members {
-			msgid, err := SaveMessage(appid, member, 0, m)
-			if err != nil {
-				continue
-			}
-
-			//推送外部通知
-			PushMessage(appid, member, m)
-
-			//发送同步的通知消息
-			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
-			SendAppMessage(appid, member, notify)
+		gm.members = make([]int64, len(members))
+		i := 0
+		for uid := range members {
+			gm.members[i] = uid
+			i += 1
 		}
+		
+		gm.content = im.content
+		deliver := GetGroupMessageDeliver(group.gid)
+		m := &Message{cmd:MSG_PENDING_GROUP_MESSAGE, body: gm}
+		deliver.SaveMessage(m)
 	}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 }

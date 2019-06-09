@@ -41,6 +41,7 @@ type GroupManager struct {
 	ping     string
 	action_id int64
 	dirty     bool
+	db        *sql.DB
 }
 
 func NewGroupManager() *GroupManager {
@@ -56,6 +57,12 @@ func NewGroupManager() *GroupManager {
 	m.ping = r
 	m.action_id = 0
 	m.dirty = true
+	
+	db, err := sql.Open("mysql", config.mysqldb_datasource)
+	if err != nil {
+		log.Fatal("open db:", err)		
+	}
+	m.db = db
 	return m
 }
 
@@ -68,6 +75,25 @@ func (group_manager *GroupManager) GetGroups() []*Group{
 		groups = append(groups, group)
 	}
 	return groups
+}
+
+func (group_manager *GroupManager) LoadGroup(gid int64) *Group {
+	group_manager.mutex.Lock()
+	if group, ok := group_manager.groups[gid]; ok {
+		group_manager.mutex.Unlock()		
+		return group
+	}
+	group_manager.mutex.Unlock()
+	group, err := LoadGroup(group_manager.db, gid)
+	if err != nil {
+		log.Warning("load group:%d err:%s", gid, err)
+		return nil
+	}
+
+	group_manager.mutex.Lock()
+	group_manager.groups[gid] = group
+	group_manager.mutex.Unlock()
+	return group
 }
 
 func (group_manager *GroupManager) FindGroup(gid int64) *Group {

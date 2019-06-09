@@ -186,6 +186,40 @@ ROLLBACK:
 	return false
 }
 
+func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
+	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group` WHERE id=?")
+	if err != nil {
+		log.Info("error:", err)
+		return nil, err
+	}
+
+	defer stmtIns.Close()
+
+	var group *Group
+	var id int64
+	var appid int64
+	var super int8
+	
+	row := stmtIns.QueryRow()	
+	err = row.Scan(&id, &appid, &super)
+	if err != nil {
+		return nil, err
+	}
+	
+	members, err := LoadGroupMember(db, id)
+	if err != nil {
+		log.Info("error:", err)
+		return nil, err
+	}
+
+	if super != 0 {
+		group = NewSuperGroup(id, appid, members)
+	} else {
+		group = NewGroup(id, appid, members)
+	}
+
+	return group, nil	
+}
 
 func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
 	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group`")

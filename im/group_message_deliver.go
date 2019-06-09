@@ -34,6 +34,13 @@ const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const F_VERSION = 1 << 16 //1.0
 
+
+
+type GroupLoader struct {
+	gid int64
+	c   chan *Group
+}
+
 //后台发送普通群消息
 //普通群消息首先保存到临时文件中，之后按照保存到文件中的顺序依次派发
 type GroupMessageDeliver struct {
@@ -47,6 +54,10 @@ type GroupMessageDeliver struct {
 	latest_sended_msgid int64 //最近发送出去的消息id
 
 	wt     chan int64	 //通知有新消息等待发送
+
+	//保证单个群组结构只会在一个线程中被加载
+	lt     chan *GroupLoader //加载group结构到内存
+	dt     chan *AppMessage  //dispatch 群组消息
 }
 
 func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
@@ -378,7 +389,12 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) bo
 		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
 	}
 
-	PushGroupMessage(gm.appid, gm.gid, m)
+	group_members := make(map[int64]int64)
+	for _, member := range members {
+		group_members[member] = 0
+	}
+	group := NewGroup(gm.gid, gm.appid, group_members)
+	PushGroupMessage(gm.appid, group, m)
 	return true
 }
 
@@ -466,9 +482,9 @@ func (storage *GroupMessageDeliver) flushPendingMessage() {
 }
 
 func (storage *GroupMessageDeliver) run() {
-	//启动时等待2s检查文件
 	log.Info("group message deliver running")
 	
+	//启动时等待2s检查文件	
 	select {
 	case <-storage.wt:
 		storage.flushPendingMessage()			
@@ -486,6 +502,63 @@ func (storage *GroupMessageDeliver) run() {
 	}
 }
 
+
+func (storage *GroupMessageDeliver) LoadGroup(gid int64) *Group {
+	group := group_manager.FindGroup(gid)
+	if group != nil {
+		return group
+	}
+	
+	l := &GroupLoader{gid, make(chan *Group)}
+	storage.lt <- l
+
+	group = <- l.c
+	return group
+}
+
+
+func (storage *GroupMessageDeliver) DispatchMessage(msg *AppMessage) {
+	group := group_manager.FindGroup(msg.receiver)
+	if group != nil {
+		DispatchGroupMessage(msg)		
+	} else {
+		select {
+		case storage.dt <- msg:
+		default:
+			log.Warning("can't dispatch group message nonblock")
+		}		
+	}
+}
+
+func (storage *GroupMessageDeliver) dispatchMessage(msg *AppMessage) {
+	group := group_manager.FindGroup(msg.receiver)
+	if group == nil {
+		log.Warning("load group nil, can't dispatch group message")
+		return
+	}
+	DispatchMessageToGroup(msg, group)
+}
+
+func (storage *GroupMessageDeliver) loadGroup(gl *GroupLoader) {
+	group := group_manager.LoadGroup(gl.gid)
+	gl.c <- group
+}
+
+func (storage *GroupMessageDeliver) run2() {
+	log.Info("group message deliver running loop2")
+
+	for  {
+		select {
+		case gl := <-storage.lt:
+			storage.loadGroup(gl)			
+		case m := <-storage.dt:
+			storage.dispatchMessage(m)
+		}
+	}
+}
+
+
 func (storage *GroupMessageDeliver) Start() {
 	go storage.run()
+	go storage.run2()	
 }
