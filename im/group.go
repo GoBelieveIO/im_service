@@ -207,7 +207,7 @@ func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 	var appid int64
 	var super int8
 	
-	row := stmtIns.QueryRow()	
+	row := stmtIns.QueryRow(group_id)
 	err = row.Scan(&id, &appid, &super)
 	if err != nil {
 		return nil, err
