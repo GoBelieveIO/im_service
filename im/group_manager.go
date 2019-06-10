@@ -489,7 +489,7 @@ func (group_manager *GroupManager) Recycle() {
 
 	end := time.Now()
 
-	log.Infof("group manager recyle, time:", end.Sub(begin))
+	log.Info("group manager recyle, time:", end.Sub(begin))
 }
 
 
