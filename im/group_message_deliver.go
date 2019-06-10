@@ -520,7 +520,7 @@ func (storage *GroupMessageDeliver) LoadGroup(gid int64) *Group {
 func (storage *GroupMessageDeliver) DispatchMessage(msg *AppMessage) {
 	group := group_manager.FindGroup(msg.receiver)
 	if group != nil {
-		DispatchGroupMessage(msg)		
+		DispatchMessageToGroup(msg.msg, group, msg.appid, nil)
 	} else {
 		select {
 		case storage.dt <- msg:
@@ -536,7 +536,7 @@ func (storage *GroupMessageDeliver) dispatchMessage(msg *AppMessage) {
 		log.Warning("load group nil, can't dispatch group message")
 		return
 	}
-	DispatchMessageToGroup(msg, group)
+	DispatchMessageToGroup(msg.msg, group, msg.appid, nil)
 }
 
 func (storage *GroupMessageDeliver) loadGroup(gl *GroupLoader) {

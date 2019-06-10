@@ -39,7 +39,7 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group)
 
 	//发送同步的通知消息
 	notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:msg.receiver, sync_key:msgid}}
-	client.SendGroupMessage(msg.receiver, notify)
+	client.SendGroupMessage(group, notify)
 }
 
 func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) {

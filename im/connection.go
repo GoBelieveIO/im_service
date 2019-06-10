@@ -21,6 +21,7 @@ package main
 
 import "net"
 import "time"
+import "unsafe"
 import "sync"
 import "sync/atomic"
 import log "github.com/golang/glog"
@@ -63,6 +64,11 @@ type Connection struct {
 }
 
 
+func (client *Connection) Client() *Client {
+	p := unsafe.Pointer(client)
+	return (*Client)(p)
+}
+
 //自己是否是发送者
 func (client *Connection) isSender(msg *Message, device_id int64) bool {
 	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
@@ -93,37 +99,12 @@ func (client *Connection) isSender(msg *Message, device_id int64) bool {
 }
 
 //发送超级群消息
-func (client *Connection) SendGroupMessage(group_id int64, msg *Message) {
+func (client *Connection) SendGroupMessage(group *Group, msg *Message) {
 	appid := client.appid
 
-	PublishGroupMessage(appid, group_id, msg)
-	
-	group := group_manager.FindGroup(group_id)
-	if group == nil {
-		log.Warningf("can't send group message, appid:%d uid:%d cmd:%s", appid, group_id, Command(msg.cmd))
-		return
-	}
+	PublishGroupMessage(appid, group.gid, msg)
 
-	route := app_route.FindRoute(appid)
-	if route == nil {
-		log.Warningf("can't send group message, appid:%d uid:%d cmd:%s", appid, group_id, Command(msg.cmd))
-		return
-	}
-
-	members := group.Members()
-	for member := range members {
-	    clients := route.FindClientSet(member)
-		if len(clients) == 0 {
-			continue
-		}
-
-		for c, _ := range(clients) {
-			if &c.Connection == client {
-				continue
-			}
-			c.EnqueueNonBlockMessage(msg)
-		}
-	}
+	DispatchMessageToGroup(msg, group, appid, client.Client())
 }
 
 
@@ -132,26 +113,7 @@ func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 
 	PublishMessage(appid, uid, msg)
 
-	route := app_route.FindRoute(appid)
-	if route == nil {
-		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
-		return false
-	}
-	clients := route.FindClientSet(uid)
-	if len(clients) == 0 {
-		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
-		return false
-	}
-
-	for c, _ := range(clients) {
-		//不再发送给自己
-		if &c.Connection == client {
-			continue
-		}
-	
-		c.EnqueueNonBlockMessage(msg)
-	}
-
+	DispatchMessageToPeer(msg, uid, appid, client.Client())
 	return true
 }
 

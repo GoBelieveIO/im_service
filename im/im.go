@@ -163,12 +163,12 @@ func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	channel.PublishGroup(amsg)
 }
 
-func SendAppGroupMessage(appid int64, group_id int64, msg *Message) {
+func SendAppGroupMessage(appid int64, group *Group, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, timestamp:now, msg:msg}
-	channel := GetGroupChannel(group_id)
+	amsg := &AppMessage{appid:appid, receiver:group.gid, msgid:0, timestamp:now, msg:msg}
+	channel := GetGroupChannel(group.gid)
 	channel.PublishGroup(amsg)
-	DispatchGroupMessage(amsg)
+	DispatchMessageToGroup(msg, group, appid, nil)
 }
 
 func SendAppMessage(appid int64, uid int64, msg *Message) {
@@ -176,7 +176,7 @@ func SendAppMessage(appid int64, uid int64, msg *Message) {
 	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
-	DispatchAppMessage(amsg)
+	DispatchMessageToPeer(msg, uid, appid, nil)
 }
 
 func DispatchAppMessage(amsg *AppMessage) {
@@ -186,35 +186,14 @@ func DispatchAppMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch app message slow...")
 	}
-
-	route := app_route.FindRoute(amsg.appid)
-	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	clients := route.FindClientSet(amsg.receiver)
-	if len(clients) == 0 {
-		log.Infof("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	for c, _ := range(clients) {
-		c.EnqueueNonBlockMessage(amsg.msg)
-	}
+	DispatchMessageToPeer(amsg.msg, amsg.receiver, amsg.appid, nil)
 }
 
 func DispatchRoomMessage(amsg *AppMessage) {
 	log.Info("dispatch room message", Command(amsg.msg.cmd))
+	
 	room_id := amsg.receiver
-	route := app_route.FindOrAddRoute(amsg.appid)
-	clients := route.FindRoomClientSet(room_id)
-
-	if len(clients) == 0 {
-		log.Infof("can't dispatch room message, appid:%d room id:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	for c, _ := range(clients) {
-		c.EnqueueNonBlockMessage(amsg.msg)
-	}	
+	DispatchMessageToRoom(amsg.msg, room_id, amsg.appid, nil)
 }
 
 func DispatchGroupMessage(amsg *AppMessage) {
@@ -229,16 +208,15 @@ func DispatchGroupMessage(amsg *AppMessage) {
 	deliver.DispatchMessage(amsg)
 }
 
-func DispatchMessageToGroup(amsg *AppMessage, group *Group) {
+func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Client) bool {
 	if group == nil {
-		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
-		return
+		return false
 	}
 
-	route := app_route.FindRoute(amsg.appid)
+	route := app_route.FindRoute(appid)
 	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, group.gid, Command(msg.cmd))
+		return false
 	}
 
 	members := group.Members()
@@ -249,8 +227,48 @@ func DispatchMessageToGroup(amsg *AppMessage, group *Group) {
 		}
 
 		for c, _ := range(clients) {
-			c.EnqueueNonBlockMessage(amsg.msg)
+			if c == client {
+				continue
+			}
+			c.EnqueueNonBlockMessage(msg)
 		}
 	}
+
+	return true
 }
 
+
+func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client) bool {
+	route := app_route.FindRoute(appid)
+	if route == nil {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
+		return false
+	}
+	clients := route.FindClientSet(uid)
+	if len(clients) == 0 {
+		return false
+	}
+	for c, _ := range(clients) {
+		if c == client {
+			continue
+		}
+		c.EnqueueNonBlockMessage(msg)
+	}
+	return true
+}
+
+func DispatchMessageToRoom(msg *Message, room_id int64, appid int64, client *Client) bool {
+	route := app_route.FindOrAddRoute(appid)
+	clients := route.FindRoomClientSet(room_id)
+
+	if len(clients) == 0 {
+		return false
+	}
+	for c, _ := range(clients) {
+		if c == client {
+			continue
+		}
+		c.EnqueueNonBlockMessage(msg)
+	}
+	return true
+}

@@ -66,7 +66,7 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 
 		//发送同步的通知消息
 		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:im.receiver, sync_key:msgid}}
-		SendAppGroupMessage(appid, im.receiver, notify)
+		SendAppGroupMessage(appid, group, notify)
 
 	} else {
 		gm := &PendingGroupMessage{}
@@ -170,7 +170,8 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	group := group_manager.FindGroup(group_id)
+	deliver := GetGroupMessageDeliver(group_id)
+	group := deliver.LoadGroup(group_id)	
 	if group != nil {
 		ms := group.Members()
 		for m, _ := range ms {
@@ -610,11 +611,8 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request) {
 	room_im.content = string(body)
 
 	msg := &Message{cmd:MSG_ROOM_IM, body:room_im}
-	route := app_route.FindOrAddRoute(appid)
-	clients := route.FindRoomClientSet(room_id)
-	for c, _ := range(clients) {
-		c.wt <- msg
-	}
+
+	DispatchMessageToRoom(msg, room_id, appid, nil)
 
 	amsg := &AppMessage{appid:appid, receiver:room_id, msg:msg}
 	channel := GetRoomChannel(room_id)
