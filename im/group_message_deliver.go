@@ -74,6 +74,8 @@ func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
 	}
 
 	storage.wt = make(chan int64, 10)
+	storage.lt = make(chan *GroupLoader)
+	storage.dt = make(chan *AppMessage)
 	
 	storage.openWriteFile()
 	storage.openCursorFile()
