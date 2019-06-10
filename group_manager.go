@@ -33,7 +33,7 @@ import log "github.com/golang/glog"
 
 //同redis的长链接保持5minute的心跳
 const SUBSCRIBE_HEATBEAT = 5*60
-
+const GROUP_EXPIRE_DURATION = 60*60 //60min
 
 type GroupManager struct {
 	mutex  sync.Mutex
@@ -66,20 +66,11 @@ func NewGroupManager() *GroupManager {
 	return m
 }
 
-func (group_manager *GroupManager) GetGroups() []*Group{
-	group_manager.mutex.Lock()
-	defer group_manager.mutex.Unlock()
-
-	groups := make([]*Group, 0, len(group_manager.groups))
-	for _, group := range(group_manager.groups) {
-		groups = append(groups, group)
-	}
-	return groups
-}
-
 func (group_manager *GroupManager) LoadGroup(gid int64) *Group {
 	group_manager.mutex.Lock()
 	if group, ok := group_manager.groups[gid]; ok {
+		now := int(time.Now().Unix())		
+		group.ts = now
 		group_manager.mutex.Unlock()		
 		return group
 	}
@@ -100,22 +91,18 @@ func (group_manager *GroupManager) FindGroup(gid int64) *Group {
 	group_manager.mutex.Lock()
 	defer group_manager.mutex.Unlock()
 	if group, ok := group_manager.groups[gid]; ok {
+		now := int(time.Now().Unix())		
+		group.ts = now
 		return group
 	}
 	return nil
 }
 
-func (group_manager *GroupManager) FindUserGroups(appid int64, uid int64) []*Group {
+func (group_manager *GroupManager) clear() {
 	group_manager.mutex.Lock()
 	defer group_manager.mutex.Unlock()
 
-	groups := make([]*Group, 0, 4)
-	for _, group := range group_manager.groups {
-		if group.appid == appid && group.IsMember(uid) {
-			groups = append(groups, group)
-		}
-	}
-	return groups
+	group_manager.groups = make(map[int64]*Group)
 }
 
 func (group_manager *GroupManager) HandleCreate(data string) {
@@ -340,27 +327,6 @@ func (group_manager *GroupManager) handleAction(data string, channel string) {
 	}	
 }
 
-func (group_manager *GroupManager) ReloadGroup() bool {
-	log.Info("reload group...")
-	db, err := sql.Open("mysql", config.mysqldb_datasource)
-	if err != nil {
-		log.Info("error:", err)
-		return false
-	}
-	defer db.Close()
-
-	groups, err := LoadAllGroup(db)
-	if err != nil {
-		log.Info("load all group error:", err)
-		return false
-	}
-
-	group_manager.mutex.Lock()
-	defer group_manager.mutex.Unlock()
-	group_manager.groups = groups
-
-	return true
-}
 
 func (group_manager *GroupManager) getActionID() (int64, error) {
 	conn := redis_pool.Get()
@@ -402,12 +368,6 @@ func (group_manager *GroupManager) load() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		
-		r := group_manager.ReloadGroup()
-		if !r {
-			time.Sleep(1 * time.Second)
-			continue
-		}
 
 		group_manager.action_id = action_id
 		group_manager.dirty = false
@@ -420,20 +380,16 @@ func (group_manager *GroupManager) load() {
 func (group_manager *GroupManager) checkActionID() {
 	action_id, err := group_manager.getActionID()
 	if err != nil {
-		//load later
-		group_manager.dirty = true
+		log.Info("check action err:", err)
 		return
 	}
 
+	log.Infof("check action id:%d %d", action_id, group_manager.action_id)
 	if action_id != group_manager.action_id {
-		r := group_manager.ReloadGroup()
-		if r {
-			group_manager.dirty = false
-			group_manager.action_id = action_id
-		} else {
-			//load later
-			group_manager.dirty = true
-		}
+		log.Info("clear group manager")
+		group_manager.clear()
+		group_manager.action_id = action_id
+		group_manager.dirty = false
 	}
 }
 
@@ -469,22 +425,7 @@ func (group_manager *GroupManager) RunOnce() bool {
 				v.Channel == "group_member_mute" {
 				group_manager.handleAction(string(v.Data), v.Channel)
 			} else if v.Channel == group_manager.ping {
-				//check dirty
-				if group_manager.dirty {
-					action_id, err := group_manager.getActionID()
-					if err == nil {
-						r := group_manager.ReloadGroup()
-						if r {
-							group_manager.dirty = false
-							group_manager.action_id = action_id
-						}
-					} else {
-						log.Warning("get action id err:", err)
-					}
-				} else {
-					group_manager.checkActionID()
-				}
-				log.Info("group manager dirty:", group_manager.dirty)
+				group_manager.checkActionID()
 			} else {
 				log.Infof("%s: message: %s\n", v.Channel, v.Data)
 			}
@@ -531,8 +472,38 @@ func (group_manager *GroupManager) PingLoop() {
 	}
 }
 
+func (group_manager *GroupManager) Recycle() {
+	group_manager.mutex.Lock()
+	defer group_manager.mutex.Unlock()
+
+	begin := time.Now()
+	
+	now := int(time.Now().Unix())
+	for k := range group_manager.groups {
+		group := group_manager.groups[k]
+		if now - group.ts > GROUP_EXPIRE_DURATION {
+			//map can delete item when iterate
+			delete(group_manager.groups, k)
+		}
+	}
+
+	end := time.Now()
+
+	log.Infof("group manager recyle, time:", end.Sub(begin))
+}
+
+
+func (group_manager *GroupManager) RecycleLoop() {
+	//5 min
+	ticker := time.NewTicker(time.Second * 60 * 5)
+	for range ticker.C {
+		group_manager.Recycle()
+	}	
+}
+
 func (group_manager *GroupManager) Start() {
 	group_manager.load()
 	go group_manager.Run()
 	go group_manager.PingLoop()
+	go group_manager.RecycleLoop()
 }

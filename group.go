@@ -19,6 +19,7 @@
 
 package main
 
+import "time"
 import "sync"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
@@ -31,6 +32,8 @@ type Group struct {
 	mutex   sync.Mutex
 	//key:成员id value:入群时间|(mute<<31)
 	members map[int64]int64
+
+	ts      int//访问时间
 }
 
 func NewGroup(gid int64, appid int64, members map[int64]int64) *Group {
@@ -39,6 +42,7 @@ func NewGroup(gid int64, appid int64, members map[int64]int64) *Group {
 	group.gid = gid
 	group.super = false
 	group.members = members
+	group.ts = int(time.Now().Unix())	
 	return group
 }
 
@@ -48,6 +52,7 @@ func NewSuperGroup(gid int64, appid int64, members map[int64]int64) *Group {
 	group.gid = gid
 	group.super = true
 	group.members = members
+	group.ts = int(time.Now().Unix())
 	return group
 }
 
@@ -123,6 +128,8 @@ func (group *Group) GetMemberMute(uid int64) bool {
 func (group *Group) IsEmpty() bool {
 	return len(group.members) == 0
 }
+
+
 
 func CreateGroup(db *sql.DB, appid int64, master int64, name string, super int8) int64 {
 	log.Info("create group super:", super)

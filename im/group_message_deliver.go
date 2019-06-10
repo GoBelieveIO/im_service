@@ -357,7 +357,6 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 	}
 	clients := route.FindClientSet(uid)
 	if len(clients) == 0 {
-		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
 		return false
 	}
 
@@ -531,7 +530,7 @@ func (storage *GroupMessageDeliver) DispatchMessage(msg *AppMessage) {
 }
 
 func (storage *GroupMessageDeliver) dispatchMessage(msg *AppMessage) {
-	group := group_manager.FindGroup(msg.receiver)
+	group := group_manager.LoadGroup(msg.receiver)
 	if group == nil {
 		log.Warning("load group nil, can't dispatch group message")
 		return
