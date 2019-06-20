@@ -76,7 +76,6 @@ func init() {
 	server_summary = NewServerSummary()
 	sync_c = make(chan *SyncHistory, 100)
 	group_sync_c = make(chan *SyncGroupHistory, 100)
-	relationship_pool = NewRelationshipPool()
 	redis_channel = NewRedisChannel()
 }
 
@@ -312,6 +311,7 @@ func main() {
 	go SyncKeyService()
 
 	if config.friend_permission {
+		relationship_pool = NewRelationshipPool()
 		redis_channel.AddSubscriber(relationship_pool)
 		go relationship_pool.RecycleLoop()
 		redis_channel.Start()

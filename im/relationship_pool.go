@@ -26,6 +26,8 @@ import "sync/atomic"
 import "errors"
 import "strconv"
 import "strings"
+import "database/sql"
+import _ "github.com/go-sql-driver/mysql"
 import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
 
@@ -48,11 +50,18 @@ type RelationshipPool struct {
 
 	dirty     bool	
 	action_id int64
+	db        *sql.DB	
 }
 
 func NewRelationshipPool() *RelationshipPool {
 	rp := &RelationshipPool{}
 	rp.items = &sync.Map{}
+
+	db, err := sql.Open("mysql", config.mysqldb_datasource)
+	if err != nil {
+		log.Fatal("open db:", err)		
+	}
+	rp.db = db
 	return rp
 }
 
@@ -81,7 +90,7 @@ func (rp *RelationshipPool) GetRelationship(appid, uid, friend_uid int64) Relati
 		}
 	}
 	
-	rs, err := GetRelationship(appid, uid, friend_uid)
+	rs, err := GetRelationship(rp.db, appid, uid, friend_uid)
 	if err != nil {
 		return NoneRelationship
 	}
@@ -315,7 +324,7 @@ func (rp *RelationshipPool) ReloadRelation() {
 			continue
 		}
 		
-		rs, err := GetRelationship(appid, uid, friend_uid)
+		rs, err := GetRelationship(rp.db, appid, uid, friend_uid)
 		if err != nil {
 			log.Warning("get relationship err:", err)
 			continue
