@@ -181,7 +181,7 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 			return
 		}
 
-		if !rs.IsInYourBlacklist() {
+		if rs.IsInYourBlacklist() {
 			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_IN_YOUR_BLACKLIST}}
 			client.EnqueueMessage(ack)
 			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
