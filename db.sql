@@ -22,5 +22,24 @@ CREATE TABLE `group_member` (
   KEY `idx_group_member_uid` (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
+
+CREATE TABLE `friend` (
+  `appid` bigint(20) NOT NULL,
+  `uid` bigint(20) NOT NULL,
+  `friend_uid` bigint(20) NOT NULL,
+  `timestamp` int(11) NOT NULL COMMENT '创建时间',
+  PRIMARY KEY (`appid`, `uid`,`friend_uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='好友关系';
+
+
+CREATE TABLE `blacklist` (
+  `appid` bigint(20) NOT NULL,
+  `uid` bigint(20) NOT NULL,
+  `friend_uid` bigint(20) NOT NULL,
+  `timestamp` int(11) NOT NULL COMMENT '创建时间',
+  PRIMARY KEY (`appid`, `uid`,`friend_uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='黑名单';
+
+
 SHOW TABLES;
 
