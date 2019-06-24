@@ -29,13 +29,13 @@ const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
 
 //内部文件存储使用
-//个人消息队列 代替MSG_OFFLINE_V3
+//超级群消息队列&个人消息队列 代替MSG_OFFLINE_V3
 const MSG_OFFLINE_V4 = 248
 
-//个人消息队列 代替MSG_OFFLINE_V2
+//超级群消息队列&个人消息队列 代替MSG_OFFLINE_V2
 const MSG_OFFLINE_V3 = 249
 
-//个人消息队列 代替MSG_OFFLINE
+//超级群消息队列&个人消息队列 代替MSG_OFFLINE
 //deprecated  兼容性
 const MSG_OFFLINE_V2 = 250  
 
@@ -43,6 +43,7 @@ const MSG_OFFLINE_V2 = 250
 const MSG_PENDING_GROUP_MESSAGE = 251
 
 //超级群消息队列
+//deprecated 兼容性
 const MSG_GROUP_IM_LIST = 252
 
 //deprecated
@@ -353,12 +354,7 @@ func (off *OfflineMessage4) FromData(buff []byte) bool {
 
 
 type GroupOfflineMessage struct {
-	appid    int64
-	receiver int64
-	msgid    int64
-	gid      int64
-	device_id int64
-	prev_msgid  int64
+	OfflineMessage
 }
 
 func (off *GroupOfflineMessage) ToData() []byte {
@@ -366,7 +362,7 @@ func (off *GroupOfflineMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, off.appid)
 	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.msgid)
-	binary.Write(buffer, binary.BigEndian, off.gid)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.device_id)
 	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
 	buf := buffer.Bytes()
@@ -381,7 +377,7 @@ func (off *GroupOfflineMessage) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.appid)
 	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	binary.Read(buffer, binary.BigEndian, &off.msgid)
-	binary.Read(buffer, binary.BigEndian, &off.gid)
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	if len(buff) == 48 {
 		binary.Read(buffer, binary.BigEndian, &off.device_id)
 	}
