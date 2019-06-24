@@ -163,3 +163,4 @@ func SetUserUnreadCount(appid int64, uid int64, count int32) {
 		log.Info("hset err:", err)
 	}
 }
+

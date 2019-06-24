@@ -26,7 +26,7 @@ const MSG_SUBSCRIBE = 130
 const MSG_UNSUBSCRIBE = 131
 const MSG_PUBLISH = 132
 
-
+const MSG_PUSH = 134
 const MSG_PUBLISH_GROUP = 135
 
 const MSG_SUBSCRIBE_ROOM = 136
@@ -38,7 +38,8 @@ func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(SubscribeMessage)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
-	
+
+	message_creators[MSG_PUSH] = func()IMessage{return new(BatchPushMessage)}	
 	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(AppMessage)}
 	
 	message_creators[MSG_SUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
@@ -49,12 +50,92 @@ func init() {
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
 	message_descriptions[MSG_PUBLISH] = "MSG_PUBLISH"
 
+	message_descriptions[MSG_PUSH] = "MSG_PUSH"		
 	message_descriptions[MSG_PUBLISH_GROUP] = "MSG_PUBLISH_GROUP"
 
 	message_descriptions[MSG_SUBSCRIBE_ROOM] = "MSG_SUBSCRIBE_ROOM"
 	message_descriptions[MSG_UNSUBSCRIBE_ROOM] = "MSG_UNSUBSCRIBE_ROOM"
 	message_descriptions[MSG_PUBLISH_ROOM] = "MSG_PUBLISH_ROOM"
 }
+
+//批量消息的推送
+type BatchPushMessage struct {
+	appid    int64
+	receivers []int64		
+	msg      *Message
+}
+
+
+func (amsg *BatchPushMessage) ToData() []byte {
+	if amsg.msg == nil {
+		return nil
+	}
+
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, amsg.appid)
+
+	var count uint16
+	count = uint16(len(amsg.receivers))
+	binary.Write(buffer, binary.BigEndian, count)
+
+	for _, receiver := range amsg.receivers {
+		binary.Write(buffer, binary.BigEndian, receiver)
+	}
+	
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, amsg.msg)
+	msg_buf := mbuffer.Bytes()
+	var l int16 = int16(len(msg_buf))
+	binary.Write(buffer, binary.BigEndian, l)
+	buffer.Write(msg_buf)
+
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (amsg *BatchPushMessage) FromData(buff []byte) bool {
+	if len(buff) < 12 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &amsg.appid)
+
+	var count uint16
+	binary.Read(buffer, binary.BigEndian, &count)
+
+	if len(buff) < 8+2+int(count)*8+2 {
+		return false
+	}
+
+	receivers := make([]int64, 0, count)
+	for i := 0; i < int(count); i++ {
+		var receiver int64
+		binary.Read(buffer, binary.BigEndian, &receiver)
+		receivers = append(receivers, receiver)
+	}
+	amsg.receivers = receivers
+
+	var l int16
+	binary.Read(buffer, binary.BigEndian, &l)
+	if int(l) > buffer.Len() || l < 0 {
+		return false
+	}
+
+	msg_buf := make([]byte, l)
+	buffer.Read(msg_buf)
+
+	mbuffer := bytes.NewBuffer(msg_buf)
+	//recusive
+	msg := ReceiveMessage(mbuffer)
+	if msg == nil {
+		return false
+	}
+	amsg.msg = msg
+
+	return true
+}
+
 
 type AppMessage struct {
 	appid    int64

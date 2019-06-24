@@ -97,6 +97,8 @@ func (client *Client) HandleMessage(msg *Message) {
 		client.HandlePublish(msg.body.(*AppMessage))
 	case MSG_PUBLISH_GROUP:
 		client.HandlePublishGroup(msg.body.(*AppMessage))
+	case MSG_PUSH:
+		client.HandlePush(msg.body.(*BatchPushMessage))
 	case MSG_SUBSCRIBE_ROOM:
 		client.HandleSubscribeRoom(msg.body.(*AppRoomID))
 	case MSG_UNSUBSCRIBE_ROOM:
@@ -124,24 +126,6 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 
 func (client *Client) HandlePublishGroup(amsg *AppMessage) {
 	log.Infof("publish message appid:%d uid:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
-	gid := amsg.receiver
-	group := group_manager.FindGroup(gid)
-	 
-	if group != nil && amsg.msg.cmd == MSG_GROUP_IM {
-		msg := amsg.msg
-		members := group.Members()
-		im := msg.body.(*IMMessage);
-		off_members := make([]int64, 0)
-		for uid, _ := range members {
-			if im.sender != uid && !IsUserOnline(amsg.appid, uid) {
-				off_members = append(off_members, uid)
-			}
-		}
-		if len(off_members) > 0 {
-			client.PublishGroupMessage(amsg.appid, off_members, im)
-		}
-	}
-
 	//当前只有MSG_SYNC_GROUP_NOTIFY可以发给终端
 	if amsg.msg.cmd != MSG_SYNC_GROUP_NOTIFY {
 		return
@@ -160,49 +144,46 @@ func (client *Client) HandlePublishGroup(amsg *AppMessage) {
 	}
 }
 
+func (client *Client) HandlePush(pmsg *BatchPushMessage) {
+	log.Infof("push message appid:%d cmd:%s", pmsg.appid, Command(pmsg.msg.cmd))
+
+	off_members := make([]int64, 0)	
+	
+	for _, uid := range(pmsg.receivers) {
+		if !IsUserOnline(pmsg.appid, uid) {
+			off_members = append(off_members, uid)
+		}
+	}
+
+	cmd := pmsg.msg.cmd
+	if len(off_members) > 0 {
+		if cmd == MSG_GROUP_IM {
+			client.PublishGroupMessage(pmsg.appid, off_members, pmsg.msg.body.(*IMMessage))
+		} else if cmd == MSG_IM {
+			//assert len(off_members) == 1
+			client.PublishPeerMessage(pmsg.appid, pmsg.msg.body.(*IMMessage))
+		} else if cmd == MSG_CUSTOMER || 
+			cmd == MSG_CUSTOMER_SUPPORT {
+			//assert len(off_members) == 1
+			receiver := off_members[0]
+			client.PublishCustomerMessage(pmsg.appid, receiver, 
+				pmsg.msg.body.(*CustomerMessage), pmsg.msg.cmd)
+		} else if cmd == MSG_SYSTEM {
+			//assert len(off_members) == 1
+			receiver := off_members[0]
+			sys := pmsg.msg.body.(*SystemMessage)
+			if config.is_push_system {
+				client.PublishSystemMessage(pmsg.appid, receiver, sys.notification)
+			}
+		}
+	}
+}
 
 func (client *Client) HandlePublish(amsg *AppMessage) {
 	log.Infof("publish message appid:%d uid:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
 
-	cmd := amsg.msg.cmd
 	receiver := &AppUserID{appid:amsg.appid, uid:amsg.receiver}
 	s := FindClientSet(receiver)
-
-	offline := true
-	for c := range(s) {
-		if c.IsAppUserOnline(receiver) {
-			offline = false
-		}
-	}
-	
-	if offline {
-		//用户不在线,推送消息到终端
-		if cmd == MSG_IM {
-			client.PublishPeerMessage(amsg.appid, amsg.msg.body.(*IMMessage))
-		} else if cmd == MSG_GROUP_IM {
-			client.PublishGroupMessage(amsg.appid, []int64{amsg.receiver},
-				amsg.msg.body.(*IMMessage))
-		} else if cmd == MSG_CUSTOMER || 
-			cmd == MSG_CUSTOMER_SUPPORT {
-			client.PublishCustomerMessage(amsg.appid, amsg.receiver, 
-				amsg.msg.body.(*CustomerMessage), amsg.msg.cmd)
-		} else if cmd == MSG_SYSTEM {
-			sys := amsg.msg.body.(*SystemMessage)
-			if config.is_push_system {
-				client.PublishSystemMessage(amsg.appid, amsg.receiver, sys.notification)
-			}
-		}
-	}
-
-	if cmd == MSG_IM || cmd == MSG_GROUP_IM || 
-		cmd == MSG_CUSTOMER || cmd == MSG_CUSTOMER_SUPPORT || 
-		cmd == MSG_SYSTEM {
-		if amsg.msg.flag & MESSAGE_FLAG_UNPERSISTENT == 0 {
-			//持久化的消息不主动推送消息到客户端
-			return
-		}
-	}
-
 	msg := &Message{cmd:MSG_PUBLISH, body:amsg}
 	for c := range(s) {
 		//不发送给自身

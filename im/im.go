@@ -18,155 +18,10 @@
  */
 
 package main
-import "net"
-import "fmt"
-import "flag"
 import "time"
-import "runtime"
-import "math/rand"
-import "net/http"
-import "path"
 import "sync/atomic"
-import "crypto/tls"
-import "github.com/gomodule/redigo/redis"
-import log "github.com/golang/glog"
 import "github.com/valyala/gorpc"
-import "github.com/importcjj/sensitive"
-import "github.com/bitly/go-simplejson"
-
-var (
-    VERSION    string
-    BUILD_TIME string
-    GO_VERSION string
-	GIT_COMMIT_ID string
-	GIT_BRANCH string
-)
-
-//storage server,  peer, group, customer message
-var rpc_clients []*gorpc.DispatcherClient
-
-//super group storage server
-var group_rpc_clients []*gorpc.DispatcherClient
-
-//route server
-var route_channels []*Channel
-
-//super group route server
-var group_route_channels []*Channel
-
-var app_route *AppRoute
-var group_manager *GroupManager
-var redis_pool *redis.Pool
-
-var config *Config
-var server_summary *ServerSummary
-
-var sync_c chan *SyncHistory
-var group_sync_c chan *SyncGroupHistory
-
-//round-robin
-var current_deliver_index uint64
-var group_message_delivers []*GroupMessageDeliver
-var filter *sensitive.Filter
-
-func init() {
-	app_route = NewAppRoute()
-	server_summary = NewServerSummary()
-	sync_c = make(chan *SyncHistory, 100)
-	group_sync_c = make(chan *SyncGroupHistory, 100)
-}
-
-func handle_client(conn net.Conn) {
-	log.Infoln("handle new connection")
-	client := NewClient(conn)
-	client.Run()
-}
-
-func handle_ssl_client(conn net.Conn) {
-	log.Infoln("handle new ssl connection")
-	client := NewClient(conn)
-	client.Run()
-}
-
-
-func Listen(f func(net.Conn), port int) {
-	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
-	listen, err := net.Listen("tcp", listen_addr)
-	if err != nil {
-		log.Errorf("listen err:%s", err)
-		return
-	}
-	tcp_listener, ok := listen.(*net.TCPListener)
-	if !ok {
-		log.Error("listen err")
-		return
-	}
-
-	for {
-		client, err := tcp_listener.AcceptTCP()
-		if err != nil {
-			log.Errorf("accept err:%s", err)
-			return
-		}
-		f(client)
-	}
-}
-
-func ListenClient() {
-	Listen(handle_client, config.port)
-}
-
-func ListenSSL(port int, cert_file, key_file string) {
-	cert, err := tls.LoadX509KeyPair(cert_file, key_file)
-	if err != nil {
-		log.Fatal("load cert err:", err)
-		return
-	}
-	config := &tls.Config{Certificates: []tls.Certificate{cert}}
-	addr := fmt.Sprintf(":%d", port)
-	listen, err := tls.Listen("tcp", addr, config)
-	if err != nil {
-		log.Fatal("ssl listen err:", err)
-	}
-
-	log.Infof("ssl listen...")
-	for {
-		conn, err := listen.Accept()
-		if err != nil {
-			log.Fatal("ssl accept err:", err)
-		}
-		handle_ssl_client(conn)
-	}
-}
-
-
-func NewRedisPool(server, password string, db int) *redis.Pool {
-	return &redis.Pool{
-		MaxIdle:     100,
-		MaxActive:   500,
-		IdleTimeout: 480 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
-			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
-			if err != nil {
-				return nil, err
-			}
-			if len(password) > 0 {
-				if _, err := c.Do("AUTH", password); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			if db > 0 && db < 16 {
-				if _, err := c.Do("SELECT", db); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			return c, err
-		},
-	}
-}
+import log "github.com/golang/glog"
 
 //个人消息／普通群消息／客服消息
 func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
@@ -262,34 +117,36 @@ func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, er
 	return msgid, nil
 }
 
-//超级群，离线消息推送
-func PushGroupMessage(appid int64, group_id int64, m *Message) {
-	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, timestamp:now, msg:m}
-
-	group := group_manager.FindGroup(amsg.receiver)
-	if group == nil {
-		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
-		return
-	}
-	
-	channels := make(map[*Channel]struct{})
+//群消息通知(apns, gcm...)
+func PushGroupMessage(appid int64, group *Group, m *Message) {
+	channels := make(map[*Channel][]int64)
 	members := group.Members()
 	for member := range members {
+		//不对自身推送
+		if im, ok := m.body.(*IMMessage); ok {
+			if im.sender == member {
+				continue
+			}
+		}
 		channel := GetChannel(member)
 		if _, ok := channels[channel]; !ok {
-			channels[channel] = struct{}{}
+			channels[channel] = []int64{member}
+		} else {
+			receivers := channels[channel]
+			receivers = append(receivers, member)
+			channels[channel] = receivers
 		}
 	}
 
-	for channel, _ := range channels {
-		channel.Publish(amsg)
+	for channel, receivers := range channels {
+		channel.Push(appid, receivers, m)
 	}
 }
 
 //离线消息推送
-func PushMessage(appid int64, uid int64, m *Message) {
-	PublishMessage(appid, uid, m)
+func PushMessage(appid int64, uid int64, m *Message) {	
+	channel := GetChannel(uid)
+	channel.Push(appid, []int64{uid}, m)
 }
 
 func PublishMessage(appid int64, uid int64, m *Message) {
@@ -306,12 +163,12 @@ func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	channel.PublishGroup(amsg)
 }
 
-func SendAppGroupMessage(appid int64, group_id int64, msg *Message) {
+func SendAppGroupMessage(appid int64, group *Group, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, timestamp:now, msg:msg}
-	channel := GetGroupChannel(group_id)
+	amsg := &AppMessage{appid:appid, receiver:group.gid, msgid:0, timestamp:now, msg:msg}
+	channel := GetGroupChannel(group.gid)
 	channel.PublishGroup(amsg)
-	DispatchGroupMessage(amsg)
+	DispatchMessageToGroup(msg, group, appid, nil)
 }
 
 func SendAppMessage(appid int64, uid int64, msg *Message) {
@@ -319,37 +176,7 @@ func SendAppMessage(appid int64, uid int64, msg *Message) {
 	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
-	DispatchAppMessage(amsg)
-}
-
-//过滤敏感词
-func FilterDirtyWord(msg *IMMessage) {
-	if filter == nil {
-		return
-	}
-
-	obj, err := simplejson.NewJson([]byte(msg.content))
-	if err != nil {
-		return
-	}
-
-	text, err := obj.Get("text").String()
-	if err != nil {
-		return
-	}
-
-	if exist,  _ := filter.FindIn(text); exist {
-		t := filter.RemoveNoise(text)
-		replacedText := filter.Replace(t, '*')
-
-		obj.Set("text", replacedText)
-		c, err := obj.Encode()
-		if err != nil {
-			log.Errorf("json encode err:%s", err)
-			return
-		}
-		msg.content = string(c)
-	}
+	DispatchMessageToPeer(msg, uid, appid, nil)
 }
 
 func DispatchAppMessage(amsg *AppMessage) {
@@ -359,35 +186,14 @@ func DispatchAppMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch app message slow...")
 	}
-
-	route := app_route.FindRoute(amsg.appid)
-	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	clients := route.FindClientSet(amsg.receiver)
-	if len(clients) == 0 {
-		log.Infof("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	for c, _ := range(clients) {
-		c.EnqueueNonBlockMessage(amsg.msg)
-	}
+	DispatchMessageToPeer(amsg.msg, amsg.receiver, amsg.appid, nil)
 }
 
 func DispatchRoomMessage(amsg *AppMessage) {
 	log.Info("dispatch room message", Command(amsg.msg.cmd))
+	
 	room_id := amsg.receiver
-	route := app_route.FindOrAddRoute(amsg.appid)
-	clients := route.FindRoomClientSet(room_id)
-
-	if len(clients) == 0 {
-		log.Infof("can't dispatch room message, appid:%d room id:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
-	}
-	for c, _ := range(clients) {
-		c.EnqueueNonBlockMessage(amsg.msg)
-	}	
+	DispatchMessageToRoom(amsg.msg, room_id, amsg.appid, nil)
 }
 
 func DispatchGroupMessage(amsg *AppMessage) {
@@ -397,17 +203,20 @@ func DispatchGroupMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch group message slow...")
 	}
-	
-	group := group_manager.FindGroup(amsg.receiver)
+
+	deliver := GetGroupMessageDeliver(amsg.receiver)
+	deliver.DispatchMessage(amsg)
+}
+
+func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Client) bool {
 	if group == nil {
-		log.Warningf("can't dispatch group message, appid:%d group id:%d", amsg.appid, amsg.receiver)
-		return
+		return false
 	}
 
-	route := app_route.FindRoute(amsg.appid)
+	route := app_route.FindRoute(appid)
 	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
-		return
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, group.gid, Command(msg.cmd))
+		return false
 	}
 
 	members := group.Members()
@@ -418,194 +227,48 @@ func DispatchGroupMessage(amsg *AppMessage) {
 		}
 
 		for c, _ := range(clients) {
-			c.EnqueueNonBlockMessage(amsg.msg)
-		}
-	}
-}
-
-
-
-type loggingHandler struct {
-	handler http.Handler
-}
-
-func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Infof("http request:%s %s %s", r.RemoteAddr, r.Method, r.URL)
-	h.handler.ServeHTTP(w, r)
-}
-
-func StartHttpServer(addr string) {
-	http.HandleFunc("/summary", Summary)
-	http.HandleFunc("/stack", Stack)
-
-	//rpc function
-	http.HandleFunc("/post_group_notification", PostGroupNotification)
-	http.HandleFunc("/post_im_message", PostIMMessage)
-	http.HandleFunc("/load_latest_message", LoadLatestMessage)
-	http.HandleFunc("/load_history_message", LoadHistoryMessage)
-	http.HandleFunc("/post_system_message", SendSystemMessage)
-	http.HandleFunc("/post_notification", SendNotification)
-	http.HandleFunc("/post_room_message", SendRoomMessage)
-	http.HandleFunc("/post_customer_message", SendCustomerMessage)
-	http.HandleFunc("/post_customer_support_message", SendCustomerSupportMessage)
-	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
-	http.HandleFunc("/init_message_queue", InitMessageQueue)
-	http.HandleFunc("/get_offline_count", GetOfflineCount)
-	http.HandleFunc("/dequeue_message", DequeueMessage)
-
-	handler := loggingHandler{http.DefaultServeMux}
-	
-	err := http.ListenAndServe(addr, handler)
-	if err != nil {
-		log.Fatal("http server err:", err)
-	}
-}
-
-func SyncKeyService() {
-	for {
-		select {
-		case s := <- sync_c:
-			origin := GetSyncKey(s.AppID, s.Uid)
-			if s.LastMsgID > origin {
-				log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
-				SaveSyncKey(s.AppID, s.Uid, s.LastMsgID)
+			if c == client {
+				continue
 			}
-			break
-		case s := <- group_sync_c:
-			origin := GetGroupSyncKey(s.AppID, s.Uid, s.GroupID)
-			if s.LastMsgID > origin {
-				log.Infof("save group sync key:%d %d %d %d", 
-					s.AppID, s.Uid, s.GroupID, s.LastMsgID)
-				SaveGroupSyncKey(s.AppID, s.Uid, s.GroupID, s.LastMsgID)
-			}
-			break
+			c.EnqueueNonBlockMessage(msg)
 		}
 	}
+
+	return true
 }
 
-func main() {
-	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
-	rand.Seed(time.Now().UnixNano())
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	flag.Parse()
-	if len(flag.Args()) == 0 {
-		fmt.Println("usage: im config")
-		return
+
+func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client) bool {
+	route := app_route.FindRoute(appid)
+	if route == nil {
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
+		return false
 	}
-	
-	config = read_cfg(flag.Args()[0])
-	log.Infof("port:%d\n", config.port)
-
-	log.Infof("redis address:%s password:%s db:%d\n", 
-		config.redis_address, config.redis_password, config.redis_db)
-
-	log.Info("storage addresses:", config.storage_rpc_addrs)
-	log.Info("route addressed:", config.route_addrs)
-	log.Info("group route addressed:", config.group_route_addrs)	
-	log.Info("kefu appid:", config.kefu_appid)
-	log.Info("pending root:", config.pending_root)
-	
-	log.Infof("socket io address:%s tls_address:%s cert file:%s key file:%s",
-		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
-	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
-	log.Info("group deliver count:", config.group_deliver_count)
-	log.Info("sync self:", config.sync_self)
-	
-	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
-		config.redis_db)
-
-	rpc_clients = make([]*gorpc.DispatcherClient, 0)
-	for _, addr := range(config.storage_rpc_addrs) {
-		c := &gorpc.Client{
-			Conns: 4,
-			Addr: addr,
+	clients := route.FindClientSet(uid)
+	if len(clients) == 0 {
+		return false
+	}
+	for c, _ := range(clients) {
+		if c == client {
+			continue
 		}
-		c.Start()
-
-		dispatcher := gorpc.NewDispatcher()
-		dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
-		dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
-		dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
-		dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
-		dispatcher.AddFunc("GetLatestMessage", GetLatestMessageInterface)
-
-		dc := dispatcher.NewFuncClient(c)
-
-		rpc_clients = append(rpc_clients, dc)
+		c.EnqueueNonBlockMessage(msg)
 	}
+	return true
+}
 
-	if len(config.group_storage_rpc_addrs) > 0 {
-		group_rpc_clients = make([]*gorpc.DispatcherClient, 0)
-		for _, addr := range(config.group_storage_rpc_addrs) {
-			c := &gorpc.Client{
-				Conns: 4,
-				Addr: addr,
-			}
-			c.Start()
+func DispatchMessageToRoom(msg *Message, room_id int64, appid int64, client *Client) bool {
+	route := app_route.FindOrAddRoute(appid)
+	clients := route.FindRoomClientSet(room_id)
 
-			dispatcher := gorpc.NewDispatcher()
-			dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
-			dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
-			dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
-			dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
-
-			dc := dispatcher.NewFuncClient(c)
-
-			group_rpc_clients = append(group_rpc_clients, dc)
+	if len(clients) == 0 {
+		return false
+	}
+	for c, _ := range(clients) {
+		if c == client {
+			continue
 		}
-	} else {
-		group_rpc_clients = rpc_clients
+		c.EnqueueNonBlockMessage(msg)
 	}
-
-	route_channels = make([]*Channel, 0)
-	for _, addr := range(config.route_addrs) {
-		channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
-		channel.Start()
-		route_channels = append(route_channels, channel)
-	}
-
-	if len(config.group_route_addrs) > 0 {
-		group_route_channels = make([]*Channel, 0)
-		for _, addr := range(config.group_route_addrs) {
-			channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
-			channel.Start()
-			group_route_channels = append(group_route_channels, channel)
-		}
-	} else {
-		group_route_channels = route_channels
-	}
-
-	if len(config.word_file) > 0 {
-		filter = sensitive.New()
-		filter.LoadWordDict(config.word_file)
-	}
-	
-	group_manager = NewGroupManager()
-	group_manager.Start()
-
-	group_message_delivers = make([]*GroupMessageDeliver, config.group_deliver_count)
-	for i := 0; i < config.group_deliver_count; i++ {
-		q := fmt.Sprintf("q%d", i)
-		r := path.Join(config.pending_root, q)
-		deliver := NewGroupMessageDeliver(r)
-		deliver.Start()
-		group_message_delivers[i] = deliver
-	}
-	
-	go ListenRedis()
-	go SyncKeyService()
-	
-	go StartHttpServer(config.http_listen_address)
-	StartRPCServer(config.rpc_listen_address)
-
-	go StartSocketIO(config.socket_io_address, config.tls_address, 
-		config.cert_file, config.key_file)
-	go StartWSServer(config.ws_address, config.wss_address, 
-		config.cert_file, config.key_file)
-
-	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
-		go ListenSSL(config.ssl_port, config.cert_file, config.key_file)
-	}
-	ListenClient()
-	log.Infof("exit")
+	return true
 }

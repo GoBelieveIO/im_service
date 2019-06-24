@@ -164,6 +164,31 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
 		return
 	}
+
+	if config.friend_permission {
+		rs := relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
+		if !rs.IsMyFriend() {
+			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_NOT_MY_FRIEND}}
+			client.EnqueueMessage(ack)
+			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
+			return
+		}
+
+		if !rs.IsYourFriend() {
+			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_NOT_YOUR_FRIEND}}
+			client.EnqueueMessage(ack)
+			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
+			return
+		}
+
+		if rs.IsInYourBlacklist() {
+			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_IN_YOUR_BLACKLIST}}
+			client.EnqueueMessage(ack)
+			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
+			return
+		}
+	}
+	
 	if message.flag & MESSAGE_FLAG_TEXT != 0 {
 		FilterDirtyWord(msg)
 	}
@@ -195,7 +220,7 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	client.SendMessage(client.uid, notify)
 	
 
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send peer message ack error")

@@ -1,9 +1,6 @@
 #监听地址 ip:port ip一般使用内网网卡地址
 listen=:4444
 
-#mysql的链接地址  用户名:密码@tcp(服务器地址:服务器端口)/数据库名称
-mysqldb_source=root:123456@tcp(127.0.0.1:3306)/gobelieve
-
 #redis服务器地址  服务器地址:服务器端口
 redis_address=127.0.0.1:6379
 redis_password=

@@ -26,7 +26,7 @@ type GroupClient struct {
 	*Connection
 }
 
-func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage) {
+func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group) {
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 	msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
@@ -35,11 +35,11 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage) {
 	}
 	
 	//推送外部通知
-	PushGroupMessage(client.appid, msg.receiver, m)
+	PushGroupMessage(client.appid, group, m)
 
 	//发送同步的通知消息
 	notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:msg.receiver, sync_key:msgid}}
-	client.SendGroupMessage(msg.receiver, notify)
+	client.SendGroupMessage(group, notify)
 }
 
 func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) {
@@ -82,13 +82,16 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	
 	msg.timestamp = int32(time.Now().Unix())
 
-	group := group_manager.FindGroup(msg.receiver)
+	deliver := GetGroupMessageDeliver(msg.receiver)
+	group := deliver.LoadGroup(msg.receiver)
 	if group == nil {
 		log.Warning("can't find group:", msg.receiver)
 		return
 	}
 
 	if !group.IsMember(msg.sender) {
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq), status:ACK_NOT_GROUP_MEMBER}}
+		client.EnqueueMessage(ack)
 		log.Warningf("sender:%d is not group member", msg.sender)
 		return
 	}
@@ -99,11 +102,11 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	}
 	
 	if group.super {
-		client.HandleSuperGroupMessage(msg)
+		client.HandleSuperGroupMessage(msg, group)
 	} else {
 		client.HandleGroupMessage(msg, group)
 	}
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send group message ack error")

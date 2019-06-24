@@ -166,7 +166,7 @@ func (batch *MessageBatch) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, count)
 
 	for _, m := range batch.msgs {
-		SendMessage(buffer, m)
+		WriteMessage(buffer, m)
 	}
 
 	buf := buffer.Bytes()

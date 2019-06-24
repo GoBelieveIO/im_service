@@ -90,7 +90,7 @@ func recv(uid int64, gid int64, conn *net.TCPConn) {
 			//log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 		}
 		seq++
-		ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{int32(msg.seq)}}
+		ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{seq:int32(msg.seq)}}
 		SendMessage(conn, ack)
 	}
 	log.Printf("%d received:%d", uid, total)
@@ -131,7 +131,7 @@ func send(uid int64, gid int64, conn *net.TCPConn) {
 				//log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 			}
 			seq++
-			ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{int32(msg.seq)}}
+			ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{seq:int32(msg.seq)}}
 			SendMessage(conn, ack)
 		}
 		log.Printf("%d received:%d", uid, total)

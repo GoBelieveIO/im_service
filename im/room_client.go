@@ -20,7 +20,6 @@
 package main
 
 import log "github.com/golang/glog"
-import "unsafe"
 import "sync/atomic"
 
 type RoomClient struct {
@@ -73,10 +72,6 @@ func (client *RoomClient) HandleEnterRoom(room *Room){
 	channel.SubscribeRoom(client.appid, client.room_id)
 }
 
-func (client *RoomClient) Client() *Client {
-	p := unsafe.Pointer(client.Connection)
-	return (*Client)(p)
-}
 
 func (client *RoomClient) HandleLeaveRoom(room *Room) {
 	if client.uid == 0 {
@@ -118,18 +113,11 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 	}
 
 	m := &Message{cmd:MSG_ROOM_IM, body:room_im}
-	route := app_route.FindOrAddRoute(client.appid)
-	clients := route.FindRoomClientSet(room_id)
-	for c, _ := range(clients) {
-		if c == client.Client() {
-			continue
-		}
-		c.EnqueueNonBlockMessage(m)
-	}
+	DispatchMessageToRoom(m, room_id, client.appid, client.Client())
 
 	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:m}
 	channel := GetRoomChannel(client.room_id)
 	channel.PublishRoom(amsg)
 
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{int32(seq)}}
+	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
 }
