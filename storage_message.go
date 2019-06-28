@@ -29,13 +29,16 @@ const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
 
 //内部文件存储使用
-//超级群消息队列&个人消息队列 代替MSG_OFFLINE_V3
+//超级群消息队列 代替MSG_GROUP_IM_LIST
+const MSG_GROUP_OFFLINE = 247
+
+//个人消息队列 代替MSG_OFFLINE_V3
 const MSG_OFFLINE_V4 = 248
 
-//超级群消息队列&个人消息队列 代替MSG_OFFLINE_V2
+//个人消息队列 代替MSG_OFFLINE_V2
 const MSG_OFFLINE_V3 = 249
 
-//超级群消息队列&个人消息队列 代替MSG_OFFLINE
+//个人消息队列 代替MSG_OFFLINE
 //deprecated  兼容性
 const MSG_OFFLINE_V2 = 250  
 
@@ -57,6 +60,7 @@ const MSG_ACK_IN = 255
 
 
 func init() {
+	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new (OfflineMessage4)}
 	message_creators[MSG_OFFLINE_V4] = func()IMessage{return new (OfflineMessage4)}	
 	message_creators[MSG_OFFLINE_V3] = func()IMessage{return new (OfflineMessage3)}
 	message_creators[MSG_OFFLINE_V2] = func()IMessage{return new (OfflineMessage2)}
@@ -76,6 +80,7 @@ func init() {
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE] = "MSG_STORAGE_SYNC_MESSAGE"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
 
+	message_descriptions[MSG_GROUP_OFFLINE] = "MSG_GROUP_OFFLINE"
 	message_descriptions[MSG_OFFLINE_V4] = "MSG_OFFLINE_V4"		
 	message_descriptions[MSG_OFFLINE_V3] = "MSG_OFFLINE_V3"	
 	message_descriptions[MSG_OFFLINE_V2] = "MSG_OFFLINE_V2"	
@@ -205,7 +210,7 @@ type IOfflineMessage interface {
 
 type OfflineMessage struct {
 	appid    int64
-	receiver int64
+	receiver int64 //用户id or 群组id
 	msgid    int64 //消息本体的id
 	device_id int64
 	seq_id   int64      //v4 消息序号, 1,2,3...
