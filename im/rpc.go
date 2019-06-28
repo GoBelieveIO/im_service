@@ -35,13 +35,13 @@ func SendGroupNotification(appid int64, gid int64,
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
 
 	for member := range(members) {
-		msgid, err := SaveMessage(appid, member, 0, msg)
+		msgid, _, err := SaveMessage(appid, member, 0, msg)
 		if err != nil {
 			break
 		}
 
 		//发送同步的通知消息
-		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
 		SendAppMessage(appid, member, notify)
 	}
 }
@@ -56,7 +56,7 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 		return
 	}
 	if group.super {
-		msgid, err := SaveGroupMessage(appid, im.receiver, 0, m)
+		msgid, _, err := SaveGroupMessage(appid, im.receiver, 0, m)
 		if err != nil {
 			return
 		}
@@ -65,7 +65,7 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 		PushGroupMessage(appid, group, m)
 
 		//发送同步的通知消息
-		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:im.receiver, sync_key:msgid}}
+		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{group_id:im.receiver, sync_key:msgid}}
 		SendAppGroupMessage(appid, group, notify)
 
 	} else {
@@ -93,13 +93,13 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 
 func SendIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
-	msgid, err := SaveMessage(appid, im.receiver, 0, m)
+	msgid, _, err := SaveMessage(appid, im.receiver, 0, m)
 	if err != nil {
 		return
 	}
 
 	//保存到发送者自己的消息队列
-	msgid2, err := SaveMessage(appid, im.sender, 0, m)
+	msgid2, _, err := SaveMessage(appid, im.sender, 0, m)
 	if err != nil {
 		return
 	}
@@ -108,11 +108,11 @@ func SendIMMessage(im *IMMessage, appid int64) {
 	PushMessage(appid, im.receiver, m)
 
 	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
 	SendAppMessage(appid, im.receiver, notify)
 
 	//发送同步的通知消息
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid2}}
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid2}}
 	SendAppMessage(appid, im.sender, notify)
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
@@ -560,7 +560,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
 	sys := &SystemMessage{string(body)}
 	msg := &Message{cmd:MSG_SYSTEM, body:sys}
 
-	msgid, err := SaveMessage(appid, uid, 0, msg)
+	msgid, _, err := SaveMessage(appid, uid, 0, msg)
 	if err != nil {
 		WriteHttpError(500, "internal server error", w)
 		return
@@ -570,7 +570,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
 	PushMessage(appid, uid, msg)
 
 	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
 	SendAppMessage(appid, uid, notify)
 	
 	w.WriteHeader(200)
@@ -683,14 +683,14 @@ func SendCustomerSupportMessage(w http.ResponseWriter, req *http.Request) {
 	m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
 
 
-	msgid, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
+	msgid, _, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
 		return
 	}
 	
-	msgid2, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
+	msgid2, _, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
@@ -700,11 +700,11 @@ func SendCustomerSupportMessage(w http.ResponseWriter, req *http.Request) {
 	PushMessage(cm.customer_appid, cm.customer_id, m)
 	
 	//发送给自己的其它登录点	
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid2}}
 	SendAppMessage(config.kefu_appid, cm.seller_id, notify)
 
 	//发送同步的通知消息
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
 	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
 
 	w.WriteHeader(200)	
@@ -771,13 +771,13 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 	m := &Message{cmd:MSG_CUSTOMER, body:cm}
 
 
-	msgid, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
+	msgid, _, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
 		return
 	}
-	msgid2, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
+	msgid2, _, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
@@ -788,12 +788,12 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 	
 	
 	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
 	SendAppMessage(config.kefu_appid, cm.seller_id, notify)
 
 
 	//发送给自己的其它登录点
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid2}}
 	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
 
 	resp := make(map[string]interface{})

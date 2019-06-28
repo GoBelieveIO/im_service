@@ -28,7 +28,7 @@ type GroupClient struct {
 
 func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group) {
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
-	msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save group message:%d %d err:%s", msg.sender, msg.receiver, err)
 		return
@@ -37,9 +37,10 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group)
 	//推送外部通知
 	PushGroupMessage(client.appid, group, m)
 
-	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:msg.receiver, sync_key:msgid}}
-	client.SendGroupMessage(group, notify)
+	m.msgid = msgid
+	m.prev_msgid = prev_msgid
+	m.flag = MESSAGE_FLAG_PUSH
+	client.SendGroupMessage(group, m)
 }
 
 func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) {

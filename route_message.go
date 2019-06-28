@@ -33,7 +33,6 @@ const MSG_SUBSCRIBE_ROOM = 136
 const MSG_UNSUBSCRIBE_ROOM = 137
 const MSG_PUBLISH_ROOM = 138
 
-
 func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(SubscribeMessage)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
@@ -141,6 +140,7 @@ type AppMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
+	prev_msgid int64
 	device_id int64
 	timestamp int64 //纳秒,测试消息从im->imr->im的时间
 	msg      *Message

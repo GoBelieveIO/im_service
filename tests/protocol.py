@@ -60,6 +60,9 @@ MESSAGE_FLAG_TEXT = 0x01
 #消息不持久化
 MESSAGE_FLAG_UNPERSISTENT = 0x02
 
+#消息由服务器主动推到客户端
+MESSAGE_FLAG_PUSH = 0x10
+
 
 PLATFORM_IOS = 1
 PLATFORM_ANDROID = 2
@@ -166,63 +169,63 @@ def send_message(cmd, seq, msg, sock):
 def recv_message(sock):
     buf = sock.recv(12)
     if len(buf) != 12:
-        return 0, 0, None
+        return 0, 0, 0, None
     length, seq, cmd, _, flag = struct.unpack("!iibbb", buf[:11])
-    print "recv message flag:", flag, " cmd:", cmd
+    print "recv message flag:", hex(flag), " cmd:", cmd
     if length == 0:
-        return cmd, seq, None
+        return cmd, seq, 0, None
 
     content = sock.recv(length)
     if len(content) != length:
-        return 0, 0, None
+        return 0, 0, 0, None
 
     if cmd == MSG_AUTH_STATUS:
         status, = struct.unpack("!i", content)
-        return cmd, seq, status
+        return cmd, seq, flag, status
     elif cmd == MSG_LOGIN_POINT:
         up_timestamp, platform_id = struct.unpack("!ib", content[:5])
         device_id = content[5:]
-        return cmd, seq, (up_timestamp, platform_id, device_id)
+        return cmd, seq, flag, (up_timestamp, platform_id, device_id)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         im = IMMessage()
         im.sender, im.receiver, im.timestamp, _ = struct.unpack("!qqii", content[:24])
         im.content = content[24:]
-        return cmd, seq, im
+        return cmd, seq, flag, im
     elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         rt = RTMessage()
         rt.sender, rt.receiver, = struct.unpack("!qq", content[:16])
         rt.content = content[16:]
-        return cmd, seq, rt
+        return cmd, seq, flag, rt
     elif cmd == MSG_ACK:
         ack, = struct.unpack("!i", content)
-        return cmd, seq, ack
+        return cmd, seq, flag, ack
     elif cmd == MSG_SYSTEM:
-        return cmd, seq, content
+        return cmd, seq, flag, content
     elif cmd == MSG_NOTIFICATION:
-        return cmd, seq, content
+        return cmd, seq, flag, content
     elif cmd == MSG_INPUTING:
         sender, receiver = struct.unpack("!qq", content)
-        return cmd, seq, (sender, receiver)
+        return cmd, seq, flag, (sender, receiver)
     elif cmd == MSG_PONG:
         return cmd, seq, None
     elif cmd == MSG_SYNC_BEGIN or \
          cmd == MSG_SYNC_END or \
          cmd == MSG_SYNC_NOTIFY:
         sync_key, = struct.unpack("!q", content)
-        return cmd, seq, sync_key
+        return cmd, seq, flag, sync_key
     elif cmd == MSG_SYNC_GROUP_BEGIN or \
          cmd == MSG_SYNC_GROUP_END or \
          cmd == MSG_SYNC_GROUP_NOTIFY:
         group_id, sync_key = struct.unpack("!qq", content)
-        return cmd, seq, (group_id, sync_key)
+        return cmd, seq, flag, (group_id, sync_key)
     elif cmd == MSG_GROUP_NOTIFICATION:
-        return cmd, seq, content
+        return cmd, seq, flag, content
     elif cmd == MSG_CUSTOMER or cmd == MSG_CUSTOMER_SUPPORT:
         cm = CustomerMessage()
         cm.customer_appid, cm.customer_id, cm.store_id, cm.seller_id, cm.timestamp = \
             struct.unpack("!qqqqi", content[:36])
         cm.content = content[36:]
-        return cmd, seq, cm
+        return cmd, seq, flag, cm
     else:
         print "unknow cmd:", cmd
-        return cmd, seq, content
+        return cmd, seq, flag, content

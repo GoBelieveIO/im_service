@@ -64,28 +64,30 @@ func (client *CustomerClient) HandleCustomerSupportMessage(msg *Message) {
 		return
 	}
 	
-	msgid, err := SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
+	msgid, prev_msgid, err := SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer support message err:", err)
 		return
 	}
 
-	msgid2, err := SaveMessage(client.appid, cm.seller_id, client.device_ID, msg)
+	msgid2, prev_msgid2, err := SaveMessage(client.appid, cm.seller_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer support message err:", err)
 		return
 	}
 
 	PushMessage(cm.customer_appid, cm.customer_id, msg)
-	
-	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
-	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
 
-	//发送给自己的其它登录点
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
-	client.SendMessage(client.uid, notify)
+	m1 := &Message{cmd:MSG_CUSTOMER_SUPPORT, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
+	m1.msgid = msgid
+	m1.prev_msgid = prev_msgid
+	SendAppMessage(cm.customer_appid, cm.customer_id, m1)
 
+	//发送给自己的其它登录点	
+	m2 := &Message{cmd:MSG_CUSTOMER_SUPPORT, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
+	m2.msgid = msgid2
+	m2.prev_msgid = prev_msgid2
+	client.SendMessage(client.uid, m2)
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
 	client.EnqueueMessage(ack)
@@ -122,29 +124,30 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 		return
 	}
 	
-	msgid, err := SaveMessage(config.kefu_appid, cm.seller_id, client.device_ID, msg)
+	msgid, prev_msgid, err := SaveMessage(config.kefu_appid, cm.seller_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return
 	}
 
-	msgid2, err := SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
+	msgid2, prev_msgid2, err := SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return
 	}
 
 	PushMessage(config.kefu_appid, cm.seller_id, msg)
-	
-	
-	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
-	SendAppMessage(config.kefu_appid, cm.seller_id, notify)
 
+	m1 := &Message{cmd:MSG_CUSTOMER, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
+	m1.msgid = msgid
+	m1.prev_msgid = prev_msgid
+	SendAppMessage(config.kefu_appid, cm.seller_id, m1)
 
-	//发送给自己的其它登录点
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
-	client.SendMessage(client.uid, notify)
+	//发送给自己的其它登录点	
+	m2 := &Message{cmd:MSG_CUSTOMER, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
+	m2.msgid = msgid2
+	m2.prev_msgid = prev_msgid2
+	client.SendMessage(client.uid, m2)
 
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}

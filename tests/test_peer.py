@@ -31,13 +31,9 @@ def send_client(uid, receiver, msg_type):
     send_message(msg_type, seq, im, sock)
     msg_seq = seq
     while True:
-        cmd, s, msg = recv_message(sock)
+        cmd, s, flag, msg = recv_message(sock)
         if cmd == MSG_ACK and msg == msg_seq:
             break
-        elif cmd == MSG_GROUP_NOTIFICATION:
-            print "send ack..."
-            seq += 1
-            send_message(MSG_ACK, seq, s, sock)
         else:
             pass
         
@@ -54,7 +50,7 @@ def recv_room_client(uid, port, room_id, handler):
     send_message(MSG_ENTER_ROOM, seq, room_id, sock)
 
     while True:
-        cmd, s, msg = recv_message(sock)
+        cmd, s, flag, msg = recv_message(sock)
         seq += 1
         send_message(MSG_ACK, seq, s, sock)
         if handler(cmd, s, msg):
@@ -332,7 +328,7 @@ def TestPingPong():
     seq += 1
     send_message(MSG_PING, seq, None, sock)
     while True:
-        cmd, _, msg = recv_message(sock)
+        cmd, _, _, msg = recv_message(sock)
         if cmd == MSG_PONG:
             print "test ping/pong completed"
             return
@@ -409,11 +405,11 @@ def TestNotification():
 
     
 def main():
-    cluster = False
+    cluster = True
      
     TestRTSendAndRecv()
     time.sleep(1)
-
+     
     print "test room message"
     TestRoomMessage()
     time.sleep(1)
@@ -423,7 +419,7 @@ def main():
      
     TestSendAndRecv()
     time.sleep(1)
-     
+
     TestOffline()
     time.sleep(1)
      

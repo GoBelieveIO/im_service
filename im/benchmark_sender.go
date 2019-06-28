@@ -90,7 +90,7 @@ func send(uid int64) {
 		log.Println("receiver:", receiver)
 		content := fmt.Sprintf("test....%d", i)
 		seq++
-		msg := &Message{MSG_IM, seq, DEFAULT_VERSION, 0, &IMMessage{uid, receiver, 0, int32(i), content}}
+		msg := &Message{cmd:MSG_IM, seq:seq, version:DEFAULT_VERSION, flag:0, body:&IMMessage{uid, receiver, 0, int32(i), content}}
 		SendMessage(conn, msg)
 		for {
 			ack := ReceiveMessage(conn)

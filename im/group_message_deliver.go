@@ -368,7 +368,15 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 			continue
 		}
 	
-		c.EnqueueMessage(msg)
+		c.EnqueueNonBlockMessage(msg)
+		if msg.msgid > 0 {
+			//assert msg.flags & MESSAGE_FLAG_PUSH
+			if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
+				log.Fatal("invalid message flag", msg.flag)
+			}
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
+			c.EnqueueNonBlockMessage(notify)
+		}
 	}
 
 	return true
@@ -380,14 +388,16 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) bo
 	
 	members := gm.members
 	for _, member := range members {
-		msgid, err := SaveMessage(gm.appid, member, gm.device_ID, m)
+		msgid, prev_msgid, err := SaveMessage(gm.appid, member, gm.device_ID, m)
 		if err != nil {
 			log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
 			return false
 		}
 
-		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{sync_key:msgid}}
-		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
+		mm := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, flag:MESSAGE_FLAG_PUSH, body:msg}
+		mm.msgid = msgid
+		mm.prev_msgid = prev_msgid
+		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, mm)
 	}
 
 	group_members := make(map[int64]int64)

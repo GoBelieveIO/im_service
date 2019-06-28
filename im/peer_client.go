@@ -195,14 +195,14 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
-	msgid, err := SaveMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
 		return
 	}
 
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
-	msgid2, err := SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	msgid2, prev_msgid2, err := SaveMessage(client.appid, msg.sender, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
 		return
@@ -211,14 +211,18 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	//推送外部通知
 	PushMessage(client.appid, msg.receiver, m)
 
-	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
-	client.SendMessage(msg.receiver, notify)
+	m1 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg}
+	m1.msgid = msgid
+	m1.prev_msgid = prev_msgid
+	
+	m2 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg}
+	m2.msgid = msgid2
+	m2.prev_msgid = prev_msgid2
+
+	client.SendMessage(msg.receiver, m1)
 
 	//发送给自己的其它登录点
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
-	client.SendMessage(client.uid, notify)
-	
+	client.SendMessage(client.uid, m2)
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
 	r := client.EnqueueMessage(ack)

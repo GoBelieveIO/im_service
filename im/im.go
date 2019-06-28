@@ -75,7 +75,7 @@ func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
 	return group_message_delivers[index]
 }
 
-func SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (int64, error) {
+func SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (int64, int64, error) {
 	dc := GetGroupStorageRPCClient(gid)
 	
 	gm := &GroupMessage{
@@ -88,14 +88,16 @@ func SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (in
 	resp, err := dc.Call("SaveGroupMessage", gm)
 	if err != nil {
 		log.Warning("save group message err:", err)
-		return 0, err
+		return 0, 0, err
 	}
-	msgid := resp.(int64)
+	r := resp.([2]int64)
+	msgid := r[0]
+	prev_msgid := r[1]
 	log.Infof("save group message:%d %d %d\n", appid, gid, msgid)
-	return msgid, nil
+	return msgid, prev_msgid, nil
 }
 
-func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, error) {
+func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, int64, error) {
 	dc := GetStorageRPCClient(uid)
 	
 	pm := &PeerMessage{
@@ -109,12 +111,14 @@ func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, er
 	resp, err := dc.Call("SavePeerMessage", pm)
 	if err != nil {
 		log.Error("save peer message err:", err)
-		return 0, err
+		return 0, 0, err
 	}
 
-	msgid := resp.(int64)
+	r := resp.([2]int64)
+	msgid := r[0]
+	prev_msgid := r[1]
 	log.Infof("save peer message:%d %d %d %d\n", appid, uid, device_id, msgid)
-	return msgid, nil
+	return msgid, prev_msgid, nil
 }
 
 //群消息通知(apns, gcm...)
@@ -151,14 +155,14 @@ func PushMessage(appid int64, uid int64, m *Message) {
 
 func PublishMessage(appid int64, uid int64, m *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:m}
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:m.msgid, prev_msgid:m.prev_msgid, timestamp:now, msg:m}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
 }
 
 func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:0, timestamp:now, msg:msg}
+	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:msg.msgid, prev_msgid:msg.prev_msgid, timestamp:now, msg:msg}
 	channel := GetGroupChannel(group_id)
 	channel.PublishGroup(amsg)
 }
@@ -186,6 +190,8 @@ func DispatchAppMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch app message slow...")
 	}
+	amsg.msg.msgid = amsg.msgid
+	amsg.msg.prev_msgid = amsg.prev_msgid
 	DispatchMessageToPeer(amsg.msg, amsg.receiver, amsg.appid, nil)
 }
 
@@ -203,6 +209,8 @@ func DispatchGroupMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch group message slow...")
 	}
+	amsg.msg.msgid = amsg.msgid
+	amsg.msg.prev_msgid = amsg.prev_msgid
 
 	deliver := GetGroupMessageDeliver(amsg.receiver)
 	deliver.DispatchMessage(amsg)
@@ -218,19 +226,27 @@ func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Cli
 		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, group.gid, Command(msg.cmd))
 		return false
 	}
-
+	
 	members := group.Members()
 	for member := range members {
 	    clients := route.FindClientSet(member)
 		if len(clients) == 0 {
 			continue
 		}
-
+		
 		for c, _ := range(clients) {
 			if c == client {
 				continue
 			}
 			c.EnqueueNonBlockMessage(msg)
+			if msg.msgid > 0 {
+				//assert msg.flag & MESSAGE_FLAG_PUSH
+				if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
+					log.Fatal("invalid message flag", msg.flag)
+				}
+				notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{group.gid, msg.msgid, msg.prev_msgid}}
+				c.EnqueueNonBlockMessage(notify)
+			}			
 		}
 	}
 
@@ -248,11 +264,21 @@ func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client)
 	if len(clients) == 0 {
 		return false
 	}
+
 	for c, _ := range(clients) {
 		if c == client {
 			continue
 		}
 		c.EnqueueNonBlockMessage(msg)
+
+		if msg.msgid > 0 {
+			//assert msg.flag & MESSAGE_FLAG_PUSH
+			if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
+				log.Fatal("invalid message flag", msg.flag)
+			}
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
+			c.EnqueueNonBlockMessage(notify)
+		}			
 	}
 	return true
 }

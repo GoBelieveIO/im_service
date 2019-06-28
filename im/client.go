@@ -315,7 +315,7 @@ func (client *Client) SendMessages(seq int) int {
 		}
 		seq++
 		//以当前客户端所用版本号发送消息
-		vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
+		vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
 		client.send(vmsg)
 		
 		e = e.Next()
@@ -343,7 +343,7 @@ func (client *Client) Write() {
 			seq++
 
 			//以当前客户端所用版本号发送消息
-			vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
+			vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
 			client.send(vmsg)
 		case messages := <- client.pwt:
 			for _, msg := range(messages) {
@@ -353,7 +353,7 @@ func (client *Client) Write() {
 				seq++
 
 				//以当前客户端所用版本号发送消息
-				vmsg := &Message{msg.cmd, seq, client.version, msg.flag, msg.body}
+				vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
 				client.send(vmsg)
 			}
 		case <- client.lwt:

@@ -90,7 +90,7 @@ func recv(uid int64, gid int64, conn *net.TCPConn) {
 			//log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 		}
 		seq++
-		ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{seq:int32(msg.seq)}}
+		ack := &Message{cmd:MSG_ACK, seq:seq, version:DEFAULT_VERSION, flag:0, body:&MessageACK{seq:int32(msg.seq)}}
 		SendMessage(conn, ack)
 	}
 	log.Printf("%d received:%d", uid, total)
@@ -131,7 +131,7 @@ func send(uid int64, gid int64, conn *net.TCPConn) {
 				//log.Printf("sender:%d receiver:%d content:%s", m.sender, m.receiver, m.content)
 			}
 			seq++
-			ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{seq:int32(msg.seq)}}
+			ack := &Message{cmd:MSG_ACK, seq:seq, version:DEFAULT_VERSION, flag:0, body:&MessageACK{seq:int32(msg.seq)}}
 			SendMessage(conn, ack)
 		}
 		log.Printf("%d received:%d", uid, total)
@@ -143,8 +143,8 @@ func send(uid int64, gid int64, conn *net.TCPConn) {
 	for i := 0; i < count; i++ {
 		content := fmt.Sprintf("test....%d", i)
 		seq++
-		msg := &Message{MSG_GROUP_IM, seq, DEFAULT_VERSION, 0,
-			&IMMessage{uid, gid, 0, int32(i), content}}
+		msg := &Message{cmd:MSG_GROUP_IM, seq:seq, version:DEFAULT_VERSION, flag:0,
+			body:&IMMessage{uid, gid, 0, int32(i), content}}
 		SendMessage(conn, msg)
 		var e bool
 		select {
@@ -199,7 +199,7 @@ func ConnectServer(uid int64) *net.TCPConn {
 	}
 	seq := 1
 	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, 0, auth})
+	SendMessage(conn, &Message{cmd:MSG_AUTH_TOKEN, seq:seq, version:DEFAULT_VERSION, flag:0, body:auth})
 	ReceiveMessage(conn)
 
 	log.Printf("uid:%d connected\n", uid)

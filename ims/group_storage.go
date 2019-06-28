@@ -54,7 +54,7 @@ func NewGroupStorage(f *StorageFile) *GroupStorage {
 	return storage
 }
 
-func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) int64 {
+func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (int64, int64) {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 
@@ -84,7 +84,7 @@ func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id 
 	}
 	gi := &GroupIndex{msgid, last_id, last_batch_id, last_seq_id}
 	storage.setGroupIndex(appid, gid, gi)
-	return msgid
+	return msgid, index.last_msgid
 }
 
 func (storage *GroupStorage) setGroupIndex(appid int64, gid int64, gi *GroupIndex) {
@@ -193,21 +193,8 @@ func (storage *GroupStorage) createGroupIndex() {
 
 			block_NO := i
 			msgid = int64(block_NO)*BLOCK_SIZE + msgid
-			if msg.cmd == MSG_GROUP_IM_LIST {
-				off := msg.body.(*GroupOfflineMessage)
-				gi := &GroupIndex{off.msgid, msgid, 0, 0}
-				storage.setGroupIndex(off.appid, off.receiver, gi)
-			} else if msg.cmd == MSG_GROUP_OFFLINE {
-				off := msg.body.(IOfflineMessage).body()
-				index := storage.getGroupIndex(off.appid, off.receiver)
-				last_batch_id := index.last_batch_id
-				last_seq_id := index.last_seq_id + 1
-				if last_seq_id%BATCH_SIZE == 0 {
-					last_batch_id = msgid
-				}
-				gi := &GroupIndex{off.msgid, msgid, last_batch_id, last_seq_id}
-				storage.setGroupIndex(off.appid, off.receiver, gi)
-			}
+
+			storage.execMessage(msg, msgid)
 		}
 
 		file.Close()
@@ -252,21 +239,8 @@ func (storage *GroupStorage) repairGroupIndex() {
 
 			block_NO := i
 			msgid = int64(block_NO)*BLOCK_SIZE + msgid
-			if msg.cmd == MSG_GROUP_IM_LIST {
-				off := msg.body.(*GroupOfflineMessage)
-				gi := &GroupIndex{off.msgid, msgid, 0, 0}
-				storage.setGroupIndex(off.appid, off.receiver, gi)
-			} else if msg.cmd == MSG_GROUP_OFFLINE {
-				off := msg.body.(IOfflineMessage).body()
-				index := storage.getGroupIndex(off.appid, off.receiver)
-				last_batch_id := index.last_batch_id
-				last_seq_id := index.last_seq_id + 1
-				if last_seq_id%BATCH_SIZE == 0 {
-					last_batch_id = msgid
-				}
-				gi := &GroupIndex{off.msgid, msgid, last_batch_id, last_seq_id}
-				storage.setGroupIndex(off.appid, off.receiver, gi)
-			}
+
+			storage.execMessage(msg, msgid)
 		}
 
 		file.Close()

@@ -88,8 +88,8 @@ func send(uid int64, receiver int64, sem chan int) {
 	for i := 0; i < count; i++ {
 		content := fmt.Sprintf("test....%d", i)
 		seq++
-		msg := &Message{MSG_IM, seq, DEFAULT_VERSION, 0,
-			&IMMessage{uid, receiver, 0, int32(i), content}}
+		msg := &Message{cmd:MSG_IM, seq:seq, version:DEFAULT_VERSION, flag:0,
+			body:&IMMessage{uid, receiver, 0, int32(i), content}}
 
 
 		select {
@@ -145,11 +145,11 @@ func receive(uid int64, limit int,  sem chan int) {
 	}
 	seq := 1
 	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{MSG_AUTH_TOKEN, seq, DEFAULT_VERSION, 0, auth})
+	SendMessage(conn, &Message{cmd:MSG_AUTH_TOKEN, seq:seq, version:DEFAULT_VERSION, flag:0, body:auth})
 	ReceiveMessage(conn)
 
 	seq++
-	ss := &Message{MSG_SYNC, seq, DEFAULT_VERSION, 0, &SyncKey{sync_key}}
+	ss := &Message{cmd:MSG_SYNC, seq:seq, version:DEFAULT_VERSION, flag:0, body:&SyncKey{sync_key}}
 	SendMessage(conn, ss)
 
 	//一次同步的取到的消息数目
@@ -174,7 +174,7 @@ func receive(uid int64, limit int,  sem chan int) {
 		if msg.cmd == MSG_SYNC_NOTIFY {
 			if !syncing {
 				seq++
-				s := &Message{MSG_SYNC, seq, DEFAULT_VERSION, 0, &SyncKey{sync_key}}
+				s := &Message{cmd:MSG_SYNC, seq:seq, version:DEFAULT_VERSION, flag:0, body:&SyncKey{sync_key}}
 				SendMessage(conn, s)
 				syncing = true
 			} else {
@@ -197,7 +197,7 @@ func receive(uid int64, limit int,  sem chan int) {
 			sync_count++
 			
 			seq++
-			ack := &Message{MSG_ACK, seq, DEFAULT_VERSION, 0, &MessageACK{seq:int32(msg.seq)}}
+			ack := &Message{cmd:MSG_ACK, seq:seq, version:DEFAULT_VERSION, flag:0, body:&MessageACK{seq:int32(msg.seq)}}
 			SendMessage(conn, ack)			
 		} else if msg.cmd == MSG_SYNC_BEGIN {
 			sync_count = 0
@@ -210,7 +210,7 @@ func receive(uid int64, limit int,  sem chan int) {
 				sync_key = s.sync_key
 				//log.Println("sync key:", sync_key)
 				seq++
-				sk := &Message{MSG_SYNC_KEY, seq, DEFAULT_VERSION, 0, &SyncKey{sync_key}}
+				sk := &Message{cmd:MSG_SYNC_KEY, seq:seq, version:DEFAULT_VERSION, flag:0, body:&SyncKey{sync_key}}
 				SendMessage(conn, sk)
 			}
 			
@@ -226,7 +226,7 @@ func receive(uid int64, limit int,  sem chan int) {
 
 			if pending_sync {
 				seq++
-				s := &Message{MSG_SYNC, seq, DEFAULT_VERSION, 0, &SyncKey{sync_key}}
+				s := &Message{cmd:MSG_SYNC, seq:seq, version:DEFAULT_VERSION, flag:0, body:&SyncKey{sync_key}}
 				SendMessage(conn, s)
 				syncing = true
 				pending_sync = false
