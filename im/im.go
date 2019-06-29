@@ -238,15 +238,15 @@ func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Cli
 			if c == client {
 				continue
 			}
-			c.EnqueueNonBlockMessage(msg)
+			var notify *Message
 			if msg.msgid > 0 {
 				//assert msg.flag & MESSAGE_FLAG_PUSH
 				if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
 					log.Fatal("invalid message flag", msg.flag)
 				}
-				notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{group.gid, msg.msgid, msg.prev_msgid}}
-				c.EnqueueNonBlockMessage(notify)
-			}			
+				notify = &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{group.gid, msg.msgid, msg.prev_msgid}}
+			}
+			c.EnqueueNonBlockContinueMessage(msg, notify)			
 		}
 	}
 
@@ -269,16 +269,16 @@ func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client)
 		if c == client {
 			continue
 		}
-		c.EnqueueNonBlockMessage(msg)
 
+		var notify *Message		
 		if msg.msgid > 0 {
 			//assert msg.flag & MESSAGE_FLAG_PUSH
 			if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
 				log.Fatal("invalid message flag", msg.flag)
 			}
-			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
-			c.EnqueueNonBlockMessage(notify)
-		}			
+			notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
+		}
+		c.EnqueueNonBlockContinueMessage(msg, notify)
 	}
 	return true
 }
