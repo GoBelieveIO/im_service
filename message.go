@@ -82,24 +82,30 @@ const MSG_GROUP_SYNC_KEY = 35
 //系统通知消息, unpersistent
 const MSG_NOTIFICATION = 36
 
+//消息的meta信息
+const MSG_METADATA = 37
+
+
 const MSG_VOIP_CONTROL = 64
 
 
 //消息标志
-//文本消息
+//文本消息 c <-> s
 const MESSAGE_FLAG_TEXT = 0x01
-//消息不持久化
+//消息不持久化 c <-> s
 const MESSAGE_FLAG_UNPERSISTENT = 0x02
 
-//群组离线消息 MSG_OFFLINE使用
+//群组消息 c -> s
 const MESSAGE_FLAG_GROUP = 0x04
 
-//离线消息由当前登录的用户在当前设备发出
+//离线消息由当前登录的用户在当前设备发出 c <- s
 const MESSAGE_FLAG_SELF = 0x08
 
-//消息由服务器主动推到客户端
+//消息由服务器主动推到客户端 c <- s
 const MESSAGE_FLAG_PUSH = 0x10
 
+//超级群消息 c <- s
+const MESSAGE_FLAG_SUPER_GROUP = 0x20
 
 
 const ACK_SUCCESS = 0
@@ -138,6 +144,7 @@ func init() {
 	message_creators[MSG_GROUP_SYNC_KEY] = func()IMessage{return new(GroupSyncKey)}
 
 	message_creators[MSG_NOTIFICATION] = func()IMessage{return new(SystemMessage)}
+	message_creators[MSG_METADATA] = func()IMessage{return new(Metadata)}
 	
 	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
@@ -180,6 +187,7 @@ func init() {
 	message_descriptions[MSG_SYNC_GROUP_NOTIFY] = "MSG_SYNC_GROUP_NOTIFY"
 
 	message_descriptions[MSG_NOTIFICATION] = "MSG_NOTIFICATION"
+	message_descriptions[MSG_METADATA] = "MSG_METADATA"	
 	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 
 
@@ -201,6 +209,7 @@ func init() {
 	external_messages[MSG_SYNC_GROUP] = true;
 	external_messages[MSG_SYNC_KEY] = true;
 	external_messages[MSG_GROUP_SYNC_KEY] = true;
+	external_messages[MSG_METADATA] = true;
 }
 
 
@@ -816,5 +825,30 @@ func (sync *GroupSyncNotify) FromData(version int, buff []byte) bool {
 	if (version > 1) {
 		binary.Read(buffer, binary.BigEndian, &sync.prev_sync_key)
 	}
+	return true
+}
+
+type Metadata struct {
+	sync_key int64
+	prev_sync_key int64
+}
+
+
+func (sync *Metadata) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, sync.sync_key)
+	binary.Write(buffer, binary.BigEndian, sync.prev_sync_key)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (sync *Metadata) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &sync.sync_key)
+	binary.Read(buffer, binary.BigEndian, &sync.prev_sync_key)
 	return true
 }

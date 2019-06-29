@@ -303,7 +303,7 @@ func (group_manager *GroupManager) parseAction(data string) (bool, int64, int64,
 func (group_manager *GroupManager) handleAction(data string, channel string) {
 	r, prev_id, action_id, content := group_manager.parseAction(data)
 	if r {
-		log.Info("group action:", prev_id, action_id, group_manager.action_id, " ", channel)
+		log.Info("group action:", prev_id, action_id, group_manager.action_id, " ", channel, " content:", content)
 		if group_manager.action_id != prev_id {
 			//reload later
 			group_manager.dirty = true

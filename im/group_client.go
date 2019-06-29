@@ -39,7 +39,7 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group)
 
 	m.msgid = msgid
 	m.prev_msgid = prev_msgid
-	m.flag = MESSAGE_FLAG_PUSH
+	m.flag = MESSAGE_FLAG_PUSH|MESSAGE_FLAG_SUPER_GROUP
 	client.SendGroupMessage(group, m)
 }
 
@@ -114,7 +114,7 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	}
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
-	log.Infof("group message sender:%d group id:%d", msg.sender, msg.receiver)
+	log.Infof("group message sender:%d group id:%d super:%v", msg.sender, msg.receiver, group.super)
 }
 
 

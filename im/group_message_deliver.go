@@ -368,15 +368,19 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 			continue
 		}
 
-		var notify *Message
 		if msg.msgid > 0 {
 			//assert msg.flags & MESSAGE_FLAG_PUSH
 			if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
 				log.Fatal("invalid message flag", msg.flag)
 			}
-			notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
+
+			meta := &Message{cmd:MSG_METADATA, body:&Metadata{sync_key:msg.msgid, prev_sync_key:msg.prev_msgid}}
+			c.EnqueueNonBlockContinueMessage(meta, msg)
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
+			c.EnqueueNonBlockMessage(notify)
+		} else {
+			c.EnqueueNonBlockMessage(msg)
 		}
-		c.EnqueueNonBlockContinueMessage(msg, notify)
 	}
 
 	return true
