@@ -143,6 +143,9 @@ func init() {
 	message_creators[MSG_SYNC_GROUP_END] = func()IMessage{return new(GroupSyncKey)}
 	message_creators[MSG_GROUP_SYNC_KEY] = func()IMessage{return new(GroupSyncKey)}
 
+	message_creators[MSG_SYNC_NOTIFY] = func()IMessage{return new(SyncNotify)}
+	message_creators[MSG_SYNC_GROUP_NOTIFY] = func()IMessage{return new(GroupSyncNotify)}
+	
 	message_creators[MSG_NOTIFICATION] = func()IMessage{return new(SystemMessage)}
 	message_creators[MSG_METADATA] = func()IMessage{return new(Metadata)}
 	
@@ -150,9 +153,7 @@ func init() {
 
 	message_creators[MSG_AUTH_STATUS] = func()IMessage{return new(AuthenticationStatus)}
 
-
-	vmessage_creators[MSG_SYNC_NOTIFY] = func()IVersionMessage{return new(SyncNotify)}
-	vmessage_creators[MSG_SYNC_GROUP_NOTIFY] = func()IVersionMessage{return new(GroupSyncNotify)}	
+	
 	vmessage_creators[MSG_ACK] = func()IVersionMessage{return new(MessageACK)}	
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
 	vmessage_creators[MSG_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -734,37 +735,7 @@ func (id *SyncKey) FromData(buff []byte) bool {
 }
 
 
-type SyncNotify struct {
-	sync_key int64
-	prev_sync_key int64	 //add:version == 2
-}
-
-func (sync *SyncNotify) ToData(version int) []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, sync.sync_key)
-	if version > 1 {
-		binary.Write(buffer, binary.BigEndian, sync.prev_sync_key)
-	}
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (sync *SyncNotify) FromData(version int, buff []byte) bool {
-	if len(buff) < 8 {
-		return false
-	}
-	if len(buff) < 16 && version > 1 {
-		return false
-	}
-	
-	buffer := bytes.NewBuffer(buff)	
-	binary.Read(buffer, binary.BigEndian, &sync.sync_key)
-	if version > 1 {
-		binary.Read(buffer, binary.BigEndian, &sync.prev_sync_key)
-	}
-	return true
-}
-
+type SyncNotify = SyncKey
 
 
 type GroupSyncKey struct {
@@ -792,41 +763,7 @@ func (id *GroupSyncKey) FromData(buff []byte) bool {
 	return true
 }
 
-
-type GroupSyncNotify struct {
-	group_id int64
-	sync_key int64
-	prev_sync_key int64 //add:version == 2
-}
-
-func (sync *GroupSyncNotify) ToData(version int) []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, sync.group_id)
-	binary.Write(buffer, binary.BigEndian, sync.sync_key)
-
-	if (version > 1) {
-		binary.Write(buffer, binary.BigEndian, sync.prev_sync_key)
-	}
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (sync *GroupSyncNotify) FromData(version int, buff []byte) bool {
-	if len(buff) < 16 {
-		return false
-	}
-	if len(buff) < 24 && version > 1 {
-		return false
-	}
-
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &sync.group_id)
-	binary.Read(buffer, binary.BigEndian, &sync.sync_key)
-	if (version > 1) {
-		binary.Read(buffer, binary.BigEndian, &sync.prev_sync_key)
-	}
-	return true
-}
+type GroupSyncNotify = GroupSyncKey
 
 type Metadata struct {
 	sync_key int64
@@ -838,12 +775,14 @@ func (sync *Metadata) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, sync.sync_key)
 	binary.Write(buffer, binary.BigEndian, sync.prev_sync_key)
+	padding := [16]byte{}
+	buffer.Write(padding[:])
 	buf := buffer.Bytes()
 	return buf
 }
 
 func (sync *Metadata) FromData(buff []byte) bool {
-	if len(buff) < 16 {
+	if len(buff) < 32 {
 		return false
 	}
 

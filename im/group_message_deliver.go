@@ -376,7 +376,7 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 
 			meta := &Message{cmd:MSG_METADATA, body:&Metadata{sync_key:msg.msgid, prev_sync_key:msg.prev_msgid}}
 			c.EnqueueNonBlockContinueMessage(meta, msg)
-			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid}}
 			c.EnqueueNonBlockMessage(notify)
 		} else {
 			c.EnqueueNonBlockMessage(msg)

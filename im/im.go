@@ -250,7 +250,7 @@ func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Cli
 				meta := &Message{cmd:MSG_METADATA, body:&Metadata{sync_key:msg.msgid, prev_sync_key:msg.prev_msgid}}
 				c.EnqueueNonBlockContinueMessage(meta, msg)
 				
-				notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{group.gid, msg.msgid, msg.prev_msgid}}
+				notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{group.gid, msg.msgid}}
 				c.EnqueueNonBlockMessage(notify)
 			} else {
 				c.EnqueueNonBlockMessage(msg)
@@ -286,7 +286,7 @@ func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client)
 
 			meta := &Message{cmd:MSG_METADATA, body:&Metadata{sync_key:msg.msgid, prev_sync_key:msg.prev_msgid}}
 			c.EnqueueNonBlockContinueMessage(meta, msg)
-			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid, msg.prev_msgid}}
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid}}
 			c.EnqueueNonBlockMessage(notify)
 		} else {
 			c.EnqueueNonBlockMessage(msg)
