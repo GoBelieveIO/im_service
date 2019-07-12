@@ -35,7 +35,6 @@ const MAGIC = 0x494d494d
 const F_VERSION = 1 << 16 //1.0
 
 
-
 type GroupLoader struct {
 	gid int64
 	c   chan *Group
@@ -58,6 +57,12 @@ type GroupMessageDeliver struct {
 	//保证单个群组结构只会在一个线程中被加载
 	lt     chan *GroupLoader //加载group结构到内存
 	dt     chan *AppMessage  //dispatch 群组消息
+
+
+	cb_mutex               sync.Mutex //callback变量的锁
+	id int64      //自增的callback id	
+	callbacks     map[int64]chan *Metadata //返回保存到ims的消息id
+	callbackid_to_msgid map[int64]int64 //callback -> msgid
 }
 
 func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
@@ -76,6 +81,8 @@ func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
 	storage.wt = make(chan int64, 10)
 	storage.lt = make(chan *GroupLoader)
 	storage.dt = make(chan *AppMessage, 1000)
+	storage.callbacks = make(map[int64]chan *Metadata)
+	storage.callbackid_to_msgid = make(map[int64]int64)
 	
 	storage.openWriteFile()
 	storage.openCursorFile()
@@ -319,19 +326,67 @@ func (storage *GroupMessageDeliver) saveMessage(msg *Message) int64 {
 	
 }
 
-func (storage *GroupMessageDeliver) SaveMessage(msg *Message) int64 {
+func (storage *GroupMessageDeliver) ClearCallback() {
+	storage.cb_mutex.Lock()
+	defer storage.cb_mutex.Unlock()
+
+	storage.callbacks = make(map[int64]chan *Metadata)
+	storage.callbackid_to_msgid = make(map[int64]int64)
+}
+
+
+func (storage *GroupMessageDeliver) DoCallback(msgid int64, meta *Metadata) {
+	storage.cb_mutex.Lock()
+	defer storage.cb_mutex.Unlock()
+
+	if ch, ok := storage.callbacks[msgid]; ok {
+		//nonblock
+		select {
+		case ch <- meta:
+		default:
+		}
+	}
+}
+
+func (storage *GroupMessageDeliver) AddCallback(msgid int64, ch chan *Metadata) int64 {
+	storage.cb_mutex.Lock()
+	defer storage.cb_mutex.Unlock()	
+	storage.id += 1
+	storage.callbacks[msgid] = ch
+	storage.callbackid_to_msgid[storage.id] = msgid
+	return storage.id
+}
+
+func (storage *GroupMessageDeliver) RemoveCallback(callback_id int64) {
+	storage.cb_mutex.Lock()
+	defer storage.cb_mutex.Unlock()
+
+	if msgid, ok := storage.callbackid_to_msgid[callback_id]; ok {
+		delete(storage.callbackid_to_msgid, callback_id)
+		delete(storage.callbacks, msgid)		
+	}
+}
+
+func (storage *GroupMessageDeliver) SaveMessage(msg *Message, ch chan *Metadata) int64 {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 	msgid := storage.saveMessage(msg)
 	atomic.StoreInt64(&storage.latest_msgid, msgid)
+
+	var callback_id int64
+	if ch != nil {
+		callback_id = storage.AddCallback(msgid, ch)
+	}
 
 	//nonblock
 	select {
 	case storage.wt <- msgid:
 	default:
 	}
-	return msgid
+	
+	return callback_id
 }
+
 
 
 func (storage *GroupMessageDeliver) openReadFile() *os.File {
@@ -386,22 +441,27 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 	return true
 }
 
-func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) bool {
+func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*Metadata, bool) {
 	msg := &IMMessage{sender: gm.sender, receiver: gm.gid, timestamp: gm.timestamp, content: gm.content}
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
-	
+
+	meta := &Metadata{}
 	members := gm.members
 	for _, member := range members {
 		msgid, prev_msgid, err := SaveMessage(gm.appid, member, gm.device_ID, m)
 		if err != nil {
 			log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
-			return false
+			return nil, false
 		}
 
 		mm := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, flag:MESSAGE_FLAG_PUSH, body:msg}
 		mm.msgid = msgid
 		mm.prev_msgid = prev_msgid
 		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, mm)
+		if member == gm.sender {
+			meta.sync_key = msgid
+			meta.prev_sync_key = prev_msgid
+		}
 	}
 
 	group_members := make(map[int64]int64)
@@ -410,7 +470,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) bo
 	}
 	group := NewGroup(gm.gid, gm.appid, group_members)
 	PushGroupMessage(gm.appid, group, m)
-	return true
+	return meta, true
 }
 
 func (storage *GroupMessageDeliver) sendPendingMessage() {
@@ -418,7 +478,8 @@ func (storage *GroupMessageDeliver) sendPendingMessage() {
 	if file == nil {
 		return
 	}
-
+	defer file.Close()
+	
 	offset := storage.latest_sended_msgid
 	if offset == 0 {
 		offset = HEADER_SIZE
@@ -450,12 +511,13 @@ func (storage *GroupMessageDeliver) sendPendingMessage() {
 		}
 
 		gm := msg.body.(*PendingGroupMessage)
-		r := storage.sendGroupMessage(gm)
+		meta, r := storage.sendGroupMessage(gm)
 		if !r {
 			log.Warning("send group message failure")
 			break
 		}
 
+		storage.DoCallback(msgid, meta)
 		storage.latest_sended_msgid = msgid
 		storage.saveCursor()
 	}
@@ -491,6 +553,7 @@ func (storage *GroupMessageDeliver) flushPendingMessage() {
 			if latest_msgid == storage.latest_sended_msgid {
 				//truncate file
 				storage.truncateFile()
+				storage.ClearCallback()
 			}
 		}
 	}	

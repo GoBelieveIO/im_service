@@ -340,8 +340,14 @@ func (client *Client) Write() {
 			if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
-			seq++
 
+			if msg.meta != nil {
+				seq++
+				meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+				client.send(meta_msg)
+			}
+			
+			seq++
 			//以当前客户端所用版本号发送消息
 			vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
 			client.send(vmsg)
@@ -350,8 +356,13 @@ func (client *Client) Write() {
 				if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 					atomic.AddInt64(&server_summary.out_message_count, 1)
 				}
-				seq++
 
+				if msg.meta != nil {
+					seq++
+					meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+					client.send(meta_msg)
+				}
+				seq++					
 				//以当前客户端所用版本号发送消息
 				vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
 				client.send(vmsg)

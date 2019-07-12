@@ -89,7 +89,8 @@ func (client *CustomerClient) HandleCustomerSupportMessage(msg *Message) {
 	m2.prev_msgid = prev_msgid2
 	client.SendMessage(client.uid, m2)
 
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
+	meta := &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}, meta:meta}
 	client.EnqueueMessage(ack)
 }
 
@@ -149,8 +150,8 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 	m2.prev_msgid = prev_msgid2
 	client.SendMessage(client.uid, m2)
 
-
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
+	meta := &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}, meta:meta}
 	client.EnqueueMessage(ack)
 }
 

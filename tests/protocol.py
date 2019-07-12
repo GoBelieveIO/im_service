@@ -53,6 +53,8 @@ MSG_GROUP_SYNC_KEY = 35
 
 MSG_NOTIFICATION = 36
 
+#消息的meta信息
+MSG_METADATA = 37
 
 #消息标志
 #文本消息
@@ -166,12 +168,11 @@ def send_message(cmd, seq, msg, sock):
     else:
         print "eeeeee"
 
-def recv_message(sock):
+def recv_message_(sock):
     buf = sock.recv(12)
     if len(buf) != 12:
         return 0, 0, 0, None
     length, seq, cmd, _, flag = struct.unpack("!iibbb", buf[:11])
-    print "recv message flag:", hex(flag), " cmd:", cmd
     if length == 0:
         return cmd, seq, 0, None
 
@@ -226,6 +227,14 @@ def recv_message(sock):
             struct.unpack("!qqqqi", content[:36])
         cm.content = content[36:]
         return cmd, seq, flag, cm
+    elif cmd == MSG_METADATA:
+        sync_key, prev_sync_key = struct.unpack("!qq", content[:16])
+        return cmd, seq, flag, (sync_key, prev_sync_key)
     else:
         print "unknow cmd:", cmd
         return cmd, seq, flag, content
+
+def recv_message(sock):
+    cmd, seq, flag, content = recv_message_(sock)
+    print "recv message cmd:", cmd, "seq:", seq, "flag:", hex(flag), "content:", content
+    return cmd, seq, flag, content

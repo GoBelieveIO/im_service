@@ -20,18 +20,19 @@
 package main
 import "time"
 import "sync/atomic"
+import "errors"
 import log "github.com/golang/glog"
 
 type GroupClient struct {
 	*Connection
 }
 
-func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group) {
+func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group) (int64, int64, error) {
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 	msgid, prev_msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save group message:%d %d err:%s", msg.sender, msg.receiver, err)
-		return
+		return 0, 0, err
 	}
 	
 	//推送外部通知
@@ -41,9 +42,11 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group)
 	m.prev_msgid = prev_msgid
 	m.flag = MESSAGE_FLAG_PUSH|MESSAGE_FLAG_SUPER_GROUP
 	client.SendGroupMessage(group, m)
+	
+	return msgid, prev_msgid, nil
 }
 
-func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) {
+func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) (int64, int64, error) {
 	gm := &PendingGroupMessage{}
 	gm.appid = client.appid
 	gm.sender = im.sender	
@@ -62,7 +65,17 @@ func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) {
 	gm.content = im.content
 	deliver := GetGroupMessageDeliver(group.gid)
 	m := &Message{cmd:MSG_PENDING_GROUP_MESSAGE, body: gm}
-	deliver.SaveMessage(m)
+	
+	c := make(chan *Metadata, 1)
+	callback_id := deliver.SaveMessage(m, c)
+	defer deliver.RemoveCallback(callback_id)
+	select {
+	case meta := <-c:
+		return meta.sync_key, meta.prev_sync_key, nil
+	case <-time.After(time.Second * 2):
+		log.Errorf("save group message:%d %d timeout", im.sender, im.receiver)
+		return 0, 0, errors.New("timeout")
+	}
 }
 
 func (client *GroupClient) HandleGroupIMMessage(message *Message) {
@@ -101,13 +114,23 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 		log.Warningf("sender:%d is mute in group", msg.sender)
 		return
 	}
-	
+
+	var meta *Metadata
+	var flag int
 	if group.super {
-		client.HandleSuperGroupMessage(msg, group)
+		msgid, prev_msgid, err := client.HandleSuperGroupMessage(msg, group)
+		if err == nil {
+			meta = &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+		}
+		flag = MESSAGE_FLAG_SUPER_GROUP
 	} else {
-		client.HandleGroupMessage(msg, group)
+		msgid, prev_msgid, err := client.HandleGroupMessage(msg, group)
+		if err == nil {
+			meta = &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+		}
 	}
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
+	
+	ack := &Message{cmd: MSG_ACK, flag:flag, body: &MessageACK{seq:int32(seq)}, meta:meta}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send group message ack error")
@@ -115,6 +138,9 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 	log.Infof("group message sender:%d group id:%d super:%v", msg.sender, msg.receiver, group.super)
+	if meta != nil {
+		log.Info("group message ack meta:", meta.sync_key, meta.prev_sync_key)
+	}	
 }
 
 

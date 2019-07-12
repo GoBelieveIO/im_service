@@ -105,7 +105,7 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 		gm.content = im.content
 		deliver := GetGroupMessageDeliver(group.gid)
 		m := &Message{cmd:MSG_PENDING_GROUP_MESSAGE, body: gm}
-		deliver.SaveMessage(m)
+		deliver.SaveMessage(m, nil)
 	}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 }

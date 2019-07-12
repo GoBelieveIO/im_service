@@ -244,6 +244,7 @@ type Message struct {
 
 	msgid int64 //non searialize
 	prev_msgid int64 //non searialize
+	meta *Metadata //non searialize
 }
 
 func (message *Message) ToData() []byte {

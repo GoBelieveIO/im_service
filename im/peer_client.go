@@ -224,7 +224,8 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	//发送给自己的其它登录点
 	client.SendMessage(client.uid, m2)
 
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
+	meta := &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}, meta:meta}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send peer message ack error")
