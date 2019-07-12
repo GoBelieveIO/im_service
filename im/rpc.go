@@ -46,6 +46,25 @@ func SendGroupNotification(appid int64, gid int64,
 	}
 }
 
+func SendSuperGroupNotification(appid int64, gid int64, 
+	notification string, members IntSet) {
+
+	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
+
+	msgid, _, err := SaveGroupMessage(appid, gid, 0, msg)
+
+	if err != nil {
+		log.Errorf("save group message: %d err:%s", gid, err)
+		return
+	}
+	
+	for member := range(members) {
+		//发送同步的通知消息
+		notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{gid, msgid}}
+		SendAppMessage(appid, member, notify)
+	}
+}
+
 
 func SendGroupIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, body:im}
@@ -183,8 +202,11 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 		WriteHttpError(400, "group no member", w)
 		return
 	}
-
-	SendGroupNotification(appid, group_id, notification, members)
+	if (group.super) {
+		SendSuperGroupNotification(appid, group_id, notification, members)
+	} else {
+		SendGroupNotification(appid, group_id, notification, members)
+	}
 
 	log.Info("post group notification success:", members)
 	w.WriteHeader(200)
