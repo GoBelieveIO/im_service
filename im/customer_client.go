@@ -78,18 +78,23 @@ func (client *CustomerClient) HandleCustomerSupportMessage(msg *Message) {
 
 	PushMessage(cm.customer_appid, cm.customer_id, msg)
 
-	m1 := &Message{cmd:MSG_CUSTOMER_SUPPORT, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
-	m1.msgid = msgid
-	m1.prev_msgid = prev_msgid
+	meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+	m1 := &Message{cmd:MSG_CUSTOMER_SUPPORT, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body, meta:meta}
 	SendAppMessage(cm.customer_appid, cm.customer_id, m1)
 
-	//发送给自己的其它登录点	
-	m2 := &Message{cmd:MSG_CUSTOMER_SUPPORT, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
-	m2.msgid = msgid2
-	m2.prev_msgid = prev_msgid2
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
+
+	
+	//发送给自己的其它登录点
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}
+	m2 := &Message{cmd:MSG_CUSTOMER_SUPPORT, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body, meta:meta}
 	client.SendMessage(client.uid, m2)
 
-	meta := &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	client.SendMessage(client.uid, notify)
+
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}, meta:meta}
 	client.EnqueueMessage(ack)
 }
@@ -139,18 +144,22 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 
 	PushMessage(config.kefu_appid, cm.seller_id, msg)
 
-	m1 := &Message{cmd:MSG_CUSTOMER, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
-	m1.msgid = msgid
-	m1.prev_msgid = prev_msgid
+	meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+	m1 := &Message{cmd:MSG_CUSTOMER, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body, meta:meta}
 	SendAppMessage(config.kefu_appid, cm.seller_id, m1)
 
-	//发送给自己的其它登录点	
-	m2 := &Message{cmd:MSG_CUSTOMER, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body}
-	m2.msgid = msgid2
-	m2.prev_msgid = prev_msgid2
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	SendAppMessage(config.kefu_appid, cm.seller_id, notify)	
+
+	//发送给自己的其它登录点
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}
+	m2 := &Message{cmd:MSG_CUSTOMER, version:DEFAULT_VERSION, flag:msg.flag|MESSAGE_FLAG_PUSH, body:msg.body, meta:meta}
 	client.SendMessage(client.uid, m2)
 
-	meta := &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	client.SendMessage(client.uid, notify)
+
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}, meta:meta}
 	client.EnqueueMessage(ack)
 }

@@ -153,16 +153,24 @@ func PushMessage(appid int64, uid int64, m *Message) {
 	channel.Push(appid, []int64{uid}, m)
 }
 
-func PublishMessage(appid int64, uid int64, m *Message) {
+func PublishMessage(appid int64, uid int64, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:uid, msgid:m.msgid, prev_msgid:m.prev_msgid, timestamp:now, msg:m}
+	amsg := &AppMessage{appid:appid, receiver:uid, timestamp:now, msg:msg}
+	if msg.meta != nil {
+		amsg.msgid = msg.meta.sync_key
+		amsg.prev_msgid = msg.meta.prev_sync_key
+	}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
 }
 
 func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group_id, msgid:msg.msgid, prev_msgid:msg.prev_msgid, timestamp:now, msg:msg}
+	amsg := &AppMessage{appid:appid, receiver:group_id, timestamp:now, msg:msg}
+	if msg.meta != nil {
+		amsg.msgid = msg.meta.sync_key
+		amsg.prev_msgid = msg.meta.prev_sync_key
+	}
 	channel := GetGroupChannel(group_id)
 	channel.PublishGroup(amsg)
 }

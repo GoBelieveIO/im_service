@@ -38,10 +38,12 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group)
 	//推送外部通知
 	PushGroupMessage(client.appid, group, m)
 
-	m.msgid = msgid
-	m.prev_msgid = prev_msgid
+	m.meta = &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
 	m.flag = MESSAGE_FLAG_PUSH|MESSAGE_FLAG_SUPER_GROUP
 	client.SendGroupMessage(group, m)
+
+	notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncKey{group_id:msg.receiver, sync_key:msgid}}
+	client.SendGroupMessage(group, notify)
 	
 	return msgid, prev_msgid, nil
 }

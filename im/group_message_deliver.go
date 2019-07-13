@@ -423,19 +423,7 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 			continue
 		}
 
-		if msg.msgid > 0 {
-			//assert msg.flags & MESSAGE_FLAG_PUSH
-			if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
-				log.Fatal("invalid message flag", msg.flag)
-			}
-
-			meta := &Message{cmd:MSG_METADATA, body:&Metadata{sync_key:msg.msgid, prev_sync_key:msg.prev_msgid}}
-			c.EnqueueNonBlockContinueMessage(meta, msg)
-			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid}}
-			c.EnqueueNonBlockMessage(notify)
-		} else {
-			c.EnqueueNonBlockMessage(msg)
-		}
+		c.EnqueueNonBlockMessage(msg)
 	}
 
 	return true
@@ -445,7 +433,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 	msg := &IMMessage{sender: gm.sender, receiver: gm.gid, timestamp: gm.timestamp, content: gm.content}
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 
-	meta := &Metadata{}
+	metadata := &Metadata{}
 	members := gm.members
 	for _, member := range members {
 		msgid, prev_msgid, err := SaveMessage(gm.appid, member, gm.device_ID, m)
@@ -454,13 +442,16 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 			return nil, false
 		}
 
-		mm := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, flag:MESSAGE_FLAG_PUSH, body:msg}
-		mm.msgid = msgid
-		mm.prev_msgid = prev_msgid
+		meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+		mm := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, flag:MESSAGE_FLAG_PUSH, body:msg, meta:meta}
 		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, mm)
+
+		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
+		
 		if member == gm.sender {
-			meta.sync_key = msgid
-			meta.prev_sync_key = prev_msgid
+			metadata.sync_key = msgid
+			metadata.prev_sync_key = prev_msgid
 		}
 	}
 
@@ -470,7 +461,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 	}
 	group := NewGroup(gm.gid, gm.appid, group_members)
 	PushGroupMessage(gm.appid, group, m)
-	return meta, true
+	return metadata, true
 }
 
 func (storage *GroupMessageDeliver) sendPendingMessage() {

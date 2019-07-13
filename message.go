@@ -242,8 +242,6 @@ type Message struct {
 	
 	body interface{}
 
-	msgid int64 //non searialize
-	prev_msgid int64 //non searialize
 	meta *Metadata //non searialize
 }
 

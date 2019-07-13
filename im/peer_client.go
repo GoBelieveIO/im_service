@@ -211,20 +211,20 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	//推送外部通知
 	PushMessage(client.appid, msg.receiver, m)
 
-	m1 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg}
-	m1.msgid = msgid
-	m1.prev_msgid = prev_msgid
-	
-	m2 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg}
-	m2.msgid = msgid2
-	m2.prev_msgid = prev_msgid2
-
+	meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+	m1 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg, meta:meta}
 	client.SendMessage(msg.receiver, m1)
+	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	client.SendMessage(msg.receiver, notify)
 
 	//发送给自己的其它登录点
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
+	m2 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg, meta:meta}
 	client.SendMessage(client.uid, m2)
-
-	meta := &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+	client.SendMessage(client.uid, notify)
+	
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}, meta:meta}
 	r := client.EnqueueMessage(ack)
 	if !r {
