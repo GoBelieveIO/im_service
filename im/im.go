@@ -190,8 +190,14 @@ func DispatchAppMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch app message slow...")
 	}
-	amsg.msg.msgid = amsg.msgid
-	amsg.msg.prev_msgid = amsg.prev_msgid
+
+	if amsg.msgid > 0 {
+		if (amsg.msg.flag & MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", amsg.msg.flag)
+		}
+		meta := &Metadata{sync_key:amsg.msgid, prev_sync_key:amsg.prev_msgid}
+		amsg.msg.meta = meta
+	}
 	DispatchMessageToPeer(amsg.msg, amsg.receiver, amsg.appid, nil)
 }
 
@@ -209,9 +215,19 @@ func DispatchGroupMessage(amsg *AppMessage) {
 	if d > int64(time.Second) {
 		log.Warning("dispatch group message slow...")
 	}
-	amsg.msg.msgid = amsg.msgid
-	amsg.msg.prev_msgid = amsg.prev_msgid
 
+	if amsg.msgid > 0 {
+		if (amsg.msg.flag & MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", amsg.msg.flag)
+		}
+		if (amsg.msg.flag & MESSAGE_FLAG_SUPER_GROUP) == 0 {
+			log.Fatal("invalid message flag", amsg.msg.flag)
+		}
+		
+		meta := &Metadata{sync_key:amsg.msgid, prev_sync_key:amsg.prev_msgid}
+		amsg.msg.meta = meta
+	}
+	
 	deliver := GetGroupMessageDeliver(amsg.receiver)
 	deliver.DispatchMessage(amsg)
 }
@@ -238,23 +254,7 @@ func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Cli
 			if c == client {
 				continue
 			}
-			if msg.msgid > 0 {
-				//assert msg.flag & MESSAGE_FLAG_PUSH
-				if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
-					log.Fatal("invalid message flag", msg.flag)
-				}
-				if (msg.flag & MESSAGE_FLAG_SUPER_GROUP) == 0 {
-					log.Fatal("invalid message flag", msg.flag)
-				}				
-
-				meta := &Message{cmd:MSG_METADATA, body:&Metadata{sync_key:msg.msgid, prev_sync_key:msg.prev_msgid}}
-				c.EnqueueNonBlockContinueMessage(meta, msg)
-				
-				notify := &Message{cmd:MSG_SYNC_GROUP_NOTIFY, body:&GroupSyncNotify{group.gid, msg.msgid}}
-				c.EnqueueNonBlockMessage(notify)
-			} else {
-				c.EnqueueNonBlockMessage(msg)
-			}
+			c.EnqueueNonBlockMessage(msg)
 		}
 	}
 
@@ -277,20 +277,7 @@ func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client)
 		if c == client {
 			continue
 		}
-
-		if msg.msgid > 0 {
-			//assert msg.flag & MESSAGE_FLAG_PUSH
-			if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
-				log.Fatal("invalid message flag", msg.flag)
-			}
-
-			meta := &Message{cmd:MSG_METADATA, body:&Metadata{sync_key:msg.msgid, prev_sync_key:msg.prev_msgid}}
-			c.EnqueueNonBlockContinueMessage(meta, msg)
-			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{msg.msgid}}
-			c.EnqueueNonBlockMessage(notify)
-		} else {
-			c.EnqueueNonBlockMessage(msg)
-		}
+		c.EnqueueNonBlockMessage(msg)
 	}
 	return true
 }
