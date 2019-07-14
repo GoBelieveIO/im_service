@@ -201,19 +201,6 @@ func (client *GroupClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
-		
-		if config.sync_self {
-			//连接成功后的首次同步，自己发送的消息也下发给客户端
-			//过滤掉所有自己在当前设备发出的消息
-			if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
-				continue
-			}
-		} else {
-			//过滤掉所有自己在当前设备发出的消息
-			if client.isSender(m, msg.DeviceID) {
-				continue
-			}
-		}
 		if client.isSender(m, msg.DeviceID) {
 			m.flag |= MESSAGE_FLAG_SELF
 		}

@@ -99,20 +99,6 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
-
-		if config.sync_self {
-			//连接成功后的首次同步，自己发送的消息也下发给客户端
-			//之后的同步则过滤掉所有自己在当前设备发出的消息
-			//这是为了解决服务端已经发出消息，但是对发送端的消息ack丢失的问题
-			if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
-				continue
-			}
-		} else {
-			//过滤掉所有自己在当前设备发出的消息
-			if client.isSender(m, msg.DeviceID) {
-				continue
-			}
-		}
 		if client.isSender(m, msg.DeviceID) {
 			m.flag |= MESSAGE_FLAG_SELF
 		}
