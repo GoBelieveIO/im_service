@@ -218,7 +218,7 @@ func (storage *GroupMessageDeliver) ReadMessage(file *os.File) *Message {
 		return nil
 	}
 	
-	msg := ReceiveMessage(file)
+	msg := ReceiveStorageMessage(file)
 	if msg == nil {
 		return msg
 	}
