@@ -12,21 +12,14 @@
 
 1. 安装go编译环境
 
+   版本要求:支持module,高于v1.11
    参考链接:https://golang.org/doc/install
 
 2. 下载im_service代码
 
-   cd $GOPATH/src/github.com/GoBelieveIO
-
    git clone https://github.com/GoBelieveIO/im_service.git
 
-3. 安装依赖
-
-   cd im_service
-
-   dep ensure
-
-4. 编译
+3. 编译
 
    cd im_service
     
@@ -36,12 +29,12 @@
     
    可执行程序在bin目录下
 
-5. 安装mysql数据库, redis, 并导入db.sql
+4. 安装mysql数据库, redis, 并导入db.sql
 
-6. 配置程序
+5. 配置程序
    配置项的说明参考ims.cfg.sample, imr.cfg.sample, im.cfg.sample
 
-7. 启动程序
+6. 启动程序
 
   * 创建配置文件中配置的im&ims消息存放路径
 
