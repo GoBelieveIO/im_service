@@ -28,13 +28,9 @@ def send_client(uid, receiver, msg_type):
     send_message(msg_type, seq, im, sock)
     msg_seq = seq
     while True:
-        cmd, s, msg = recv_message(sock)
+        cmd, s, flag, msg = recv_message(sock)
         if cmd == MSG_ACK and msg == msg_seq:
             break
-        elif cmd == MSG_GROUP_NOTIFICATION:
-            print "send ack..."
-            seq += 1
-            send_message(MSG_ACK, seq, s, sock)
         else:
             pass
         
@@ -330,7 +326,7 @@ def TestSuperGroupNotification():
 
     
 def main():
-    cluster = False
+    cluster = True
      
     TestGroup()
     time.sleep(1)
@@ -340,13 +336,13 @@ def main():
      
     TestSuperGroupNotification()
     time.sleep(1)
-    
+     
     TestGroupMessage()
     time.sleep(1)
 
     TestSuperGroupMessage()
     time.sleep(1)
-     
+
     TestGroupOffline()
     time.sleep(1)
      

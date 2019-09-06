@@ -119,7 +119,7 @@ func (rp *RelationshipPool) SetMyFriend(appid, uid, friend_uid int64, is_my_frie
 	}
 
 	r := v.(*RelationshipItem)
-	r.rs = NewRelationship(is_my_friend, r.rs.IsMyFriend(), r.rs.IsInMyBlacklist(), r.rs.IsInYourBlacklist())
+	r.rs = NewRelationship(is_my_friend, r.rs.IsYourFriend(), r.rs.IsInMyBlacklist(), r.rs.IsInYourBlacklist())
 	log.Infof("new relationship:%d-%d %d", uid, friend_uid, r.rs)
 }
 

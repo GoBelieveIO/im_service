@@ -117,8 +117,8 @@ func Test_NewCount(t *testing.T) {
 	content := "test"
 	im := &IMMessage{sender:1, receiver:receiver, content:content}
 	msg := &Message{cmd:MSG_IM, body:im}	
-	last_id := storage.SavePeerMessage(appid, im.receiver, device_id, msg)
-
+	last_id, _ := storage.SavePeerMessage(appid, im.receiver, device_id, msg)
+	
 	for i := 0; i < 5000; i++ {
 		content = fmt.Sprintf("test:%d", i)		
 		im = &IMMessage{sender:1, receiver:receiver, content:content}

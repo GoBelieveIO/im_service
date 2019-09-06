@@ -22,7 +22,7 @@ package main
 import "time"
 import "sync"
 import "database/sql"
-import _ "github.com/go-sql-driver/mysql"
+import mysql "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 
 type Group struct {
@@ -195,8 +195,12 @@ ROLLBACK:
 
 func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group` WHERE id=?")
+	if err == mysql.ErrInvalidConn {
+		log.Info("db prepare error:", err)
+		stmtIns, err = db.Prepare("SELECT id, appid, super FROM `group` WHERE id=?")
+	}
 	if err != nil {
-		log.Info("error:", err)
+		log.Info("db prepare error:", err)
 		return nil, err
 	}
 
@@ -262,8 +266,12 @@ func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
 
 func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int64, error) {
 	stmtIns, err := db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=?")
+	if err == mysql.ErrInvalidConn {
+		log.Info("db prepare error:", err)		
+		stmtIns, err = db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=?")
+	}
 	if err != nil {
-		log.Info("error:", err)
+		log.Info("db prepare error:", err)		
 		return nil, err
 	}
 

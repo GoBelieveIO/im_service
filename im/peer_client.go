@@ -99,20 +99,6 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
-
-		if config.sync_self {
-			//连接成功后的首次同步，自己发送的消息也下发给客户端
-			//之后的同步则过滤掉所有自己在当前设备发出的消息
-			//这是为了解决服务端已经发出消息，但是对发送端的消息ack丢失的问题
-			if client.sync_count > 1 && client.isSender(m, msg.DeviceID) {
-				continue
-			}
-		} else {
-			//过滤掉所有自己在当前设备发出的消息
-			if client.isSender(m, msg.DeviceID) {
-				continue
-			}
-		}
 		if client.isSender(m, msg.DeviceID) {
 			m.flag |= MESSAGE_FLAG_SELF
 		}
@@ -195,14 +181,14 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
-	msgid, err := SaveMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
 		return
 	}
 
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
-	msgid2, err := SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	msgid2, prev_msgid2, err := SaveMessage(client.appid, msg.sender, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
 		return
@@ -211,16 +197,21 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	//推送外部通知
 	PushMessage(client.appid, msg.receiver, m)
 
-	//发送同步的通知消息
+	meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+	m1 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg, meta:meta}
+	client.SendMessage(msg.receiver, m1)
 	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
 	client.SendMessage(msg.receiver, notify)
 
 	//发送给自己的其它登录点
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
+	m2 := &Message{cmd:MSG_IM, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg, meta:meta}
+	client.SendMessage(client.uid, m2)
+	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
 	client.SendMessage(client.uid, notify)
 	
-
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
+	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}, meta:meta}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send peer message ack error")

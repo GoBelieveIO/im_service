@@ -117,7 +117,7 @@ func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 	return true
 }
 
-func (client *Connection) EnqueueNonBlockMessage(msg *Message) bool {
+func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *Message) bool {
 	closed := atomic.LoadInt32(&client.closed)
 	if closed > 0 {
 		log.Infof("can't send message to closed connection:%d", client.uid)
@@ -139,6 +139,15 @@ func (client *Connection) EnqueueNonBlockMessage(msg *Message) bool {
 		dropped = true
 	}
 	client.messages.PushBack(msg)
+
+	if sub_msg != nil {
+		if client.messages.Len() >= MESSAGE_QUEUE_LIMIT {
+			//队列阻塞，丢弃之前的消息
+			client.messages.Remove(client.messages.Front())
+			dropped = true
+		}
+		client.messages.PushBack(sub_msg)
+	}
 	client.mutex.Unlock()
 	if dropped {
 		log.Info("message queue full, drop a message")
@@ -151,6 +160,11 @@ func (client *Connection) EnqueueNonBlockMessage(msg *Message) bool {
 	}
 	
 	return true
+}
+
+
+func (client *Connection) EnqueueNonBlockMessage(msg *Message) bool {
+	return client.EnqueueNonBlockContinueMessage(msg, nil)
 }
 
 

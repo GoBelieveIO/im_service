@@ -224,7 +224,6 @@ func main() {
 		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
 	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
 	log.Info("group deliver count:", config.group_deliver_count)
-	log.Info("sync self:", config.sync_self)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)

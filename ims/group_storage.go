@@ -28,73 +28,97 @@ import "bytes"
 import "encoding/binary"
 import log "github.com/golang/glog"
 
+const GROUP_INDEX_FILE_NAME = "group_index.v2"
+
 type GroupID struct {
 	appid  int64
 	gid    int64
 }
 
+type GroupIndex struct {
+	last_msgid int64
+	last_id int64
+	last_batch_id int64
+	last_seq_id int64 //最近消息的序号
+}
+
 type GroupStorage struct {
 	*StorageFile
 
-	message_index  map[GroupID]int64 //记录每个群组最近的消息ID
+	message_index  map[GroupID]*GroupIndex //记录每个群组最近的消息ID
 }
 
 func NewGroupStorage(f *StorageFile) *GroupStorage {
 	storage := &GroupStorage{StorageFile:f}
-	storage.message_index = make(map[GroupID]int64)
+	storage.message_index = make(map[GroupID]*GroupIndex)
 	return storage
 }
 
-func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) int64 {
+func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (int64, int64) {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 
 	msgid := storage.saveMessage(msg)
 
-	last_id, _ := storage.getLastGroupMessageID(appid, gid)
-	lt := &GroupOfflineMessage{appid:appid, gid:gid, msgid:msgid, device_id:device_id, prev_msgid:last_id}
-	m := &Message{cmd:MSG_GROUP_IM_LIST, body:lt}
+	index := storage.getGroupIndex(appid, gid)
+	last_id := index.last_id
+	last_batch_id := index.last_batch_id
+	last_seq_id := index.last_seq_id
 	
+	off := &OfflineMessage4{}
+	off.appid = appid
+	off.receiver = gid
+	off.msgid = msgid
+	off.device_id = device_id
+	off.seq_id = last_seq_id + 1
+	off.prev_msgid = last_id
+	off.prev_peer_msgid = 0
+	off.prev_batch_msgid = last_batch_id
+
+	m := &Message{cmd:MSG_GROUP_OFFLINE, body:off}
 	last_id = storage.saveMessage(m)
-	storage.setLastGroupMessageID(appid, gid, last_id)
-	return msgid
+
+	last_seq_id += 1
+	if last_seq_id%BATCH_SIZE == 0 {
+		last_batch_id = last_id
+	}
+	gi := &GroupIndex{msgid, last_id, last_batch_id, last_seq_id}
+	storage.setGroupIndex(appid, gid, gi)
+	return msgid, index.last_msgid
 }
 
-func (storage *GroupStorage) setLastGroupMessageID(appid int64, gid int64, msgid int64) {
+func (storage *GroupStorage) setGroupIndex(appid int64, gid int64, gi *GroupIndex) {
 	id := GroupID{appid, gid}
-	storage.message_index[id] = msgid
-	if msgid >	storage.last_id {
-		storage.last_id = msgid
+	storage.message_index[id] = gi
+	if gi.last_id > storage.last_id {
+		storage.last_id = gi.last_id
 	}
 }
 
-func (storage *GroupStorage) SetLastGroupMessageID(appid int64, gid int64, msgid int64) {
-	storage.mutex.Lock()
-	defer storage.mutex.Unlock()
-	storage.setLastGroupMessageID(appid, gid, msgid)
-}
-
-func (storage *GroupStorage) getLastGroupMessageID(appid int64, gid int64) (int64, error) {
+func (storage *GroupStorage) getGroupIndex(appid int64, gid int64) (*GroupIndex) {
 	id := GroupID{appid, gid}
-	return storage.message_index[id], nil
+	if gi, ok := storage.message_index[id]; ok {
+		return gi
+	}
+	return &GroupIndex{}
 }
 
-func (storage *GroupStorage) GetLastGroupMessageID(appid int64, gid int64) (int64, error) {
+
+func (storage *GroupStorage) GetGroupIndex(appid int64, gid int64) (*GroupIndex) {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
-
-	return storage.getLastGroupMessageID(appid, gid)
+	
+	return storage.getGroupIndex(appid, gid)
 }
+
 
 //获取所有消息id大于msgid的消息
 //ts:入群时间
 func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gid int64, msgid int64, ts int32, limit int) ([]*EMessage, int64) {
 	log.Infof("load group history message:%d %d", msgid, ts)
-	last_id, err := storage.GetLastGroupMessageID(appid, gid)
-	if err != nil {
-		log.Info("get last group message id err:", err)
-		return nil, 0
-	}
+	msg_index := storage.GetGroupIndex(appid, gid)
+	last_id := msg_index.last_id
+	
 	var last_msgid int64
 	c := make([]*EMessage, 0, 10)
 
@@ -104,11 +128,13 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 			log.Warningf("load message:%d error\n", msgid)
 			break
 		}
-		if msg.cmd != MSG_GROUP_IM_LIST {
-			log.Warning("invalid message cmd:", Command(msg.cmd))
+		var off *OfflineMessage
+		if ioff, ok := msg.body.(IOfflineMessage); ok {
+			off = ioff.body()
+		} else {
+			log.Warning("invalid message cmd:", msg.cmd)
 			break
-		}
-		off := msg.body.(*GroupOfflineMessage)
+		}		
 		if last_msgid == 0 {
 			last_msgid = off.msgid
 		}
@@ -165,14 +191,10 @@ func (storage *GroupStorage) createGroupIndex() {
 				break
 			}
 
-			if msg.cmd == MSG_GROUP_IM_LIST {
-				off := msg.body.(*GroupOfflineMessage)
-				id := GroupID{off.appid, off.gid}
-				storage.message_index[id] = msgid
-				if msgid > storage.last_id {
-					storage.last_id = msgid
-				}
-			}
+			block_NO := i
+			msgid = int64(block_NO)*BLOCK_SIZE + msgid
+
+			storage.execMessage(msg, msgid)
 		}
 
 		file.Close()
@@ -215,16 +237,10 @@ func (storage *GroupStorage) repairGroupIndex() {
 				break
 			}
 
-			if msg.cmd == MSG_GROUP_IM_LIST {
-				off := msg.body.(*GroupOfflineMessage)
-				id := GroupID{off.appid, off.gid}
-				block_NO := i
-				msgid = int64(block_NO)*BLOCK_SIZE + msgid
-				storage.message_index[id] = msgid
-				if msgid > storage.last_id {
-					storage.last_id = msgid
-				}
-			}
+			block_NO := i
+			msgid = int64(block_NO)*BLOCK_SIZE + msgid
+
+			storage.execMessage(msg, msgid)
 		}
 
 		file.Close()
@@ -234,7 +250,7 @@ func (storage *GroupStorage) repairGroupIndex() {
 
 
 func (storage *GroupStorage) readGroupIndex() bool {
-	path := fmt.Sprintf("%s/group_index", storage.root)
+	path := fmt.Sprintf("%s/%s", storage.root, GROUP_INDEX_FILE_NAME)
 	log.Info("read group message index path:", path)
 	file, err := os.Open(path)
 	if err != nil {
@@ -244,7 +260,7 @@ func (storage *GroupStorage) readGroupIndex() bool {
 		return false
 	}
 	defer file.Close()
-	const INDEX_SIZE = 24
+	const INDEX_SIZE = 48
 	data := make([]byte, INDEX_SIZE*1000)
 
 	for {
@@ -259,22 +275,26 @@ func (storage *GroupStorage) readGroupIndex() bool {
 		buffer := bytes.NewBuffer(data[:n])
 		for i := 0; i < n/INDEX_SIZE; i++ {
 			id := GroupID{}
-			var msg_id int64
+			var last_msgid int64
+			var last_id int64
+			var last_batch_id int64
+			var last_seq_id int64
 			binary.Read(buffer, binary.BigEndian, &id.appid)
 			binary.Read(buffer, binary.BigEndian, &id.gid)
-			binary.Read(buffer, binary.BigEndian, &msg_id)
+			binary.Read(buffer, binary.BigEndian, &last_msgid)
+			binary.Read(buffer, binary.BigEndian, &last_id)
+			binary.Read(buffer, binary.BigEndian, &last_batch_id)
+			binary.Read(buffer, binary.BigEndian, &last_seq_id)
 
-			storage.message_index[id] = msg_id
-			if msg_id > storage.last_id {
-				storage.last_id = msg_id
-			}
+			gi := &GroupIndex{last_msgid, last_id, last_batch_id, last_seq_id}
+			storage.setGroupIndex(id.appid, id.gid, gi)
 		}
 	}
 	return true
 }
 
 func (storage *GroupStorage) removeGroupIndex() {
-	path := fmt.Sprintf("%s/group_index", storage.root)
+	path := fmt.Sprintf("%s/%s", storage.root, GROUP_INDEX_FILE_NAME)
 	err := os.Remove(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -283,8 +303,8 @@ func (storage *GroupStorage) removeGroupIndex() {
 	}
 }
 
-func (storage *GroupStorage) cloneGroupIndex() map[GroupID]int64 {
-	message_index := make(map[GroupID]int64)
+func (storage *GroupStorage) cloneGroupIndex() map[GroupID]*GroupIndex {
+	message_index := make(map[GroupID]*GroupIndex)
 	for k, v := range(storage.message_index) {
 		message_index[k] = v
 	}
@@ -293,7 +313,7 @@ func (storage *GroupStorage) cloneGroupIndex() map[GroupID]int64 {
 
 
 //appid gid msgid = 24字节
-func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]int64) {
+func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]*GroupIndex) {
 	path := fmt.Sprintf("%s/group_index_t", storage.root)
 	log.Info("write group message index path:", path)
 	begin := time.Now().UnixNano()
@@ -309,7 +329,10 @@ func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]int64) {
 	for id, value := range(message_index) {
 		binary.Write(buffer, binary.BigEndian, id.appid)
 		binary.Write(buffer, binary.BigEndian, id.gid)
-		binary.Write(buffer, binary.BigEndian, value)
+		binary.Write(buffer, binary.BigEndian, value.last_msgid)		
+		binary.Write(buffer, binary.BigEndian, value.last_id)
+		binary.Write(buffer, binary.BigEndian, value.last_batch_id)
+		binary.Write(buffer, binary.BigEndian, value.last_seq_id)
 
 		index += 1
 		//batch write to file
@@ -340,7 +363,7 @@ func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]int64) {
 		log.Info("sync file err:", err)
 	}
 
-	path2 := fmt.Sprintf("%s/group_index", storage.root)
+	path2 := fmt.Sprintf("%s/%s", storage.root, GROUP_INDEX_FILE_NAME)
 	err = os.Rename(path, path2)
 	if err != nil {
 		log.Fatal("rename group index file err:", err)
@@ -353,6 +376,19 @@ func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]int64) {
 func (storage *GroupStorage) execMessage(msg *Message, msgid int64) {
 	if msg.cmd == MSG_GROUP_IM_LIST {
 		off := msg.body.(*GroupOfflineMessage)
-		storage.setLastGroupMessageID(off.appid, off.gid, msgid)
+		gi := &GroupIndex{off.msgid, msgid, 0, 0}
+		storage.setGroupIndex(off.appid, off.receiver, gi)
+	} else if msg.cmd == MSG_GROUP_OFFLINE {
+		off := msg.body.(IOfflineMessage).body()
+		index := storage.getGroupIndex(off.appid, off.receiver)
+		last_id := msgid
+		last_batch_id := index.last_batch_id
+		last_seq_id := index.last_seq_id + 1
+		if last_seq_id%BATCH_SIZE == 0 {
+			last_batch_id = msgid
+		}
+
+		gi := &GroupIndex{off.msgid, last_id, last_batch_id, last_seq_id}
+		storage.setGroupIndex(off.appid, off.receiver, gi)
 	}
 }

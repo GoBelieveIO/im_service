@@ -61,22 +61,23 @@ func SyncGroupMessage(addr string , sync_key *SyncGroupHistory) *GroupHistoryMes
 }
 
 
-func SavePeerMessage(addr string, m *PeerMessage) (int64, error) {
+func SavePeerMessage(addr string, m *PeerMessage) ([2]int64, error) {
 	atomic.AddInt64(&server_summary.nrequests, 1)
 	atomic.AddInt64(&server_summary.peer_message_count, 1)
 	msg := &Message{cmd:int(m.Cmd), version:DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	msgid := storage.SavePeerMessage(m.AppID, m.Uid, m.DeviceID, msg)
-	return msgid, nil
+	msgid, prev_msgid := storage.SavePeerMessage(m.AppID, m.Uid, m.DeviceID, msg)
+	return [2]int64{msgid, prev_msgid}, nil
 }
 
-func SaveGroupMessage(addr string, m *GroupMessage) (int64, error) {
+func SaveGroupMessage(addr string, m *GroupMessage) ([2]int64, error) {
 	atomic.AddInt64(&server_summary.nrequests, 1)
 	atomic.AddInt64(&server_summary.group_message_count, 1)
 	msg := &Message{cmd:int(m.Cmd), version:DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	msgid := storage.SaveGroupMessage(m.AppID, m.GroupID, m.DeviceID, msg)
-	return msgid, nil
+	msgid, prev_msgid := storage.SaveGroupMessage(m.AppID, m.GroupID, m.DeviceID, msg)
+	
+	return [2]int64{msgid, prev_msgid}, nil
 }
 
 func GetNewCount(addr string, sync_key *SyncHistory) (int64, error) {
