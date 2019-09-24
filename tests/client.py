@@ -61,7 +61,7 @@ def _connect_server(token, port):
     auth.token = token
     seq = seq + 1
     send_message(MSG_AUTH_TOKEN, seq, auth, sock)
-    cmd, _, msg = recv_message(sock)
+    cmd, _, _, msg = recv_message(sock)
     if cmd != MSG_AUTH_STATUS or msg != 0:
         return None, 0
     return sock, seq
@@ -98,7 +98,7 @@ def recv_client_(uid, port, handler, group_id=None, is_kefu=False):
     quit = False
     begin = False
     while True:
-        cmd, s, msg = recv_message(sock)
+        cmd, s, flag, msg = recv_message(sock)
         print "cmd:", cmd, "msg:", msg
         if cmd == MSG_SYNC_BEGIN:
             begin = True
@@ -136,7 +136,7 @@ def recv_client_(uid, port, handler, group_id=None, is_kefu=False):
             if quit:
                 break
 
-        elif handler(cmd, s, msg):
+        elif not (flag & MESSAGE_FLAG_PUSH) and handler(cmd, s, msg):
             quit = True
             if not begin:
                 break

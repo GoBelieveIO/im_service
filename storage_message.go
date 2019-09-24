@@ -29,6 +29,9 @@ const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
 
 //内部文件存储使用
+//超级群消息队列 代替MSG_GROUP_IM_LIST
+const MSG_GROUP_OFFLINE = 247
+
 //个人消息队列 代替MSG_OFFLINE_V3
 const MSG_OFFLINE_V4 = 248
 
@@ -43,6 +46,7 @@ const MSG_OFFLINE_V2 = 250
 const MSG_PENDING_GROUP_MESSAGE = 251
 
 //超级群消息队列
+//deprecated 兼容性
 const MSG_GROUP_IM_LIST = 252
 
 //deprecated
@@ -56,6 +60,7 @@ const MSG_ACK_IN = 255
 
 
 func init() {
+	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new (OfflineMessage4)}
 	message_creators[MSG_OFFLINE_V4] = func()IMessage{return new (OfflineMessage4)}	
 	message_creators[MSG_OFFLINE_V3] = func()IMessage{return new (OfflineMessage3)}
 	message_creators[MSG_OFFLINE_V2] = func()IMessage{return new (OfflineMessage2)}
@@ -75,6 +80,7 @@ func init() {
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE] = "MSG_STORAGE_SYNC_MESSAGE"
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
 
+	message_descriptions[MSG_GROUP_OFFLINE] = "MSG_GROUP_OFFLINE"
 	message_descriptions[MSG_OFFLINE_V4] = "MSG_OFFLINE_V4"		
 	message_descriptions[MSG_OFFLINE_V3] = "MSG_OFFLINE_V3"	
 	message_descriptions[MSG_OFFLINE_V2] = "MSG_OFFLINE_V2"	
@@ -204,7 +210,7 @@ type IOfflineMessage interface {
 
 type OfflineMessage struct {
 	appid    int64
-	receiver int64
+	receiver int64 //用户id or 群组id
 	msgid    int64 //消息本体的id
 	device_id int64
 	seq_id   int64      //v4 消息序号, 1,2,3...
@@ -353,12 +359,7 @@ func (off *OfflineMessage4) FromData(buff []byte) bool {
 
 
 type GroupOfflineMessage struct {
-	appid    int64
-	receiver int64
-	msgid    int64
-	gid      int64
-	device_id int64
-	prev_msgid  int64
+	OfflineMessage
 }
 
 func (off *GroupOfflineMessage) ToData() []byte {
@@ -366,7 +367,7 @@ func (off *GroupOfflineMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, off.appid)
 	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.msgid)
-	binary.Write(buffer, binary.BigEndian, off.gid)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
 	binary.Write(buffer, binary.BigEndian, off.device_id)
 	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
 	buf := buffer.Bytes()
@@ -381,7 +382,7 @@ func (off *GroupOfflineMessage) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.appid)
 	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	binary.Read(buffer, binary.BigEndian, &off.msgid)
-	binary.Read(buffer, binary.BigEndian, &off.gid)
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
 	if len(buff) == 48 {
 		binary.Read(buffer, binary.BigEndian, &off.device_id)
 	}

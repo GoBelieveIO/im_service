@@ -139,9 +139,14 @@ func ReceiveClientMessage(conn io.Reader) *Message {
 	return ReceiveLimitMessage(conn, 32*1024, true)
 }
 
-//消息大小限制在1M
+//消息大小限制在32M
 func ReceiveStorageSyncMessage(conn io.Reader) *Message {
 	return ReceiveLimitMessage(conn, 32*1024*1024, false)
+}
+
+//消息大小限制在1M
+func ReceiveStorageMessage(conn io.Reader) *Message {
+	return ReceiveLimitMessage(conn, 1024*1024, false)
 }
 
 

@@ -61,7 +61,6 @@ type Config struct {
 
 	group_deliver_count int //群组消息投递并发数量,默认4
 	word_file           string //关键词字典文件
-	sync_self           bool //是否同步自己发送的消息
 	friend_permission   bool //验证好友关系
 }
 
@@ -186,7 +185,6 @@ func read_cfg(cfg_path string) *Config {
 	}
 
 	config.word_file = get_opt_string(app_cfg, "word_file")
-	config.sync_self = get_opt_int(app_cfg, "sync_self") != 0
 	config.friend_permission = get_opt_int(app_cfg, "friend_permission") != 0	
 	return config
 }

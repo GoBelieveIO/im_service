@@ -125,11 +125,7 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 
 
 func (client *Client) HandlePublishGroup(amsg *AppMessage) {
-	log.Infof("publish message appid:%d uid:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
-	//当前只有MSG_SYNC_GROUP_NOTIFY可以发给终端
-	if amsg.msg.cmd != MSG_SYNC_GROUP_NOTIFY {
-		return
-	}
+	log.Infof("publish message appid:%d group id:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
 
 	//群发给所有接入服务器
 	s := GetClientSet()

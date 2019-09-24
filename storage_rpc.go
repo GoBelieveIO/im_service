@@ -80,12 +80,12 @@ func SyncGroupMessageInterface(addr string , sync_key *SyncGroupHistory) *GroupH
 	return nil
 }
 
-func SavePeerMessageInterface(addr string, m *PeerMessage) (int64, error) {
-	return 0, nil
+func SavePeerMessageInterface(addr string, m *PeerMessage) ([2]int64, error) {
+	return [2]int64{}, nil
 }
 
-func SaveGroupMessageInterface(addr string, m *GroupMessage) (int64, error) {
-	return 0, nil
+func SaveGroupMessageInterface(addr string, m *GroupMessage) ([2]int64, error) {
+	return [2]int64{}, nil
 }
 
 //获取是否接收到新消息,只会返回0/1

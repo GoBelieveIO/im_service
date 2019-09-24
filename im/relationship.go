@@ -19,7 +19,7 @@
 
 package main
 import "database/sql"
-import _ "github.com/go-sql-driver/mysql"
+import mysql "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 
 const NoneRelationship = 0
@@ -67,9 +67,14 @@ func (rs Relationship) reverse() Relationship {
 
 func GetRelationship(db *sql.DB, appid int64, uid int64, friend_uid int64) (Relationship, error) {
 	stmtIns, err := db.Prepare("SELECT uid, friend_uid FROM `friend` WHERE appid=? AND uid=? AND friend_uid=?")
+	if err == mysql.ErrInvalidConn {
+		log.Info("db prepare error:", err)
+		stmtIns, err = db.Prepare("SELECT uid, friend_uid FROM `friend` WHERE appid=? AND uid=? AND friend_uid=?")
+	}
+
 	if err != nil {
 		log.Info("db prepare error:", err)
-		return NoneRelationship, err		
+		return NoneRelationship, err
 	}
 	
 	var is_my_friend, is_your_friend, is_in_my_blacklist, is_in_your_blacklist bool
