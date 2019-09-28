@@ -224,6 +224,7 @@ func main() {
 		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
 	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
 	log.Info("group deliver count:", config.group_deliver_count)
+	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
@@ -309,7 +310,7 @@ func main() {
 	go ListenRedis()
 	go SyncKeyService()
 
-	if config.friend_permission {
+	if config.friend_permission || config.enable_blacklist {
 		relationship_pool = NewRelationshipPool()
 		redis_channel.AddSubscriber(relationship_pool)
 		go relationship_pool.RecycleLoop()

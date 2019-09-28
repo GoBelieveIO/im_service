@@ -62,6 +62,7 @@ type Config struct {
 	group_deliver_count int //群组消息投递并发数量,默认4
 	word_file           string //关键词字典文件
 	friend_permission   bool //验证好友关系
+	enable_blacklist    bool //验证是否在对方的黑名单中
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -185,6 +186,7 @@ func read_cfg(cfg_path string) *Config {
 	}
 
 	config.word_file = get_opt_string(app_cfg, "word_file")
-	config.friend_permission = get_opt_int(app_cfg, "friend_permission") != 0	
+	config.friend_permission = get_opt_int(app_cfg, "friend_permission") != 0
+	config.enable_blacklist = get_opt_int(app_cfg, "enable_blacklist") != 0
 	return config
 }
