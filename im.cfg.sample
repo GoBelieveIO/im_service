@@ -20,17 +20,17 @@ route_pool=127.0.0.1:4444
 #配置的情况下，一定不能和route_pool有重复
 #group_route_pool=
 
-#engine-io的监听地址 ip:port
+#engine-io的监听地址 ip:port 可选项
 socket_io_address=:13890
 #engine-io ssl监听地址 可选项
 tls_address=:14890
 
-#websocket的监听地址 ip:port
+#websocket的监听地址 ip:port 可选项
 ws_address=:13891
 #wss监听地址 可选项
 wss_address=:14891
 
-#域名的证书文件路径(let's encrypt)
+#域名的证书文件路径(let's encrypt) 可选项
 cert_file=fullchain1.pem
 key_file=privkey1.pem
 

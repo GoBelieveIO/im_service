@@ -158,19 +158,23 @@ func ServeWebsocket(w http.ResponseWriter, r *http.Request) {
 	client.Run()
 }
 
-func StartWSServer(address string, tls_address string, cert_file string, key_file string) {
+
+func StartWSSServer(tls_address string, cert_file string, key_file string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", ServeWebsocket)
 
 	if tls_address != "" && cert_file != "" && key_file != "" {
-		go func() {
-			log.Infof("EngineIO Serving TLS at %s...", tls_address)
-			err := http.ListenAndServeTLS(tls_address, cert_file, key_file, mux)
-			if err != nil {
-				log.Fatalf("listen err:%s", err)
-			}
-		}()
+		log.Infof("websocket Serving TLS at %s...", tls_address)
+		err := http.ListenAndServeTLS(tls_address, cert_file, key_file, mux)
+		if err != nil {
+			log.Fatalf("listen err:%s", err)
+		}
 	}
+}
+
+func StartWSServer(address string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", ServeWebsocket)
 	err := http.ListenAndServe(address, mux)
 	if err != nil {
 		log.Fatalf("listen err:%s", err)

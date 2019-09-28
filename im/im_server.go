@@ -321,11 +321,17 @@ func main() {
 	go StartHttpServer(config.http_listen_address)
 	StartRPCServer(config.rpc_listen_address)
 
-	go StartSocketIO(config.socket_io_address, config.tls_address, 
-		config.cert_file, config.key_file)
-	go StartWSServer(config.ws_address, config.wss_address, 
-		config.cert_file, config.key_file)
-
+	if len(config.socket_io_address) > 0 {
+		go StartSocketIO(config.socket_io_address, config.tls_address, 
+			config.cert_file, config.key_file)
+	}
+	if len(config.ws_address) > 0 {
+		go StartWSServer(config.ws_address)
+	}
+	if len(config.wss_address) > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
+		go StartWSSServer(config.wss_address, config.cert_file, config.key_file)
+	}
+	
 	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
 		go ListenSSL(config.ssl_port, config.cert_file, config.key_file)
 	}

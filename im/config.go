@@ -125,10 +125,10 @@ func read_cfg(cfg_path string) *Config {
 
 	config.pending_root = get_string(app_cfg, "pending_root")
 	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
-	config.socket_io_address = get_string(app_cfg, "socket_io_address")
+	config.socket_io_address = get_opt_string(app_cfg, "socket_io_address")
 	config.tls_address = get_opt_string(app_cfg, "tls_address")
 
-	config.ws_address = get_string(app_cfg, "ws_address")
+	config.ws_address = get_opt_string(app_cfg, "ws_address")
 	config.wss_address = get_opt_string(app_cfg, "wss_address")
 	
 	config.cert_file = get_opt_string(app_cfg, "cert_file")
