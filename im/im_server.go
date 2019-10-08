@@ -112,16 +112,19 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 //过滤敏感词
 func FilterDirtyWord(msg *IMMessage) {
 	if filter == nil {
+		log.Info("filter is null")
 		return
 	}
 
 	obj, err := simplejson.NewJson([]byte(msg.content))
 	if err != nil {
+		log.Info("filter dirty word, can't decode json")
 		return
 	}
 
 	text, err := obj.Get("text").String()
 	if err != nil {
+		log.Info("filter dirty word, can't get text")
 		return
 	}
 
@@ -136,6 +139,7 @@ func FilterDirtyWord(msg *IMMessage) {
 			return
 		}
 		msg.content = string(c)
+		log.Infof("filter dirty word, replace text %s with %s", text, replacedText)
 	}
 }
 
