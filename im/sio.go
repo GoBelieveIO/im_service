@@ -90,7 +90,7 @@ func handlerEngineIOClient(conn engineio.Conn) {
 }
 
 func SendEngineIOBinaryMessage(conn engineio.Conn, msg *Message) {
-	w, err := conn.NextWriter(engineio.MessageBinary)
+	w, err := conn.NextWriter(engineio.BINARY)
 	if err != nil {
 		log.Info("get next writer fail")
 		return
@@ -114,7 +114,7 @@ func ReadEngineIOMessage(conn engineio.Conn) *Message {
 		return nil
 	}
 	r.Close()
-	if t == engineio.MessageText {
+	if t == engineio.TEXT {
 		return nil
 	} else {
 		return ReadBinaryMesage(b)
