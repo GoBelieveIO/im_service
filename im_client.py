@@ -10,10 +10,16 @@ import uuid
 import base64
 import select
 import sys
+import ssl
+import traceback
 
-HOST = "imnode.gobelieve.io"
-PORT = 23000
-
+SSL = True
+HOST = "imnode2.gobelieve.io"
+if SSL:
+    PORT = 24430
+else:
+    PORT = 23000
+    
 #command
 MSG_HEARTBEAT = 1
 #MSG_AUTH = 2
@@ -33,6 +39,29 @@ MSG_AUTH_TOKEN = 15
 MSG_LOGIN_POINT = 16
 MSG_RT = 17
 MSG_SYSTEM = 21
+
+MSG_CUSTOMER = 24
+MSG_CUSTOMER_SUPPORT = 25
+
+MSG_SYNC = 26
+MSG_SYNC_BEGIN = 27
+MSG_SYNC_END = 28
+MSG_SYNC_NOTIFY = 29
+
+MSG_SYNC_GROUP = 30
+MSG_SYNC_GROUP_BEGIN = 31
+MSG_SYNC_GROUP_END = 32
+MSG_SYNC_GROUP_NOTIFY = 33
+
+MSG_SYNC_KEY  = 34
+MSG_GROUP_SYNC_KEY = 35
+
+
+MSG_NOTIFICATION = 36
+
+#消息的meta信息
+MSG_METADATA = 37
+
 
 
 #platform
@@ -90,6 +119,15 @@ def send_message(cmd, seq, msg, sock):
     elif cmd == MSG_PING:
         h = struct.pack("!iibbbb", 0, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h)
+    elif cmd == MSG_SYNC or cmd == MSG_SYNC_KEY:
+        h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!q", msg)
+        sock.sendall(h+b)
+    elif cmd == MSG_SYNC_GROUP or cmd == MSG_GROUP_SYNC_KEY:
+        group_id, sync_key = msg
+        h = struct.pack("!iibbbb", 16, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!qq", group_id, sync_key)
+        sock.sendall(h+b)
     else:
         print "eeeeee"
 
@@ -131,6 +169,21 @@ def recv_message(sock):
         return cmd, seq, (sender, receiver)
     elif cmd == MSG_PONG:
         return cmd, seq, None
+    elif cmd == MSG_SYNC_BEGIN or \
+         cmd == MSG_SYNC_END or \
+         cmd == MSG_SYNC_NOTIFY:
+        sync_key, = struct.unpack("!q", content)
+        return cmd, seq, sync_key
+    elif cmd == MSG_SYNC_GROUP_BEGIN or \
+         cmd == MSG_SYNC_GROUP_END or \
+         cmd == MSG_SYNC_GROUP_NOTIFY:
+        group_id, sync_key = struct.unpack("!qq", content)
+        return cmd, seq, (group_id, sync_key)
+    elif cmd == MSG_GROUP_NOTIFICATION:
+        return cmd, seq, content
+    elif cmd == MSG_METADATA:
+        sync_key, prev_sync_key = struct.unpack("!qq", content[:16])
+        return cmd, seq, (sync_key, prev_sync_key)    
     else:
         return cmd, seq, content
 
@@ -138,13 +191,19 @@ class Client(object):
     def __init__(self):
         self.seq = 0
         self.sock = None
+        self.sync_key = 0
 
     def connect_server(self, device_id, token, host=None):
         if host is not None:
             address = (host, PORT)
         else:
             address = (HOST, PORT)
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  
+        if SSL:
+            sock_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock = ssl.wrap_socket(sock_fd)
+        else:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            
         sock.connect(address)
         auth = AuthenticationToken()
         auth.token = token
@@ -181,6 +240,13 @@ class Client(object):
                 return cmd, s, m
 
 
+    def send_sync(self):
+        self.seq += 1
+        send_message(MSG_SYNC, self.seq, self.sync_key, self.sock)        
+
+    def send_sync_key(self):
+        self.seq += 1
+        send_message(MSG_SYNC_KEY, self.seq, self.sync_key, self.sock)                
 
 DEVICE_ID = "ec452582-a7a9-11e5-87d3-34363bd464b2"
 if __name__ == "__main__":
@@ -196,13 +262,14 @@ if __name__ == "__main__":
     obj = json.loads(resp.text)
     token = obj["token"]
     print "token:", token
-
     while True:
         try:
             client = Client()
             r = client.connect_server(DEVICE_ID, token)
             if not r:
                 continue
+            client.send_sync()
+            
             while True:
                 print "recv message..."
                 cmd, s, m = client.recv_message()
@@ -227,11 +294,20 @@ if __name__ == "__main__":
                 elif cmd == MSG_PONG:
                     print "pong..."
                     continue
+                elif cmd == MSG_SYNC_NOTIFY:
+                    new_sync_key = m
+                    if new_sync_key > client.sync_key:
+                        client.send_sync()
+                elif cmd == MSG_SYNC_END:
+                    new_sync_key = m
+                    if new_sync_key > client.sync_key:
+                        client.sync_key = new_sync_key
+                        client.send_sync_key()
                 else:
                     print "unknow message:", cmd
                     continue
 
         except Exception, e:
-            print "exception:", e
+            traceback.print_exc()            
             time.sleep(1)
             continue
