@@ -239,6 +239,13 @@ class Client(object):
                 cmd, s, m = recv_message(self.sock)
                 return cmd, s, m
 
+    def send_peer_message(self, msg):
+        self.seq += 1
+        send_message(MSG_IM, self.seq, msg, self.sock)
+
+    def send_group_message(self, msg):
+        self.seq += 1
+        send_message(MSG_GROUP_IM, self.seq, msg, self.sock)
 
     def send_sync(self):
         self.seq += 1
