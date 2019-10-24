@@ -316,11 +316,8 @@ func main() {
 
 	if config.friend_permission || config.enable_blacklist {
 		relationship_pool = NewRelationshipPool()
-		redis_channel.AddSubscriber(relationship_pool)
-		go relationship_pool.RecycleLoop()
-		redis_channel.Start()
+		relationship_pool.Start()
 	}
-	
 	
 	go StartHttpServer(config.http_listen_address)
 	StartRPCServer(config.rpc_listen_address)
