@@ -64,7 +64,6 @@ var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
 
 var relationship_pool *RelationshipPool
-var redis_channel *RedisChannel
 
 //round-robin
 var current_deliver_index uint64
@@ -76,7 +75,6 @@ func init() {
 	server_summary = NewServerSummary()
 	sync_c = make(chan *SyncHistory, 100)
 	group_sync_c = make(chan *SyncGroupHistory, 100)
-	redis_channel = NewRedisChannel()
 }
 
 

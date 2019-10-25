@@ -30,8 +30,6 @@ import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 
 
-//同redis的长链接保持5minute的心跳
-const SUBSCRIBE_HEATBEAT = 5*60
 const GROUP_EXPIRE_DURATION = 60*60 //60min
 const GROUP_MANAGER_STREAM_NAME = "group_manager_stream"
 const GROUP_MANAGER_XREAD_TIMEOUT = 60
