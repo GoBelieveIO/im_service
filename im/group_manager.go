@@ -29,10 +29,12 @@ import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 
+
 //同redis的长链接保持5minute的心跳
 const SUBSCRIBE_HEATBEAT = 5*60
 const GROUP_EXPIRE_DURATION = 60*60 //60min
 const GROUP_MANAGER_STREAM_NAME = "group_manager_stream"
+const GROUP_MANAGER_XREAD_TIMEOUT = 60
 
 //group event
 const GROUP_EVENT_CREATE = "group_create"
@@ -368,7 +370,7 @@ func (group_manager *GroupManager) load() {
 func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, error) {
 	//block timeout 60s
 	reply, err := redis.Values(c.Do("XREAD", "COUNT", "1000", "BLOCK",
-		"60000", "STREAMS", GROUP_MANAGER_STREAM_NAME,
+		GROUP_MANAGER_XREAD_TIMEOUT*1000, "STREAMS", GROUP_MANAGER_STREAM_NAME,
 		group_manager.last_entry_id))
 	if err != nil && err != redis.ErrNil {
 		log.Info("redis xread err:", err)
@@ -448,24 +450,25 @@ func (group_manager *GroupManager) RunOnce() bool {
 		}
 	}
 
+	var last_clear_ts int64
 	for {
 		events, err := group_manager.readEvents(c)
 		if err != nil {
 			log.Warning("group manager read event err:", err)
 			break
 		}
-
-		if len(events) == 0 {
-			//lazy clear policy
-			if group_manager.dirty {
-				group_manager.clear()
-				group_manager.dirty = false
-			}
-			continue
-		}
 		
 		for _, event := range events {
 			group_manager.handleEvent(event)
+		}
+
+		now := time.Now().Unix()
+		//lazy clear policy
+		if group_manager.dirty && now - last_clear_ts >= GROUP_MANAGER_XREAD_TIMEOUT {
+			log.Info("clear group manager")
+			group_manager.clear()
+			group_manager.dirty = false
+			last_clear_ts = now
 		}
 	}
 	return true

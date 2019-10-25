@@ -34,6 +34,7 @@ import log "github.com/golang/glog"
 const EXPIRE_DURATION = 60*60 //60min
 const ACTIVE_DURATION = 10*60
 const RELATIONSHIP_POOL_STREAM_NAME = "relationship_stream"
+const RELATIONSHIP_POOL_XREAD_TIMEOUT = 60
 
 const RELATIONSHIP_EVENT_FRIEND = "friend"
 const RELATIONSHIP_EVENT_BLACKLIST = "blacklist"
@@ -432,7 +433,8 @@ func (rp *RelationshipPool) load() {
 func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, error) {
 	//block timeout 60s
 	reply, err := redis.Values(c.Do("XREAD", "COUNT", "1000", "BLOCK",
-		"60000", "STREAMS", RELATIONSHIP_POOL_STREAM_NAME, rp.last_entry_id))
+		RELATIONSHIP_POOL_XREAD_TIMEOUT*1000, "STREAMS",
+		RELATIONSHIP_POOL_STREAM_NAME, rp.last_entry_id))
 	if err != nil && err != redis.ErrNil {
 		log.Info("redis xread err:", err)
 		return nil, err
@@ -512,6 +514,7 @@ func (rp *RelationshipPool) RunOnce() bool {
 		}
 	}
 
+	var last_clear_ts int64	
 	for {
 		events, err := rp.readEvents(c)
 		if err != nil {
@@ -523,13 +526,16 @@ func (rp *RelationshipPool) RunOnce() bool {
 			rp.handleEvent(event)
 		}
 
-		if len(events) == 0 {
-			//xread timeout, lazy policy
-			if rp.dirty {
-				rp.ReloadRelation()				
-				rp.dirty = false
-			}
+		now := time.Now().Unix()		
+
+		//xread timeout, lazy policy
+		if rp.dirty && now - last_clear_ts >= RELATIONSHIP_POOL_XREAD_TIMEOUT {
+			log.Info("reload relationship")
+			rp.ReloadRelation()				
+			rp.dirty = false
+			last_clear_ts = now
 		}
+
 	}
 	return true
 }
