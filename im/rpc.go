@@ -212,8 +212,7 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 }
 
-
-func PostIMMessage(w http.ResponseWriter, req *http.Request) {
+func PostPeerMessage(w http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -225,54 +224,25 @@ func PostIMMessage(w http.ResponseWriter, req *http.Request) {
 	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
 	if err != nil {
 		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 
 	sender, err := strconv.ParseInt(m.Get("sender"), 10, 64)
 	if err != nil {
 		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 
-	var is_group bool
-	msg_type := m.Get("class")
-	if msg_type == "group" {
-		is_group = true
-	} else if msg_type == "peer" {
-		is_group = false
-	} else {
-		log.Info("invalid message class")
-		WriteHttpError(400, "invalid message class", w)
+	receiver, err := strconv.ParseInt(m.Get("receiver"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid param", w)
 		return
 	}
 
-	obj, err := simplejson.NewJson(body)
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	sender2, err := obj.Get("sender").Int64()
-	if err == nil && sender == 0 {
-		sender = sender2
-	}
-
-	receiver, err := obj.Get("receiver").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return		
-	}
-	
-	content, err := obj.Get("content").String()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return		
-	}
+	content := string(body)
 
 	im := &IMMessage{}
 	im.sender = sender
@@ -281,14 +251,56 @@ func PostIMMessage(w http.ResponseWriter, req *http.Request) {
 	im.timestamp = int32(time.Now().Unix())
 	im.content = content
 
-	if is_group {
-		SendGroupIMMessage(im, appid)
-		log.Info("post group im message success")
- 	} else {
-		SendIMMessage(im, appid)
-		log.Info("post peer im message success")
-	}
+	SendIMMessage(im, appid)
+	
 	w.WriteHeader(200)
+	log.Info("post peer im message success")	
+}
+
+func PostGroupMessage(w http.ResponseWriter, req *http.Request) {
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		WriteHttpError(400, err.Error(), w)
+		return
+	}
+
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+
+	sender, err := strconv.ParseInt(m.Get("sender"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+
+	receiver, err := strconv.ParseInt(m.Get("receiver"), 10, 64)
+	if err != nil {
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid param", w)
+		return
+	}
+	
+	content := string(body)
+
+	im := &IMMessage{}
+	im.sender = sender
+	im.receiver = receiver
+	im.msgid = 0
+	im.timestamp = int32(time.Now().Unix())
+	im.content = content
+
+	SendGroupIMMessage(im, appid)
+	
+	w.WriteHeader(200)
+	
+	log.Info("post group im message success")	
 }
 
 func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
@@ -863,12 +875,3 @@ func SendRealtimeMessage(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(200)
 }
 
-
-func InitMessageQueue(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(200)
-}
-
-
-func DequeueMessage(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(200)
-}

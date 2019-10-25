@@ -157,7 +157,8 @@ func StartHttpServer(addr string) {
 
 	//rpc function
 	http.HandleFunc("/post_group_notification", PostGroupNotification)
-	http.HandleFunc("/post_im_message", PostIMMessage)
+	http.HandleFunc("/post_peer_message", PostPeerMessage)		
+	http.HandleFunc("/post_group_message", PostGroupMessage)	
 	http.HandleFunc("/load_latest_message", LoadLatestMessage)
 	http.HandleFunc("/load_history_message", LoadHistoryMessage)
 	http.HandleFunc("/post_system_message", SendSystemMessage)
@@ -166,9 +167,8 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
 	http.HandleFunc("/post_customer_support_message", SendCustomerSupportMessage)
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
-	http.HandleFunc("/init_message_queue", InitMessageQueue)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
-	http.HandleFunc("/dequeue_message", DequeueMessage)
+
 
 	handler := loggingHandler{http.DefaultServeMux}
 	
