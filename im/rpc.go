@@ -191,11 +191,15 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 
 	deliver := GetGroupMessageDeliver(group_id)
 	group := deliver.LoadGroup(group_id)	
-	if group != nil {
-		ms := group.Members()
-		for m, _ := range ms {
-			members.Add(m)
-		}
+	if group == nil {
+		log.Info("group not exist: ", group_id)
+		WriteHttpError(400, "group not exist", w)
+		return
+	}
+
+	ms := group.Members()
+	for m, _ := range ms {
+		members.Add(m)
 	}
 
 	if len(members) == 0 {
