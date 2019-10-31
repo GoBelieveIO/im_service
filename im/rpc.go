@@ -197,11 +197,9 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if len(members) == 0 {
-		ms := group.Members()
-		for m, _ := range ms {
-			members.Add(m)
-		}
+	ms := group.Members()
+	for m, _ := range ms {
+		members.Add(m)
 	}
 
 	if len(members) == 0 {
