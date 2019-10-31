@@ -64,7 +64,6 @@ var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
 
 var relationship_pool *RelationshipPool
-var redis_channel *RedisChannel
 
 //round-robin
 var current_deliver_index uint64
@@ -76,7 +75,6 @@ func init() {
 	server_summary = NewServerSummary()
 	sync_c = make(chan *SyncHistory, 100)
 	group_sync_c = make(chan *SyncGroupHistory, 100)
-	redis_channel = NewRedisChannel()
 }
 
 
@@ -159,7 +157,8 @@ func StartHttpServer(addr string) {
 
 	//rpc function
 	http.HandleFunc("/post_group_notification", PostGroupNotification)
-	http.HandleFunc("/post_im_message", PostIMMessage)
+	http.HandleFunc("/post_peer_message", PostPeerMessage)		
+	http.HandleFunc("/post_group_message", PostGroupMessage)	
 	http.HandleFunc("/load_latest_message", LoadLatestMessage)
 	http.HandleFunc("/load_history_message", LoadHistoryMessage)
 	http.HandleFunc("/post_system_message", SendSystemMessage)
@@ -168,9 +167,8 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
 	http.HandleFunc("/post_customer_support_message", SendCustomerSupportMessage)
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
-	http.HandleFunc("/init_message_queue", InitMessageQueue)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
-	http.HandleFunc("/dequeue_message", DequeueMessage)
+
 
 	handler := loggingHandler{http.DefaultServeMux}
 	
@@ -316,11 +314,8 @@ func main() {
 
 	if config.friend_permission || config.enable_blacklist {
 		relationship_pool = NewRelationshipPool()
-		redis_channel.AddSubscriber(relationship_pool)
-		go relationship_pool.RecycleLoop()
-		redis_channel.Start()
+		relationship_pool.Start()
 	}
-	
 	
 	go StartHttpServer(config.http_listen_address)
 	StartRPCServer(config.rpc_listen_address)

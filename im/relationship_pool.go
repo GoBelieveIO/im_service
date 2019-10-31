@@ -33,6 +33,23 @@ import log "github.com/golang/glog"
 
 const EXPIRE_DURATION = 60*60 //60min
 const ACTIVE_DURATION = 10*60
+const RELATIONSHIP_POOL_STREAM_NAME = "relationship_stream"
+const RELATIONSHIP_POOL_XREAD_TIMEOUT = 60
+
+const RELATIONSHIP_EVENT_FRIEND = "friend"
+const RELATIONSHIP_EVENT_BLACKLIST = "blacklist"
+
+type RelationshipEvent struct {
+	Id string //stream entry id
+	ActionId int64 `redis:"action_id"`
+	PreviousActionId int64 `redis:"previous_action_id"`
+	Name string `redis:"name"`
+	AppId int64 `redis:"app_id"`
+	Uid int64 `redis:"uid"`
+	FriendUid int64 `redis:"friend_uid"`
+	IsFriend bool `redis:"friend"`
+	IsBlacklist bool `redis:"blacklist"`
+}
 
 type RelationshipItem struct {
 	rs Relationship
@@ -48,7 +65,8 @@ type RelationshipPool struct {
 	items  *sync.Map
 	item_count int64
 
-	dirty     bool	
+	dirty     bool
+	last_entry_id string
 	action_id int64
 	db        *sql.DB	
 }
@@ -132,6 +150,7 @@ func (rp *RelationshipPool) SetYourFriend(appid, uid, friend_uid int64, is_your_
 	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)		
 	v, ok := rp.items.Load(key)
 	if !ok {
+		log.Info("can not load key:", key)		
 		return
 	}
 	
@@ -150,6 +169,7 @@ func (rp *RelationshipPool) SetInMyBlacklist(appid, uid, friend_uid int64, is_in
 	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)	
 	v, ok := rp.items.Load(key)
 	if !ok {
+		log.Info("can not load key:", key)		
 		return
 	}
 	
@@ -168,6 +188,7 @@ func (rp *RelationshipPool) SetInYourBlacklist(appid, uid, friend_uid int64, is_
 	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)	
 	v, ok := rp.items.Load(key)
 	if !ok {
+		log.Info("can not load key:", key)
 		return
 	}
 	
@@ -208,73 +229,31 @@ func (rp *RelationshipPool) RecycleLoop() {
 	}	
 }
 
-func (rp *RelationshipPool) HandleFriend(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 4 {
-		log.Info("message error:", data)
-		return
-	}
-
-	appid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
-	uid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
-	friend_uid, err := strconv.ParseInt(arr[2], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
-	friend, err := strconv.ParseInt(arr[3], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
+func (rp *RelationshipPool) HandleFriend(event *RelationshipEvent) {
+	appid := event.AppId
+	uid := event.Uid
+	friend_uid := event.FriendUid
+	is_friend := event.IsFriend
+	if appid == 0 || uid == 0 || friend_uid == 0 {
+		log.Info("invalid relationship event:%+v", event)
 		return
 	}
 	
-	rp.SetMyFriend(appid, uid, friend_uid, friend != 0)
+	rp.SetMyFriend(appid, uid, friend_uid, is_friend)
 	
 }
 
-func (rp *RelationshipPool) HandleBlacklist(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 4 {
-		log.Info("message error:", data)
+func (rp *RelationshipPool) HandleBlacklist(event *RelationshipEvent) {
+	appid := event.AppId
+	uid := event.Uid
+	friend_uid := event.FriendUid
+	is_blacklist := event.IsBlacklist
+
+	if appid == 0 || uid == 0 || friend_uid == 0 {
+		log.Info("invalid relationship event:%+v", event)
 		return
 	}
-
-	appid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
-	uid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
-	friend_uid, err := strconv.ParseInt(arr[2], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
-	friend, err := strconv.ParseInt(arr[3], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
-	rp.SetInMyBlacklist(appid, uid, friend_uid, friend != 0)
+	rp.SetInMyBlacklist(appid, uid, friend_uid, is_blacklist)
 }
 
 func (rp *RelationshipPool) parseKey(k string) (int64, int64, int64, error) {
@@ -300,6 +279,7 @@ func (rp *RelationshipPool) parseKey(k string) (int64, int64, int64, error) {
 
 	return appid, uid, friend_uid, nil
 }
+
 
 func (rp *RelationshipPool) ReloadRelation() {
 	active_items := make([]string, 0, 100)
@@ -340,6 +320,38 @@ func (rp *RelationshipPool) ReloadRelation() {
 }
 
 
+func (rp *RelationshipPool) getLastEntryID() (string, error) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	r, err := redis.Values(conn.Do("XREVRANGE", RELATIONSHIP_POOL_STREAM_NAME, "+", "-", "COUNT", "1"))
+
+	if err != nil {
+		log.Error("redis err:", err)
+		return "", err
+	}
+
+	if len(r) == 0 {
+		return "0-0", nil
+	}
+	
+	var entries []interface{}
+	r, err = redis.Scan(r, &entries)
+	if err != nil {
+		log.Error("redis scan err:", err)
+		return "", err
+	}
+
+	var id string		
+	_, err = redis.Scan(entries, &id, nil)
+	if err != nil {
+		log.Error("redis scan err:", err)
+		return "", err		
+	}
+	return id, nil
+}
+
+
 func (rp *RelationshipPool) getActionID() (int64, error) {
 	conn := redis_pool.Get()
 	defer conn.Close()
@@ -373,82 +385,180 @@ func (rp *RelationshipPool) getActionID() (int64, error) {
 }
 
 
-//检查当前的action id 是否变更，变更时则重新加载群组结构
-func (rp *RelationshipPool) checkActionID() {
-	action_id, err := rp.getActionID()
-	if err != nil {
-		return
+func (rp *RelationshipPool) handleEvent(event *RelationshipEvent) {
+	prev_id := event.PreviousActionId
+	action_id := event.ActionId
+	log.Infof("relationship action:%+v %d ", event, rp.action_id)
+	if rp.action_id != prev_id {
+		rp.dirty = true
+		log.Warning("friend action nonsequence:", rp.action_id, prev_id, action_id)
 	}
 
-	if action_id != rp.action_id {
-		rp.ReloadRelation()
+	if event.Name == RELATIONSHIP_EVENT_FRIEND {
+		rp.HandleFriend(event)
+	} else if event.Name == RELATIONSHIP_EVENT_BLACKLIST {
+		rp.HandleBlacklist(event)
+	} else {
+		log.Warning("unknow event:", event.Name)
+	}
+	
+	rp.action_id = action_id
+	rp.last_entry_id = event.Id
+}
+
+
+func (rp *RelationshipPool) load() {
+	//循环直到成功
+	for {
+		action_id, err := rp.getActionID()
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		entry_id, err := rp.getLastEntryID()
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		rp.last_entry_id = entry_id
 		rp.action_id = action_id
 		rp.dirty = false
+		log.Infof("relationship pool action id:%d stream last entry id:%s",
+			action_id, rp.last_entry_id)
+		break
 	}
 }
 
-//保证action id的顺序性
-func (rp *RelationshipPool) parseAction(data string) (bool, int64, int64, string) {
-	arr := strings.SplitN(data, ":", 3)
-	if len(arr) != 3 {
-		log.Warning("friend action error:", data)
-		return false, 0, 0, ""
+
+func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, error) {
+	//block timeout 60s
+	reply, err := redis.Values(c.Do("XREAD", "COUNT", "1000", "BLOCK",
+		RELATIONSHIP_POOL_XREAD_TIMEOUT*1000, "STREAMS",
+		RELATIONSHIP_POOL_STREAM_NAME, rp.last_entry_id))
+	if err != nil && err != redis.ErrNil {
+		log.Info("redis xread err:", err)
+		return nil, err
+	}
+	if len(reply) == 0 {
+		log.Info("redis xread timeout")
+		return nil, nil
 	}
 
-	prev_id, err := strconv.ParseInt(arr[0], 10, 64)
+	var stream_res []interface{}
+	_, err = redis.Scan(reply, &stream_res)
 	if err != nil {
-		log.Info("error:", err, data)
-		return false, 0, 0, ""
+		log.Info("redis scan err:", err)
+		return nil, err
 	}
 
-	action_id, err := strconv.ParseInt(arr[1], 10, 64)
+	var r []interface{}
+	_, err = redis.Scan(stream_res, nil, &r)
 	if err != nil {
-		log.Info("error:", err, data)
-		return false, 0, 0, ""
+		log.Info("redis scan err:", err)
+		return nil, err
 	}
-	return true, prev_id, action_id, arr[2]
-}
-
-func (rp *RelationshipPool) HandleAction(data string, channel string) {
-	r, prev_id, action_id, content := rp.parseAction(data)
-	if r {
-		log.Info("friend action:", prev_id, action_id, rp.action_id, " ", channel)
-		if rp.action_id != prev_id {
-			rp.dirty = true
-			log.Warning("friend action nonsequence:", rp.action_id, prev_id, action_id)
+	
+	events := make([]*RelationshipEvent, 0, 1000)
+	for len(r) > 0 {
+		var entries []interface{}
+		r, err = redis.Scan(r, &entries)
+		if err != nil {
+			log.Error("redis scan err:", err)
+			return nil, err
 		}
 
-		if channel == "channel_friend" {
-			rp.HandleFriend(content)
-		} else if channel == "channel_blacklist" {
-			rp.HandleBlacklist(content)
+		var id string
+		var fields []interface{}
+		_, err = redis.Scan(entries, &id, &fields)
+		if err != nil {
+			log.Error("redis scan err:", err)
+			return nil, err		
 		}
-		rp.action_id = action_id
+
+		event := &RelationshipEvent{}
+		event.Id = id
+		err = redis.ScanStruct(fields, event)
+		if err != nil {
+			//ignore the error, will skip the event
+			log.Error("redis scan err:", err)
+		}
+		events = append(events, event)
 	}
+	
+	return events, nil
 }
 
-func (rp *RelationshipPool) HandlePing() {
-	//check dirty
-	if rp.dirty {
-		action_id, err := rp.getActionID()
-		if err == nil {
-			rp.ReloadRelation()
+
+func (rp *RelationshipPool) RunOnce() bool {
+	c, err := redis.Dial("tcp", config.redis_address)
+	if err != nil {
+		log.Info("dial redis error:", err)
+		return false
+	}
+
+	defer c.Close()
+	
+	password := config.redis_password
+	if len(password) > 0 {
+		if _, err := c.Do("AUTH", password); err != nil {
+			log.Info("redis auth err:", err)
+			return false
+		}
+	}
+
+	db := config.redis_db
+	if db > 0 && db < 16 {
+		if _, err := c.Do("SELECT", db); err != nil {
+			log.Info("redis select err:", err)
+			return false
+		}
+	}
+
+	var last_clear_ts int64	
+	for {
+		events, err := rp.readEvents(c)
+		if err != nil {
+			log.Warning("group manager read event err:", err)
+			break
+		}
+
+		for _, event := range events {
+			rp.handleEvent(event)
+		}
+
+		now := time.Now().Unix()		
+
+		//xread timeout, lazy policy
+		if rp.dirty && now - last_clear_ts >= RELATIONSHIP_POOL_XREAD_TIMEOUT {
+			log.Info("reload relationship")
+			rp.ReloadRelation()				
 			rp.dirty = false
-			rp.action_id = action_id
-		} else {
-			log.Warning("get action id err:", err)
+			last_clear_ts = now
 		}
-	} else {
-		rp.checkActionID()
-	}	
+
+	}
+	return true
+}
+
+func (rp *RelationshipPool) Run() {
+	nsleep := 1
+	for {
+		connected := rp.RunOnce()
+		if !connected {
+			nsleep *= 2
+			if nsleep > 60 {
+				nsleep = 60
+			}
+		} else {
+			nsleep = 1
+		}
+		time.Sleep(time.Duration(nsleep) * time.Second)
+	}
 }
 
 
-func (rp *RelationshipPool) Subcribe(psc redis.PubSubConn) {
-	psc.Subscribe("channel_friend", "channel_blacklist")
-}
-
-
-func (rp *RelationshipPool) OnStart() {
-	rp.checkActionID()
+func (rp *RelationshipPool) Start() {
+	rp.load()
+	go rp.Run()
+	go rp.RecycleLoop()
 }

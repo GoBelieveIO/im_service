@@ -24,38 +24,52 @@ import "strconv"
 import "strings"
 import "time"
 import "errors"
-import "fmt"
-import "math/rand"
 import "github.com/gomodule/redigo/redis"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/golang/glog"
 
-//同redis的长链接保持5minute的心跳
-const SUBSCRIBE_HEATBEAT = 5*60
+
 const GROUP_EXPIRE_DURATION = 60*60 //60min
+const GROUP_MANAGER_STREAM_NAME = "group_manager_stream"
+const GROUP_MANAGER_XREAD_TIMEOUT = 60
+
+//group event
+const GROUP_EVENT_CREATE = "group_create"
+const GROUP_EVENT_DISBAND = "group_disband"
+const GROUP_EVENT_UPGRADE = "group_upgrade"
+const GROUP_EVENT_MEMBER_ADD = "group_member_add"
+const GROUP_EVENT_MEMBER_REMOVE = "group_member_remove"
+const GROUP_EVENT_MEMBER_MUTE = "group_member_mute"
+
+
+type GroupEvent struct {
+	Id string //stream entry id
+	ActionId int64 `redis:"action_id"`
+	PreviousActionId int64 `redis:"previous_action_id"`
+	Name string `redis:"name"`
+	AppId int64 `redis:"app_id"`
+	GroupId int64 `redis:"group_id"`
+	MemberId int64 `redis:"member_id"`
+	IsSuper bool `redis:"super"`
+	IsMute bool `redis:"mute"`
+}
+
 
 type GroupManager struct {
 	mutex  sync.Mutex
 	groups map[int64]*Group
-	ping     string
 	action_id int64
+	last_entry_id string
 	dirty     bool
 	db        *sql.DB
 }
 
 func NewGroupManager() *GroupManager {
-	now := time.Now().Unix()
-	r := fmt.Sprintf("ping_%d", now)
-	for i := 0; i < 4; i++ {
-		n := rand.Int31n(26)
-		r = r + string('a' + n)
-	}
-	
 	m := new(GroupManager)
 	m.groups = make(map[int64]*Group)
-	m.ping = r
 	m.action_id = 0
+	m.last_entry_id = ""
 	m.dirty = true
 	
 	db, err := sql.Open("mysql", config.mysqldb_datasource)
@@ -105,28 +119,17 @@ func (group_manager *GroupManager) clear() {
 	group_manager.groups = make(map[int64]*Group)
 }
 
-func (group_manager *GroupManager) HandleCreate(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 3 {
-		log.Info("message error:", data)
-		return
-	}
-	gid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	appid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	super, err := strconv.ParseInt(arr[2], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
+func (group_manager *GroupManager) HandleCreate(event *GroupEvent) {
+	gid := event.GroupId
+	appid := event.AppId
+	super := event.IsSuper
 
+	if gid == 0 || appid == 0 {
+		log.Infof("invalid group event:%s, group id:%d appid:%d",
+			event.Name, gid, appid)
+		return
+	}
+	
 	group_manager.mutex.Lock()
 	defer group_manager.mutex.Unlock()
 
@@ -134,18 +137,18 @@ func (group_manager *GroupManager) HandleCreate(data string) {
 		log.Infof("group:%d exists\n", gid)
 	}
 	log.Infof("create group:%d appid:%d", gid, appid)
-	if super != 0 {
+	if super {
 		group_manager.groups[gid] = NewSuperGroup(gid, appid, nil)
 	} else {
 		group_manager.groups[gid] = NewGroup(gid, appid, nil)
 	}
 }
 
-func (group_manager *GroupManager) HandleDisband(data string) {
-	gid, err := strconv.ParseInt(data, 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
+func (group_manager *GroupManager) HandleDisband(event *GroupEvent) {
+	gid := event.GroupId
+	if gid == 0 {
+		log.Infof("invalid group event:%s, group id:%d", event.Name, gid)
+		return		
 	}
 
 	group_manager.mutex.Lock()
@@ -158,59 +161,41 @@ func (group_manager *GroupManager) HandleDisband(data string) {
 	}
 }
 
-func (group_manager *GroupManager) HandleUpgrade(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 3 {
-		log.Info("message error:", data)
-		return
-	}
-	gid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	appid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	super, err := strconv.ParseInt(arr[2], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
+func (group_manager *GroupManager) HandleUpgrade(event *GroupEvent) {
+	gid := event.GroupId
+	is_super := event.IsSuper
+
+	if gid == 0 {
+		log.Infof("invalid group event:%s, group id:%d",
+			event.Name, gid)
 		return
 	}
 
-	if super == 0 {
+	if !is_super {
 		log.Warning("super group can't transfer to nomal group")
 		return
 	}
 	group := group_manager.FindGroup(gid)
 	if group != nil {
-		group.super = (super == 1)
-		log.Infof("upgrade group appid:%d gid:%d super:%d", appid, gid, super)
+		group.super = is_super
+		log.Infof("upgrade group gid:%d super:%t",
+			gid, is_super)
 	} else {
 		log.Infof("can't find group:%d\n", gid)
 	}
 }
 
 
-func (group_manager *GroupManager) HandleMemberAdd(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 2 {
-		log.Info("message error")
-		return
-	}
-	gid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	uid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
+func (group_manager *GroupManager) HandleMemberAdd(event *GroupEvent) {
+	gid := event.GroupId
+	uid := event.MemberId
 
+	if gid == 0 || uid == 0 {
+		log.Infof("invalid group event:%s, group id:%d member id:%d",
+			event.Name, gid, uid)
+		return
+	}
+	
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		timestamp := int(time.Now().Unix())
@@ -221,23 +206,15 @@ func (group_manager *GroupManager) HandleMemberAdd(data string) {
 	}
 }
 
-func (group_manager *GroupManager) HandleMemberRemove(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 2 {
-		log.Info("message error")
+func (group_manager *GroupManager) HandleMemberRemove(event *GroupEvent) {
+	gid := event.GroupId
+	uid := event.MemberId
+	if gid == 0 || uid == 0 {
+		log.Infof("invalid group event:%s, group id:%d member id:%d", 
+			event.Name, gid, uid)
 		return
 	}
-	gid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	uid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-
+	
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		group.RemoveMember(uid)
@@ -247,85 +224,57 @@ func (group_manager *GroupManager) HandleMemberRemove(data string) {
 	}
 }
 
-func (group_manager *GroupManager) HandleMute(data string) {
-	arr := strings.Split(data, ",")
-	if len(arr) != 3 {
-		log.Info("message error:", data)
-		return
-	}
-	gid, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	uid, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
-	}
-	mute, err := strconv.ParseInt(arr[2], 10, 64)
-	if err != nil {
-		log.Info("error:", err)
-		return
+func (group_manager *GroupManager) HandleMute(event *GroupEvent) {
+	gid := event.GroupId
+	uid := event.MemberId
+	is_mute := event.IsMute
+
+	if gid == 0 || uid == 0 {
+		log.Infof("invalid group event:%s, group id:%d member id:%d", 
+			event.Name, gid, uid)
+		return		
 	}
 
 	group := group_manager.FindGroup(gid)
 	if group != nil {
-		group.SetMemberMute(uid, mute != 0)
-		log.Infof("set group member gid:%d uid:%d mute:%d", gid, uid, mute)
+		group.SetMemberMute(uid, is_mute)
+		log.Infof("set group member gid:%d uid:%d mute:%t", gid, uid, is_mute)
 	} else {
 		log.Infof("can't find group:%d\n", gid)
 	}
 }
 
-//保证action id的顺序性
-func (group_manager *GroupManager) parseAction(data string) (bool, int64, int64, string) {
-	arr := strings.SplitN(data, ":", 3)
-	if len(arr) != 3 {
-		log.Warning("group action error:", data)
-		return false, 0, 0, ""
+
+func (group_manager *GroupManager) handleEvent(event *GroupEvent) {
+	prev_id := event.PreviousActionId
+	action_id := event.ActionId
+	log.Infof("group action:%+v %d ", event, group_manager.action_id)
+
+	if group_manager.action_id != prev_id {
+		//reload later
+		group_manager.dirty = true
+		log.Warning("action nonsequence:", group_manager.action_id, prev_id, action_id)
 	}
 
-	prev_id, err := strconv.ParseInt(arr[0], 10, 64)
-	if err != nil {
-		log.Info("error:", err, data)
-		return false, 0, 0, ""
+	if event.Name == GROUP_EVENT_CREATE {
+		group_manager.HandleCreate(event)
+	} else if event.Name == GROUP_EVENT_DISBAND {
+		group_manager.HandleDisband(event)
+	} else if event.Name == GROUP_EVENT_UPGRADE {
+		group_manager.HandleUpgrade(event)		
+	} else if event.Name == GROUP_EVENT_MEMBER_ADD {
+		group_manager.HandleMemberAdd(event)
+	} else if event.Name == GROUP_EVENT_MEMBER_REMOVE {
+		group_manager.HandleMemberRemove(event)
+	} else if event.Name == GROUP_EVENT_MEMBER_MUTE {
+		group_manager.HandleMute(event)
+	} else {
+		log.Warning("unknow event:", event.Name)
 	}
-
-	action_id, err := strconv.ParseInt(arr[1], 10, 64)
-	if err != nil {
-		log.Info("error:", err, data)
-		return false, 0, 0, ""
-	}
-	return true, prev_id, action_id, arr[2]
+	group_manager.action_id = action_id
+	group_manager.last_entry_id = event.Id
 }
 
-func (group_manager *GroupManager) handleAction(data string, channel string) {
-	r, prev_id, action_id, content := group_manager.parseAction(data)
-	if r {
-		log.Info("group action:", prev_id, action_id, group_manager.action_id, " ", channel, " content:", content)
-		if group_manager.action_id != prev_id {
-			//reload later
-			group_manager.dirty = true
-			log.Warning("action nonsequence:", group_manager.action_id, prev_id, action_id)
-		}
-
-		if channel == "group_create" {
-			group_manager.HandleCreate(content)
-		} else if channel == "group_disband" {
-			group_manager.HandleDisband(content)
-		} else if channel == "group_member_add" {
-			group_manager.HandleMemberAdd(content)
-		} else if channel == "group_member_remove" {
-			group_manager.HandleMemberRemove(content)
-		} else if channel == "group_upgrade" {
-			group_manager.HandleUpgrade(content)
-		} else if channel == "group_member_mute" {
-			group_manager.HandleMute(content)
-		}
-		group_manager.action_id = action_id
-	}	
-}
 
 
 func (group_manager *GroupManager) getActionID() (int64, error) {
@@ -360,6 +309,40 @@ func (group_manager *GroupManager) getActionID() (int64, error) {
 	}
 }
 
+
+
+func (group_manager *GroupManager) getLastEntryID() (string, error) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	r, err := redis.Values(conn.Do("XREVRANGE", GROUP_MANAGER_STREAM_NAME, "+", "-", "COUNT", "1"))
+
+	if err != nil {
+		log.Error("redis err:", err)
+		return "", err
+	}
+
+	if len(r) == 0 {
+		return "0-0", nil
+	}
+	
+	var entries []interface{}
+	r, err = redis.Scan(r, &entries)
+	if err != nil {
+		log.Error("redis scan err:", err)
+		return "", err
+	}
+
+	var id string		
+	_, err = redis.Scan(entries, &id, nil)
+	if err != nil {
+		log.Error("redis scan err:", err)
+		return "", err		
+	}
+	return id, nil
+}
+
+
 func (group_manager *GroupManager) load() {
 	//循环直到成功
 	for {
@@ -368,7 +351,12 @@ func (group_manager *GroupManager) load() {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
+		entry_id, err := group_manager.getLastEntryID()
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		group_manager.last_entry_id = entry_id
 		group_manager.action_id = action_id
 		group_manager.dirty = false
 		log.Info("group action id:", action_id)
@@ -376,66 +364,112 @@ func (group_manager *GroupManager) load() {
 	}
 }
 
-//检查当前的action id 是否变更，变更时则重新加载群组结构
-func (group_manager *GroupManager) checkActionID() {
-	action_id, err := group_manager.getActionID()
-	if err != nil {
-		log.Info("check action err:", err)
-		return
+
+func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, error) {
+	//block timeout 60s
+	reply, err := redis.Values(c.Do("XREAD", "COUNT", "1000", "BLOCK",
+		GROUP_MANAGER_XREAD_TIMEOUT*1000, "STREAMS", GROUP_MANAGER_STREAM_NAME,
+		group_manager.last_entry_id))
+	if err != nil && err != redis.ErrNil {
+		log.Info("redis xread err:", err)
+		return nil, err
+	}
+	if len(reply) == 0 {
+		log.Info("redis xread timeout")
+		return nil, nil
 	}
 
-	log.Infof("check action id:%d %d", action_id, group_manager.action_id)
-	if action_id != group_manager.action_id {
-		log.Info("clear group manager")
-		group_manager.clear()
-		group_manager.action_id = action_id
-		group_manager.dirty = false
+	var stream_res []interface{}
+	_, err = redis.Scan(reply, &stream_res)
+	if err != nil {
+		log.Info("redis scan err:", err)
+		return nil, err
 	}
+
+	var r []interface{}
+	_, err = redis.Scan(stream_res, nil, &r)
+	if err != nil {
+		log.Info("redis scan err:", err)
+		return nil, err
+	}
+	
+	events := make([]*GroupEvent, 0, 1000)
+	for len(r) > 0 {
+		var entries []interface{}
+		r, err = redis.Scan(r, &entries)
+		if err != nil {
+			log.Error("redis scan err:", err)
+			return nil, err
+		}
+
+		var id string
+		var fields []interface{}
+		_, err = redis.Scan(entries, &id, &fields)
+		if err != nil {
+			log.Error("redis scan err:", err)
+			return nil, err		
+		}
+
+		event := &GroupEvent{}
+		event.Id = id
+		err = redis.ScanStruct(fields, event)
+		if err != nil {
+			//ignore the error, will skip the event
+			log.Error("redis scan err:", err)
+		}
+		events = append(events, event)
+	}
+	
+	return events, nil
 }
 
 func (group_manager *GroupManager) RunOnce() bool {
-	t := redis.DialReadTimeout(time.Second*SUBSCRIBE_HEATBEAT)
-	c, err := redis.Dial("tcp", config.redis_address, t)
+	c, err := redis.Dial("tcp", config.redis_address)
 	if err != nil {
 		log.Info("dial redis error:", err)
 		return false
 	}
 
+	defer c.Close()
+	
 	password := config.redis_password
 	if len(password) > 0 {
 		if _, err := c.Do("AUTH", password); err != nil {
-			c.Close()
+			log.Info("redis auth err:", err)
 			return false
 		}
 	}
 
-	psc := redis.PubSubConn{c}
-	psc.Subscribe("group_create", "group_disband", "group_member_add",
-		"group_member_remove", "group_upgrade", "group_member_mute", group_manager.ping)
-	
-	group_manager.checkActionID()
-	for {
-		switch v := psc.Receive().(type) {
-		case redis.Message:
-			if v.Channel == "group_create" ||
-				v.Channel == "group_disband" ||
-				v.Channel == "group_member_add"	||
-				v.Channel == "group_member_remove" ||
-				v.Channel == "group_upgrade" ||
-				v.Channel == "group_member_mute" {
-				group_manager.handleAction(string(v.Data), v.Channel)
-			} else if v.Channel == group_manager.ping {
-				group_manager.checkActionID()
-			} else {
-				log.Infof("%s: message: %s\n", v.Channel, v.Data)
-			}
-		case redis.Subscription:
-			log.Infof("%s: %s %d\n", v.Channel, v.Kind, v.Count)
-		case error:
-			log.Info("error:", v)
-			return true
+	db := config.redis_db
+	if db > 0 && db < 16 {
+		if _, err := c.Do("SELECT", db); err != nil {
+			log.Info("redis select err:", err)
+			return false
 		}
 	}
+
+	var last_clear_ts int64
+	for {
+		events, err := group_manager.readEvents(c)
+		if err != nil {
+			log.Warning("group manager read event err:", err)
+			break
+		}
+		
+		for _, event := range events {
+			group_manager.handleEvent(event)
+		}
+
+		now := time.Now().Unix()
+		//lazy clear policy
+		if group_manager.dirty && now - last_clear_ts >= GROUP_MANAGER_XREAD_TIMEOUT {
+			log.Info("clear group manager")
+			group_manager.clear()
+			group_manager.dirty = false
+			last_clear_ts = now
+		}
+	}
+	return true
 }
 
 func (group_manager *GroupManager) Run() {
@@ -454,23 +488,6 @@ func (group_manager *GroupManager) Run() {
 	}
 }
 
-func (group_manager *GroupManager) Ping() {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	_, err := conn.Do("PUBLISH", group_manager.ping, "ping")
-	if err != nil {
-		log.Info("ping error:", err)
-	}
-}
-
-
-func (group_manager *GroupManager) PingLoop() {
-	for {
-		group_manager.Ping()
-		time.Sleep(time.Second*(SUBSCRIBE_HEATBEAT-10))
-	}
-}
 
 func (group_manager *GroupManager) Recycle() {
 	group_manager.mutex.Lock()
@@ -504,6 +521,5 @@ func (group_manager *GroupManager) RecycleLoop() {
 func (group_manager *GroupManager) Start() {
 	group_manager.load()
 	go group_manager.Run()
-	go group_manager.PingLoop()
 	go group_manager.RecycleLoop()
 }
