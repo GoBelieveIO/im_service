@@ -229,6 +229,7 @@ func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 		group = NewGroup(id, appid, members)
 	}
 
+	log.Info("load group success:", group_id)
 	return group, nil	
 }
 
