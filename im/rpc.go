@@ -140,7 +140,6 @@ func SendIMMessage(im *IMMessage, appid int64) {
 
 //http
 func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
-	log.Info("post group notification")
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -174,8 +173,17 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 		return		
 	}
 
-	members := NewIntSet()
+	is_super := false
+	if super_json, ok := obj.CheckGet("super"); ok {
+		is_super, err = super_json.Bool()
+		if err != nil {
+			log.Info("error:", err)
+			WriteHttpError(400, "invalid json format", w)
+			return		
+		}
+	}
 
+	members := NewIntSet()
 	marray, err := obj.Get("members").Array()
 	for _, m := range marray {
 		if _, ok := m.(json.Number); ok {
@@ -190,29 +198,26 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request) {
 	}
 
 	deliver := GetGroupMessageDeliver(group_id)
-	group := deliver.LoadGroup(group_id)	
-	if group == nil {
-		log.Info("group not exist: ", group_id)
-		WriteHttpError(400, "group not exist", w)
-		return
-	}
-
-	ms := group.Members()
-	for m, _ := range ms {
-		members.Add(m)
+	group := deliver.LoadGroup(group_id)
+	if group != nil {
+		ms := group.Members()
+		for m, _ := range ms {
+			members.Add(m)
+		}
+		is_super = group.super
 	}
 
 	if len(members) == 0 {
 		WriteHttpError(400, "group no member", w)
 		return
 	}
-	if (group.super) {
+	if (is_super) {
 		SendSuperGroupNotification(appid, group_id, notification, members)
 	} else {
 		SendGroupNotification(appid, group_id, notification, members)
 	}
 
-	log.Info("post group notification success:", members)
+	log.Info("post group notification success")
 	w.WriteHeader(200)
 }
 

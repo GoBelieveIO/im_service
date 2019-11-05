@@ -91,7 +91,7 @@ func (group_manager *GroupManager) LoadGroup(gid int64) *Group {
 	group_manager.mutex.Unlock()
 	group, err := LoadGroup(group_manager.db, gid)
 	if err != nil {
-		log.Warning("load group:%d err:%s", gid, err)
+		log.Warningf("load group:%d err:%s", gid, err)
 		return nil
 	}
 
