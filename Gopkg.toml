@@ -73,7 +73,7 @@
 
 [[constraint]]
   name = "github.com/gorilla/websocket"
-  version = "1.3.0"
+  version = "~1.4.0"
 
 [[constraint]]
   name = "github.com/googollee/go-engine.io"
