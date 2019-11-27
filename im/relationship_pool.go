@@ -235,7 +235,7 @@ func (rp *RelationshipPool) HandleFriend(event *RelationshipEvent) {
 	friend_uid := event.FriendUid
 	is_friend := event.IsFriend
 	if appid == 0 || uid == 0 || friend_uid == 0 {
-		log.Info("invalid relationship event:%+v", event)
+		log.Infof("invalid relationship event:%+v", event)
 		return
 	}
 	
@@ -250,7 +250,7 @@ func (rp *RelationshipPool) HandleBlacklist(event *RelationshipEvent) {
 	is_blacklist := event.IsBlacklist
 
 	if appid == 0 || uid == 0 || friend_uid == 0 {
-		log.Info("invalid relationship event:%+v", event)
+		log.Infof("invalid relationship event:%+v", event)
 		return
 	}
 	rp.SetInMyBlacklist(appid, uid, friend_uid, is_blacklist)
