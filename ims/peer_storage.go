@@ -103,6 +103,16 @@ func (storage *PeerStorage) SavePeerMessage(appid int64, uid int64, device_id in
 	return msgid, user_index.last_msgid
 }
 
+func (storage *PeerStorage) SavePeerGroupMessage(appid int64, members []int64, device_id int64, msg *Message) []int64 {
+	r := make([]int64, 0, len(members)*2)
+	for _, uid := range(members) {
+		msgid, prev_msgid := storage.SavePeerMessage(appid, uid, device_id, msg)
+		r = append(r, msgid)
+		r = append(r, prev_msgid)
+	}
+	return r
+}
+
 func (storage *PeerStorage) GetPeerIndex(appid int64, receiver int64) *UserIndex {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()

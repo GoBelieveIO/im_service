@@ -243,6 +243,7 @@ func main() {
 		dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
 		dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
 		dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
+		dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
 		dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
 		dispatcher.AddFunc("GetLatestMessage", GetLatestMessageInterface)
 
@@ -264,6 +265,7 @@ func main() {
 			dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
 			dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
 			dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
+			dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
 			dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
 
 			dc := dispatcher.NewFuncClient(c)

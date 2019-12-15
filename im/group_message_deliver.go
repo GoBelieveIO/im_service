@@ -434,29 +434,50 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
 
 	metadata := &Metadata{}
-	members := gm.members
-	for _, member := range members {
-		msgid, prev_msgid, err := SaveMessage(gm.appid, member, gm.device_ID, m)
+
+	batch_members := make(map[int64][]int64)
+	for _, member := range gm.members {
+		index := GetStorageRPCIndex(member)
+		if _, ok := batch_members[index]; !ok {
+			batch_members[index] = []int64{member}
+		} else {
+			mb := batch_members[index]
+			mb = append(mb, member)
+			batch_members[index] = mb
+		}
+	}
+	
+	for _, mb := range(batch_members) {
+		r, err := SavePeerGroupMessage(gm.appid, mb, gm.device_ID, m)
 		if err != nil {
-			log.Errorf("save group member message:%d %d err:%s", err, msg.sender, msg.receiver)
+			log.Errorf("save peer group message:%d %d err:%s", gm.sender, gm.gid, err)
+			return nil, false
+		}
+		if len(r) != len(mb)*2 {
+			log.Errorf("save peer group message err:%d %d", len(r), len(mb))
 			return nil, false
 		}
 
-		meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
-		mm := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION, flag:MESSAGE_FLAG_PUSH, body:msg, meta:meta}
-		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, mm)
+		for i := 0; i < len(r); i += 2 {
+			msgid, prev_msgid := r[i], r[i+1]
+			member := mb[i/2]
+			meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
+			mm := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION,
+				flag:MESSAGE_FLAG_PUSH, body:msg, meta:meta}
+			storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, mm)
 
-		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
-		storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
-		
-		if member == gm.sender {
-			metadata.sync_key = msgid
-			metadata.prev_sync_key = prev_msgid
+			notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
+			storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
+			
+			if member == gm.sender {
+				metadata.sync_key = msgid
+				metadata.prev_sync_key = prev_msgid
+			}
 		}
 	}
 
 	group_members := make(map[int64]int64)
-	for _, member := range members {
+	for _, member := range gm.members {
 		group_members[member] = 0
 	}
 	group := NewGroup(gm.gid, gm.appid, group_members)

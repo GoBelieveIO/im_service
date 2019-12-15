@@ -180,6 +180,7 @@ func ListenRPCClient() {
 	dispatcher.AddFunc("SyncMessage", SyncMessage)
 	dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessage)
 	dispatcher.AddFunc("SavePeerMessage", SavePeerMessage)
+	dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessage)
 	dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessage)
 	dispatcher.AddFunc("GetNewCount", GetNewCount)
 	dispatcher.AddFunc("GetLatestMessage", GetLatestMessage)

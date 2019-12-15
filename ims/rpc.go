@@ -70,6 +70,16 @@ func SavePeerMessage(addr string, m *PeerMessage) ([2]int64, error) {
 	return [2]int64{msgid, prev_msgid}, nil
 }
 
+func SavePeerGroupMessage(addr string, m *PeerGroupMessage) ([]int64, error) {
+	atomic.AddInt64(&server_summary.nrequests, 1)
+	atomic.AddInt64(&server_summary.peer_message_count, 1)
+	msg := &Message{cmd:int(m.Cmd), version:DEFAULT_VERSION}
+	msg.FromData(m.Raw)
+	r := storage.SavePeerGroupMessage(m.AppID, m.Members, m.DeviceID, msg)
+	return r, nil
+}
+
+
 func SaveGroupMessage(addr string, m *GroupMessage) ([2]int64, error) {
 	atomic.AddInt64(&server_summary.nrequests, 1)
 	atomic.AddInt64(&server_summary.group_message_count, 1)
