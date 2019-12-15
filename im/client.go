@@ -205,12 +205,17 @@ func (client *Client) HandleMessage(msg *Message) {
 
 
 func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
-	appid, uid, forbidden, notification_on, err := LoadUserAccessToken(token)
+	appid, uid, err := LoadUserAccessToken(token)
 
 	if err != nil {
 		return 0, 0, 0, false, err
 	}
-
+	
+	forbidden, notification_on, err := GetUserPreferences(appid, uid)
+	if err != nil {
+		return 0, 0, 0, false, err
+	}
+	
 	return appid, uid, forbidden, notification_on, nil
 }
 
@@ -236,7 +241,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		return
 	}
 
-	if login.platform_id != PLATFORM_WEB && len(login.device_id) > 0{
+	if login.platform_id != PLATFORM_WEB && len(login.device_id) > 0 {
 		client.device_ID, err = GetDeviceID(login.device_id, int(login.platform_id))
 		if err != nil {
 			log.Info("auth token uid==0")
