@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import struct
 import socket
@@ -7,8 +8,8 @@ import requests
 import json
 import uuid
 import base64
-import md5
 import sys
+import rpc
 from protocol import *
 from client import *
 
@@ -39,7 +40,7 @@ def send_client(uid, receiver, msg_type):
         
     sock.close()    
     task += 1
-    print "send success"
+    print("send success")
 
 
 
@@ -67,7 +68,7 @@ def recv_room_message_client(uid, room_id, port=23000):
 
     recv_room_client(uid, port, room_id, handle_message)
     task += 1
-    print "recv room message success"
+    print("recv room message success")
 
 
 def send_room_message_client(uid, room_id):
@@ -84,7 +85,7 @@ def send_room_message_client(uid, room_id):
     seq += 1
     send_message(MSG_ROOM_IM, seq, im, sock)
     task += 1
-    print "send success"
+    print("send success")
 
 
 def send_rt_client(uid, receiver):
@@ -96,10 +97,10 @@ def send_rt_client(uid, receiver):
     im.content = "test rt"
     seq += 1
 
-    print "send rt...."
+    print("send rt....")
     send_message(MSG_RT, seq, im, sock)
     task += 1
-    print "send success"
+    print("send success")
 
 
     
@@ -113,7 +114,7 @@ def recv_message_client(uid, port=23000):
 
     recv_client(uid, port, handle_message)
     task += 1
-    print "recv message success"
+    print("recv message success")
 
     
 def recv_rt_message_client(uid, port=23000):
@@ -126,97 +127,74 @@ def recv_rt_message_client(uid, port=23000):
 
     recv_client(uid, port, handle_message)
     task += 1
-    print "recv rt message success"
+    print("recv rt message success")
 
 
 
     
 def send_http_peer_message(uid, receiver):
     global task
-    url = URL + "/messages/peers"
-    content = json.dumps({"text":"test"})
-    obj = {"sender":uid, "receiver":receiver, "content":content}
-    secret = md5.new(APP_SECRET).digest().encode("hex")
-    basic = base64.b64encode(str(APP_ID) + ":" + secret)
-    headers = {'Content-Type': 'application/json; charset=UTF-8',
-               'Authorization': 'Basic ' + basic}
-     
-    res = requests.post(url, data=json.dumps(obj), headers=headers)
+    content = json.dumps({"text":"test"})    
+    res = rpc.post_peer_message(APP_ID, uid, receiver, content)
     if res.status_code != 200:
-        print res.status_code, res.content
+        print(res.status_code, res.content)
         return
-    print "send http peer message:", res.status_code
+    print("send http peer message:", res.status_code)
     task += 1
 
 
 
 def send_notificaton(uid):
     global task
-    url = URL + "/messages/notifications"
-    obj = {
-        "receiver":uid,
-        "content":"notification content"
-    }
-    secret = md5.new(APP_SECRET).digest().encode("hex")
-    basic = base64.b64encode(str(APP_ID) + ":" + secret)
-    headers = {'Content-Type': 'application/json; charset=UTF-8',
-               'Authorization': 'Basic ' + basic}
-     
-    res = requests.post(url, data=json.dumps(obj), headers=headers)
+    res = rpc.post_peer_notification(APP_ID, uid, "notification content")
     if res.status_code != 200:
-        print res.status_code, res.content
+        print(res.status_code, res.content)
         return
-    print "send notification:", res.status_code
+    print("send notification:", res.status_code)
     task += 1
     
 def recv_notification_client(uid):
     global task
     def handle_message(cmd, s, msg):
         if cmd == MSG_NOTIFICATION:
-            print "cmd:", cmd, msg
+            print("cmd:", cmd, msg)
             return True
         else:
-            print "cmd:", cmd, msg
+            print("cmd:", cmd, msg)
             return False
 
     recv_client(uid, 23000, handle_message)
     task += 1
-    print "recv notification success"
+    print("recv notification success")
 
     
 
 def send_system_message(uid):
     global task
-    url = URL + "/messages/systems"
     obj = {
         "receiver":uid,
         "content":"system message content"
     }
-    secret = md5.new(APP_SECRET).digest().encode("hex")
-    basic = base64.b64encode(str(APP_ID) + ":" + secret)
-    headers = {'Content-Type': 'application/json; charset=UTF-8',
-               'Authorization': 'Basic ' + basic}
-     
-    res = requests.post(url, data=json.dumps(obj), headers=headers)
+    res = rpc.post_system_message(APP_ID, uid, "system message content")
     if res.status_code != 200:
-        print res.status_code, res.content
+        print(res.status_code, res.content)
         return
-    print "send system message:", res.status_code
+    print("send system message:", res.status_code)
     task += 1
     
 def recv_system_message_client(uid):
     global task
     def handle_message(cmd, s, msg):
         if cmd == MSG_SYSTEM:
-            print "cmd:", cmd, msg
+            print("cmd:", cmd, msg)
             return True
         else:
-            print "cmd:", cmd, msg
+            print("cmd:", cmd, msg)
             return False
 
     recv_client(uid, 23000, handle_message)
     task += 1
-    print "recv system message success"
+    print("recv system message success")
 
 
 
@@ -237,7 +215,7 @@ def TestCluster():
     while task < 2:
         time.sleep(1)
 
-    print "test cluster completed"
+    print("test cluster completed")
 
 def TestRTSendAndRecv():
     global task
@@ -255,7 +233,7 @@ def TestRTSendAndRecv():
     
     while task < 2:
         time.sleep(1)
-    print "test rt  completed"
+    print("test rt  completed")
 
 def TestSendAndRecv():
     global task
@@ -273,7 +251,7 @@ def TestSendAndRecv():
     
     while task < 2:
         time.sleep(1)
-    print "test single completed"
+    print("test single completed")
 
 def TestHttpSendAndRecv():
     global task
@@ -291,7 +269,7 @@ def TestHttpSendAndRecv():
     while task < 2:
         time.sleep(1)
 
-    print "test http peer message completed"
+    print("test http peer message completed")
 
     
 def TestOffline():
@@ -310,16 +288,16 @@ def TestOffline():
     while task < 2:
         time.sleep(1)
 
-    print "test offline completed"
+    print("test offline completed")
 
 
 def TestTimeout():
     sock, seq = connect_server(RECEIVER, 23000)
-    print "waiting timeout"
+    print("waiting timeout")
     while True:
         r = sock.recv(1024)
         if len(r) == 0:
-            print "test timeout completed"
+            print("test timeout completed")
             break
 
 def TestPingPong():
@@ -330,7 +308,7 @@ def TestPingPong():
     while True:
         cmd, _, _, msg = recv_message(sock)
         if cmd == MSG_PONG:
-            print "test ping/pong completed"
+            print("test ping/pong completed")
             return
         else:
             continue
@@ -356,11 +334,11 @@ def _TestRoomMessage(port):
 
 def TestRoomMessage():
     _TestRoomMessage(23000)
-    print "test room message completed"
+    print("test room message completed")
 
 def TestClusterRoomMessage():
     _TestRoomMessage(24000)
-    print "test cluster room message completed"
+    print("test cluster room message completed")
 
 
 def TestSystemMessage():
@@ -381,7 +359,7 @@ def TestSystemMessage():
     while task < 2:
         time.sleep(1)
 
-    print "test system message completed"
+    print("test system message completed")
     
 def TestNotification():
     global task
@@ -401,7 +379,7 @@ def TestNotification():
     while task < 2:
         time.sleep(1)
 
-    print "test notification completed"
+    print("test notification completed")
 
     
 def main():
@@ -410,7 +388,7 @@ def main():
     TestRTSendAndRecv()
     time.sleep(1)
      
-    print "test room message"
+    print("test room message")
     TestRoomMessage()
     time.sleep(1)
      

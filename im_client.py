@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import struct
@@ -22,7 +23,6 @@ else:
     
 #command
 MSG_HEARTBEAT = 1
-#MSG_AUTH = 2
 MSG_AUTH_STATUS = 3
 MSG_IM = 4
 MSG_ACK = 5
@@ -38,10 +38,16 @@ MSG_PONG = 14
 MSG_AUTH_TOKEN = 15
 MSG_LOGIN_POINT = 16
 MSG_RT = 17
+MSG_ENTER_ROOM = 18
+MSG_LEAVE_ROOM = 19
+MSG_ROOM_IM = 20
 MSG_SYSTEM = 21
+MSG_UNREAD_COUNT = 22
+MSG_CUSTOMER_SERVICE_ = 23
 
 MSG_CUSTOMER = 24
 MSG_CUSTOMER_SUPPORT = 25
+
 
 MSG_SYNC = 26
 MSG_SYNC_BEGIN = 27
@@ -55,7 +61,6 @@ MSG_SYNC_GROUP_NOTIFY = 33
 
 MSG_SYNC_KEY  = 34
 MSG_GROUP_SYNC_KEY = 35
-
 
 MSG_NOTIFICATION = 36
 
@@ -90,10 +95,26 @@ class RTMessage:
         self.sender = 0
         self.receiver = 0
         self.content = ""
+
+
+class CustomerMessage:
+    def __init__(self):
+        self.customer_appid = 0
+        self.custoemr_id = 0
+        self.store_id = 0
+        self.seller_id = 0
+        self.timestamp = 0
+        self.content = ""
+
+        self.persistent = True
+
+    def __str__(self):
+        return str((self.customer_appid, self.customer_id, self.store_id, self.seller_id, self.timestamp, self.content))
+
     
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
-        b = struct.pack("!BB", msg.platform_id, len(msg.token)) + msg.token + struct.pack("!B", len(msg.device_id)) + msg.device_id
+        b = struct.pack("!BB", msg.platform_id, len(msg.token)) + bytes(msg.token, "utf-8") + struct.pack("!B", len(msg.device_id)) + bytes(msg.device_id, "utf-8")
         length = len(b)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h+b)
@@ -101,24 +122,23 @@ def send_message(cmd, seq, msg, sock):
         length = 24 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
-        sock.sendall(h+b+msg.content)
-    elif cmd == MSG_RT:
+        sock.sendall(h+b+bytes(msg.content, "utf-8"))
+    elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         length = 16 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qq", msg.sender, msg.receiver)
-        sock.sendall(h+b+msg.content)
+        sock.sendall(h+b+bytes(msg.content, "utf-8"))
     elif cmd == MSG_ACK:
         h = struct.pack("!iibbbb", 4, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!i", msg)
         sock.sendall(h + b)
-    elif cmd == MSG_INPUTING:
-        sender, receiver = msg
-        h = struct.pack("!iibbbb", 16, seq, cmd, PROTOCOL_VERSION, 0, 0)
-        b = struct.pack("!qq", sender, receiver)
-        sock.sendall(h + b)
     elif cmd == MSG_PING:
         h = struct.pack("!iibbbb", 0, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h)
+    elif cmd == MSG_ENTER_ROOM or cmd == MSG_LEAVE_ROOM:
+        h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!q", msg)
+        sock.sendall(h+b)
     elif cmd == MSG_SYNC or cmd == MSG_SYNC_KEY:
         h = struct.pack("!iibbbb", 8, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!q", msg)
@@ -128,64 +148,89 @@ def send_message(cmd, seq, msg, sock):
         h = struct.pack("!iibbbb", 16, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qq", group_id, sync_key)
         sock.sendall(h+b)
+    elif cmd == MSG_CUSTOMER_SUPPORT or cmd == MSG_CUSTOMER:
+        length = 36 + len(msg.content)
+        flag = 0
+        if not msg.persistent:
+            flag = MESSAGE_FLAG_UNPERSISTENT
+        print("send message flag:", flag)
+        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, flag, 0)
+        b = struct.pack("!qqqqi", msg.customer_appid, msg.customer_id, msg.store_id, msg.seller_id, msg.timestamp)
+        sock.sendall(h+b+bytes(msg.content, "utf-8"))
     else:
-        print "eeeeee"
+        print("eeeeee")
 
-def recv_message(sock):
+def recv_message_(sock):
     buf = sock.recv(12)
     if len(buf) != 12:
-        return 0, 0, None
-    length, seq, cmd = struct.unpack("!iib", buf[:9])
-
+        return 0, 0, 0, None
+    length, seq, cmd, _, flag = struct.unpack("!iibbb", buf[:11])
     if length == 0:
-        return cmd, seq, None
+        return cmd, seq, 0, None
 
     content = sock.recv(length)
     if len(content) != length:
-        return 0, 0, None
+        return 0, 0, 0, None
 
     if cmd == MSG_AUTH_STATUS:
         status, = struct.unpack("!i", content)
-        return cmd, seq, status
+        return cmd, seq, flag, status
     elif cmd == MSG_LOGIN_POINT:
         up_timestamp, platform_id = struct.unpack("!ib", content[:5])
         device_id = content[5:]
-        return cmd, seq, (up_timestamp, platform_id, device_id)
+        return cmd, seq, flag, (up_timestamp, platform_id, device_id)
     elif cmd == MSG_IM or cmd == MSG_GROUP_IM:
         im = IMMessage()
-        im.sender, im.receiver, im.timestamp, im.msgid = struct.unpack("!qqii", content[:24])
+        im.sender, im.receiver, im.timestamp, _ = struct.unpack("!qqii", content[:24])
         im.content = content[24:]
-        return cmd, seq, im
-    elif cmd == MSG_RT:
+        return cmd, seq, flag, im
+    elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         rt = RTMessage()
         rt.sender, rt.receiver, = struct.unpack("!qq", content[:16])
         rt.content = content[16:]
-        return cmd, seq, rt
+        return cmd, seq, flag, rt
     elif cmd == MSG_ACK:
         ack, = struct.unpack("!i", content)
-        return cmd, seq, ack
+        return cmd, seq, flag, ack
+    elif cmd == MSG_SYSTEM:
+        return cmd, seq, flag, content
+    elif cmd == MSG_NOTIFICATION:
+        return cmd, seq, flag, content
     elif cmd == MSG_INPUTING:
         sender, receiver = struct.unpack("!qq", content)
-        return cmd, seq, (sender, receiver)
+        return cmd, seq, flag, (sender, receiver)
     elif cmd == MSG_PONG:
         return cmd, seq, None
     elif cmd == MSG_SYNC_BEGIN or \
          cmd == MSG_SYNC_END or \
          cmd == MSG_SYNC_NOTIFY:
         sync_key, = struct.unpack("!q", content)
-        return cmd, seq, sync_key
+        return cmd, seq, flag, sync_key
     elif cmd == MSG_SYNC_GROUP_BEGIN or \
          cmd == MSG_SYNC_GROUP_END or \
          cmd == MSG_SYNC_GROUP_NOTIFY:
         group_id, sync_key = struct.unpack("!qq", content)
-        return cmd, seq, (group_id, sync_key)
+        return cmd, seq, flag, (group_id, sync_key)
     elif cmd == MSG_GROUP_NOTIFICATION:
-        return cmd, seq, content
+        return cmd, seq, flag, content
+    elif cmd == MSG_CUSTOMER or cmd == MSG_CUSTOMER_SUPPORT:
+        cm = CustomerMessage()
+        cm.customer_appid, cm.customer_id, cm.store_id, cm.seller_id, cm.timestamp = \
+            struct.unpack("!qqqqi", content[:36])
+        cm.content = content[36:]
+        return cmd, seq, flag, cm
     elif cmd == MSG_METADATA:
         sync_key, prev_sync_key = struct.unpack("!qq", content[:16])
-        return cmd, seq, (sync_key, prev_sync_key)    
+        return cmd, seq, flag, (sync_key, prev_sync_key)
     else:
-        return cmd, seq, content
+        print("unknow cmd:", cmd)
+        return cmd, seq, flag, content
+
+def recv_message(sock):
+    cmd, seq, flag, content = recv_message_(sock)
+    print("recv message cmd:", cmd, "seq:", seq, "flag:", hex(flag), "content:", content)
+    return cmd, seq, flag, content
+
 
 class Client(object):
     def __init__(self):
@@ -210,7 +255,7 @@ class Client(object):
         auth.device_id = device_id
         self.seq = self.seq + 1
         send_message(MSG_AUTH_TOKEN, self.seq, auth, sock)
-        cmd, _, msg = recv_message(sock)
+        cmd, _, _, msg = recv_message(sock)
         if cmd != MSG_AUTH_STATUS or msg != 0:
             return False
 
@@ -230,13 +275,13 @@ class Client(object):
             if not rlist and not xlist:
                 #timeout
                 self.seq += 1
-                print "ping..."
+                print("ping...")
                 send_message(MSG_PING, self.seq, None, self.sock)
                 continue
             if xlist:
                 return 0, 0, None
             if rlist:
-                cmd, s, m = recv_message(self.sock)
+                cmd, s, _, m = recv_message(self.sock)
                 return cmd, s, m
 
     def send_peer_message(self, msg):
@@ -268,7 +313,7 @@ if __name__ == "__main__":
         sys.exit(1)
     obj = json.loads(resp.text)
     token = obj["token"]
-    print "token:", token
+    print("token:", token)
     while True:
         try:
             client = Client()
@@ -278,28 +323,28 @@ if __name__ == "__main__":
             client.send_sync()
             
             while True:
-                print "recv message..."
+                print("recv message...")
                 cmd, s, m = client.recv_message()
                 #socket disconnect
                 if cmd == 0 and s == 0 and m is None:
-                    print "socket disconnect"
+                    print("socket disconnect")
                     break
 
-                print "cmd:", cmd
+                print("cmd:", cmd)
                 if cmd == MSG_IM:
                     #handle im
-                    print "im:", m.sender, m.receiver, m.timestamp, m.content
+                    print("im:", m.sender, m.receiver, m.timestamp, m.content)
                     client.ack_message(s)
                 elif cmd == MSG_GROUP_IM:
                     #handle group im
-                    print "group im:", m.sender, m.receiver, m.timestamp, m.content
+                    print("group im:", m.sender, m.receiver, m.timestamp, m.content)
                     client.ack_message(s)
                 elif cmd == MSG_SYSTEM:
                     #handle system
-                    print "system:", m
+                    print("system:", m)
                     client.ack_message(s)
                 elif cmd == MSG_PONG:
-                    print "pong..."
+                    print("pong...")
                     continue
                 elif cmd == MSG_SYNC_NOTIFY:
                     new_sync_key = m
@@ -311,10 +356,10 @@ if __name__ == "__main__":
                         client.sync_key = new_sync_key
                         client.send_sync_key()
                 else:
-                    print "unknow message:", cmd
+                    print("unknow message:", cmd)
                     continue
 
-        except Exception, e:
+        except Exception as e:
             traceback.print_exc()            
             time.sleep(1)
             continue
