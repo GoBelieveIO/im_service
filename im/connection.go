@@ -223,8 +223,6 @@ func (client *Connection) read() *Message {
 	if conn, ok := client.conn.(net.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
 		return ReceiveClientMessage(conn)
-	} else if conn, ok := client.conn.(engineio.Conn); ok {
-		return ReadEngineIOMessage(conn)
 	} else if conn, ok := client.conn.(*websocket.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
 		return ReadWebsocketMessage(conn)
@@ -256,8 +254,6 @@ func (client *Connection) send(m *Message) {
 			atomic.AddInt32(&client.tc, 1)
 			log.Info("send msg:", Command(msg.cmd),  " tcp err:", err)
 		}
-	} else if conn, ok := client.conn.(engineio.Conn); ok {
-		SendEngineIOBinaryMessage(conn, msg)
 	} else if conn, ok := client.conn.(*websocket.Conn); ok {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {

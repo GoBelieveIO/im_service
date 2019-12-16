@@ -221,10 +221,10 @@ func main() {
 	log.Info("group route addressed:", config.group_route_addrs)	
 	log.Info("kefu appid:", config.kefu_appid)
 	log.Info("pending root:", config.pending_root)
+
+	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)	
+	log.Infof("cert file:%s key file:%s", config.cert_file, config.key_file)
 	
-	log.Infof("socket io address:%s tls_address:%s cert file:%s key file:%s",
-		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
-	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
 	log.Info("group deliver count:", config.group_deliver_count)
 	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
 	
@@ -322,10 +322,6 @@ func main() {
 	go StartHttpServer(config.http_listen_address)
 	StartRPCServer(config.rpc_listen_address)
 
-	if len(config.socket_io_address) > 0 {
-		go StartSocketIO(config.socket_io_address, config.tls_address, 
-			config.cert_file, config.key_file)
-	}
 	if len(config.ws_address) > 0 {
 		go StartWSServer(config.ws_address)
 	}
