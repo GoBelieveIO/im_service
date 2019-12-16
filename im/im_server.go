@@ -320,7 +320,6 @@ func main() {
 	}
 	
 	go StartHttpServer(config.http_listen_address)
-	StartRPCServer(config.rpc_listen_address)
 
 	if len(config.ws_address) > 0 {
 		go StartWSServer(config.ws_address)
