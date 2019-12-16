@@ -26,20 +26,6 @@
   revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
 
 [[projects]]
-  digest = "1:239c4c7fd2159585454003d9be7207167970194216193a8a210b8d29576f19c9"
-  name = "github.com/golang/protobuf"
-  packages = [
-    "proto",
-    "ptypes",
-    "ptypes/any",
-    "ptypes/duration",
-    "ptypes/timestamp",
-  ]
-  pruneopts = "UT"
-  revision = "c823c79ea1570fb5ff454033735a8e68575d1d0f"
-  version = "v1.3.0"
-
-[[projects]]
   digest = "1:38ec74012390146c45af1f92d46e5382b50531247929ff3a685d2b2be65155ac"
   name = "github.com/gomodule/redigo"
   packages = [
@@ -51,28 +37,6 @@
   version = "v2.0.0"
 
 [[projects]]
-  digest = "1:324591cd9122f94cc39a87bd44ec71153672c239e2cff5743bfad96b60be3749"
-  name = "github.com/googollee/go-engine.io"
-  packages = [
-    ".",
-    "message",
-    "parser",
-    "polling",
-    "transport",
-    "websocket",
-  ]
-  pruneopts = "UT"
-  revision = "3c3145340e676971209507021a435520c2700d92"
-
-[[projects]]
-  digest = "1:ca59b1175189b3f0e9f1793d2c350114be36eaabbe5b9f554b35edee1de50aea"
-  name = "github.com/gorilla/mux"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "a7962380ca08b5a188038c69871b8d3fbdf31e89"
-  version = "v1.7.0"
-
-[[projects]]
   digest = "1:e62657cca9badaa308d86e7716083e4c5933bb78e30a17743fc67f50be26f6f4"
   name = "github.com/gorilla/websocket"
   packages = ["."]
@@ -82,11 +46,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:702ea462cd8318b3565200f0849a678c82f7ea1117c7548ae3569a4f83dfb469"
+  digest = "1:dac5293edd95f269a44637cbf49e74522d52f8eaf8ab530299921535b535d01b"
   name = "github.com/importcjj/sensitive"
   packages = ["."]
   pruneopts = "UT"
-  revision = "62a4c32ecfda764c1ee9b9bfa740f189822a984c"
+  revision = "12e8792b0f2a66e4b799fc68b839dfcc6a4db02d"
 
 [[projects]]
   branch = "master"
@@ -105,108 +69,12 @@
   revision = "908281bef77441f2d0ec1792189b4032a1dace0c"
 
 [[projects]]
-  branch = "master"
-  digest = "1:4512c74e2c934a151fa9246cdc565d29611f53295bfb05e7a6275e80ee540a0c"
-  name = "golang.org/x/net"
-  packages = [
-    "context",
-    "http/httpguts",
-    "http2",
-    "http2/hpack",
-    "idna",
-    "internal/timeseries",
-    "trace",
-  ]
-  pruneopts = "UT"
-  revision = "9f648a60d9775ef5c977e7669d1673a7a67bef33"
-
-[[projects]]
-  branch = "master"
-  digest = "1:f36c7b9a36158e62ffe5d8b02d1b5955500c13106cdaeebf5323d88863cae96f"
-  name = "golang.org/x/sys"
-  packages = ["unix"]
-  pruneopts = "UT"
-  revision = "fead79001313d15903fb4605b4a1b781532cd93e"
-
-[[projects]]
-  digest = "1:a2ab62866c75542dd18d2b069fec854577a20211d7c0ea6ae746072a1dccdd18"
-  name = "golang.org/x/text"
-  packages = [
-    "collate",
-    "collate/build",
-    "internal/colltab",
-    "internal/gen",
-    "internal/tag",
-    "internal/triegen",
-    "internal/ucd",
-    "language",
-    "secure/bidirule",
-    "transform",
-    "unicode/bidi",
-    "unicode/cldr",
-    "unicode/norm",
-    "unicode/rangetable",
-  ]
-  pruneopts = "UT"
-  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
-  version = "v0.3.0"
-
-[[projects]]
   digest = "1:c25289f43ac4a68d88b02245742347c94f1e108c534dda442188015ff80669b3"
   name = "google.golang.org/appengine"
   packages = ["cloudsql"]
   pruneopts = "UT"
-  revision = "e9657d882bb81064595ca3b56cbe2546bbabf7b1"
-  version = "v1.4.0"
-
-[[projects]]
-  branch = "master"
-  digest = "1:c3076e7defee87de1236f1814beb588f40a75544c60121e6eb38b3b3721783e2"
-  name = "google.golang.org/genproto"
-  packages = ["googleapis/rpc/status"]
-  pruneopts = "UT"
-  revision = "5fe7a883aa19554f42890211544aa549836af7b7"
-
-[[projects]]
-  digest = "1:cbc746de4662c66fd24a037501bd65aa0f8ad0bfca0c92576e0abb88864e3741"
-  name = "google.golang.org/grpc"
-  packages = [
-    ".",
-    "balancer",
-    "balancer/base",
-    "balancer/roundrobin",
-    "binarylog/grpc_binarylog_v1",
-    "codes",
-    "connectivity",
-    "credentials",
-    "credentials/internal",
-    "encoding",
-    "encoding/proto",
-    "grpclog",
-    "internal",
-    "internal/backoff",
-    "internal/binarylog",
-    "internal/channelz",
-    "internal/envconfig",
-    "internal/grpcrand",
-    "internal/grpcsync",
-    "internal/syscall",
-    "internal/transport",
-    "keepalive",
-    "metadata",
-    "naming",
-    "peer",
-    "resolver",
-    "resolver/dns",
-    "resolver/passthrough",
-    "stats",
-    "status",
-    "tap",
-  ]
-  pruneopts = "UT"
-  revision = "2fdaae294f38ed9a121193c51ec99fecd3b13eb7"
-  source = "https://github.com/grpc/grpc-go.git"
-  version = "v1.19.0"
+  revision = "971852bfffca25b069c31162ae8f247a3dba083b"
+  version = "v1.6.5"
 
 [solve-meta]
   analyzer-name = "dep"
@@ -215,16 +83,11 @@
     "github.com/bitly/go-simplejson",
     "github.com/go-sql-driver/mysql",
     "github.com/golang/glog",
-    "github.com/golang/protobuf/proto",
     "github.com/gomodule/redigo/redis",
-    "github.com/googollee/go-engine.io",
-    "github.com/gorilla/mux",
     "github.com/gorilla/websocket",
     "github.com/importcjj/sensitive",
     "github.com/richmonkey/cfg",
     "github.com/valyala/gorpc",
-    "golang.org/x/net/context",
-    "google.golang.org/grpc",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -38,17 +38,8 @@
   name = "github.com/golang/glog"
 
 [[constraint]]
-  name = "github.com/golang/protobuf"
-  version = "1.2.0"
-
-[[constraint]]
   name = "github.com/gomodule/redigo"
   version = "2.0.0"
-
-  
-[[constraint]]
-  name = "github.com/gorilla/mux"
-  version = "1.6.2"
 
 [[constraint]]
   branch = "master"
@@ -62,22 +53,10 @@
   branch = "master"
   name = "github.com/valyala/gorpc"
 
-[[constraint]]
-  branch = "master"
-  name = "golang.org/x/net"
-
-[[constraint]]
-  name = "google.golang.org/grpc"
-  version = "1.14.0"
-  source = "https://github.com/grpc/grpc-go.git"
 
 [[constraint]]
   name = "github.com/gorilla/websocket"
   version = "~1.4.0"
-
-[[constraint]]
-  name = "github.com/googollee/go-engine.io"
-  revision = "3c3145340e676971209507021a435520c2700d92"
 
 
 [prune]

@@ -25,7 +25,6 @@ import "unsafe"
 import "sync"
 import "sync/atomic"
 import log "github.com/golang/glog"
-import "github.com/googollee/go-engine.io"
 import "github.com/gorilla/websocket"
 import "container/list"
 
@@ -272,9 +271,6 @@ func (client *Connection) send(m *Message) {
 // 根据连接类型关闭
 func (client *Connection) close() {
 	if conn, ok := client.conn.(net.Conn); ok {
-		conn.Close()
-	} else if conn, ok := client.conn.(engineio.Conn); ok {
-		//bug:https://github.com/googollee/go-engine.io/issues/34
 		conn.Close()
 	} else if conn, ok := client.conn.(*websocket.Conn); ok {
 		conn.Close()
