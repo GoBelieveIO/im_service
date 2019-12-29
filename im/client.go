@@ -66,13 +66,13 @@ func NewClient(conn interface{}) *Client {
 }
 
 func handle_client(conn net.Conn) {
-	log.Infoln("handle new connection")
+	log.Infoln("handle new connection, remote address:", conn.RemoteAddr())
 	client := NewClient(conn)
 	client.Run()
 }
 
 func handle_ssl_client(conn net.Conn) {
-	log.Infoln("handle new ssl connection")
+	log.Infoln("handle new ssl connection,  remote address:", conn.RemoteAddr())
 	client := NewClient(conn)
 	client.Run()
 }

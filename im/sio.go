@@ -54,7 +54,7 @@ func ServeWebsocket(w http.ResponseWriter, r *http.Request) {
 		log.Info("brower websocket pong...")
 		return nil
 	})
-	
+	log.Info("new websocket connection, remote address:", conn.RemoteAddr());
 	client := NewClient(conn)
 	client.Run()
 }
