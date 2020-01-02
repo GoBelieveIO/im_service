@@ -245,7 +245,8 @@ class Client(object):
             address = (HOST, PORT)
         if SSL:
             sock_fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock = ssl.wrap_socket(sock_fd)
+            context = ssl.create_default_context()
+            sock = context.wrap_socket(sock_fd, server_hostname=HOST)
         else:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             
