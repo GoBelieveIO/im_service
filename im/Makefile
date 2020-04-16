@@ -5,17 +5,17 @@ im: im_server.go im.go subscriber.go connection.go client.go peer_client.go grou
 
 
 
-benchmark:benchmark.go protocol.go message.go
-	go build benchmark.go protocol.go message.go
+benchmark:benchmark.go benchmark_login.go protocol.go message.go
+	go build benchmark.go benchmark_login.go protocol.go message.go
 
-benchmark_group:benchmark_group.go protocol.go message.go
-	go build benchmark_group.go protocol.go message.go
+benchmark_group:benchmark_group.go benchmark_login.go protocol.go message.go
+	go build benchmark_group.go benchmark_login.go protocol.go message.go
 
-benchmark_connection:benchmark_connection.go protocol.go message.go
-	go build benchmark_connection.go protocol.go message.go
+benchmark_connection:benchmark_connection.go benchmark_login.go protocol.go message.go
+	go build benchmark_connection.go benchmark_login.go protocol.go message.go
 
-benchmark_sender:benchmark_sender.go protocol.go message.go
-	go build benchmark_sender.go protocol.go message.go
+benchmark_sender:benchmark_sender.go benchmark_login.go protocol.go message.go
+	go build benchmark_sender.go benchmark_login.go protocol.go message.go
 
 benchmark_storage:benchmark_storage.go storage_rpc.go protocol.go message.go storage_message.go
 	go build -o benchmark_storage benchmark_storage.go storage_rpc.go protocol.go message.go storage_message.go

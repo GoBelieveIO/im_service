@@ -6,64 +6,28 @@ import "log"
 import "runtime"
 import "time"
 import "flag"
-import "strings"
-import "io/ioutil"
-import "net/http"
-import "encoding/base64"
-import "crypto/md5"
-import "encoding/json"
-import "github.com/bitly/go-simplejson"
+import "math/rand"
+import "github.com/gomodule/redigo/redis"
 
 const HOST = "127.0.0.1"
 const PORT = 23000
-
-const APP_ID = 7
-const APP_KEY = "sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44"
-const APP_SECRET = "0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1"
-const URL = "http://127.0.0.1:23002"
 
 
 var concurrent int
 var count int
 var recv_count int
 var c chan bool
+var redis_pool *redis.Pool
+var seededRand *rand.Rand
+
+const redis_address = "127.0.0.1:6379"
+const redis_password = ""
+const redis_db = 0
 
 func init() {
 	flag.IntVar(&concurrent, "c", 10, "concurrent number")
 	flag.IntVar(&recv_count, "r", 20, "recv number")
 	flag.IntVar(&count, "n", 5000, "request number")
-}
-
-
-func login(uid int64) (string, error) {
-	url := URL + "/auth/grant"
-	secret := fmt.Sprintf("%x", md5.Sum([]byte(APP_SECRET)))
-	s := fmt.Sprintf("%d:%s", APP_ID, secret)
-	basic := base64.StdEncoding.EncodeToString([]byte(s))
-
-	v := make(map[string]interface{})
-	v["uid"] = uid
-
-	body, _ := json.Marshal(v)
-
-	client := &http.Client{}
-	req, _ := http.NewRequest("POST", url, strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Basic " + basic)
-	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
-
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	
-	b, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	obj, err := simplejson.NewJson(b)
-	token, _ := obj.Get("data").Get("token").String()
-	return token, nil
 }
 
 func recv(uid int64, gid int64, conn *net.TCPConn) {
@@ -215,7 +179,9 @@ func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 
 	log.Printf("concurrent:%d, recv:%d, request:%d\n", concurrent, recv_count, count)
-
+	seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	redis_pool = NewRedisPool(redis_address, redis_password, redis_db)
+	
 	c = make(chan bool, 100)
 	u := int64(13635273140)
 
@@ -224,9 +190,6 @@ func main() {
 
 	//test_send(u, gid)
 	//return
-
-
-
 
 	conns := make([]*net.TCPConn, 0, 1000)
 

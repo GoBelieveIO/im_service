@@ -6,9 +6,6 @@ import "runtime"
 import "time"
 import "flag"
 import "math/rand"
-import "fmt"
-import cryptorand "crypto/rand"
-import "encoding/base64"
 import "github.com/gomodule/redigo/redis"
 
 const APPID = 7
@@ -23,6 +20,7 @@ var local_ip string
 var host string
 var port int
 
+var seededRand *rand.Rand
 var redis_pool *redis.Pool
 
 func init() {
@@ -31,70 +29,6 @@ func init() {
 	flag.StringVar(&local_ip, "local_ip", "0.0.0.0", "local ip")
 	flag.StringVar(&host, "host", "127.0.0.1", "host")
 	flag.IntVar(&port, "port", 23000, "port")
-}
-
-
-func NewRedisPool(server, password string, db int) *redis.Pool {
-	return &redis.Pool{
-		MaxIdle:     100,
-		MaxActive:   500,
-		IdleTimeout: 480 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
-			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
-			if err != nil {
-				return nil, err
-			}
-			if len(password) > 0 {
-				if _, err := c.Do("AUTH", password); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			if db > 0 && db < 16 {
-				if _, err := c.Do("SELECT", db); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			return c, err
-		},
-	}
-}
-
-
-
-func GenerateRandomBytes(n int) ([]byte, error) {
-	b := make([]byte, n)
-	_, err := cryptorand.Read(b)
-    // Note that err == nil only if we read len(b) bytes.
-	if err != nil {
-		return nil, err
-	}
-
-	return b, nil
-}
-
-func GenerateRandomString(s int) (string, error) {
-	b, err := GenerateRandomBytes(s)
-	return base64.URLEncoding.EncodeToString(b), err
-}
-
-
-
-func SaveUserAccessToken(token string, appid int64, uid int64) (error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	key := fmt.Sprintf("access_token_%s", token)
-
-	_, err := conn.Do("HMSET", key, "user_id", uid, "app_id", appid)
-	if err != nil {
-		return err		
-	}
-
-	_, err = conn.Do("EXPIRE", key, 60*60)
-	return err
 }
 
 
@@ -112,16 +46,7 @@ func receive(uid int64) {
 		return
 	}
 
-
-	token, err := GenerateRandomString(32)
-	if err != nil {
-		log.Panicln("err:", err)
-	}
-	
-	err = SaveUserAccessToken(token, APPID, uid)
-	if err != nil {
-		log.Panicln("redis err:", err)
-	}
+	token, err := login(uid)
 	
 	seq := 1
 	SendMessage(conn, &Message{cmd:MSG_AUTH_TOKEN, seq:seq, version:DEFAULT_VERSION, flag:0, body:&AuthenticationToken{token: token, platform_id:PLATFORM_WEB, device_id:"1"}})
@@ -198,6 +123,7 @@ func main() {
 
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 
+	seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	redis_pool = NewRedisPool(REDIS_HOST, REDIS_PASSWORD, REDIS_DB)
 	
 	c := make(chan bool, 100)
