@@ -151,7 +151,10 @@ func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *
 	if dropped {
 		log.Info("message queue full, drop a message")
 	}
-	
+
+	if client.messages.Len() > 50 {
+		log.Warning("message queue jam, connection:%d", client.uid)
+	}
 	//nonblock
 	select {
 	case client.lwt <- 1:
