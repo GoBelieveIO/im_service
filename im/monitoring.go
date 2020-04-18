@@ -41,9 +41,15 @@ func Summary(rw http.ResponseWriter, req *http.Request) {
 	if appid != 0 {
 		route := app_route.FindOrAddRoute(appid)
 		clientset_count, client_count := route.GetClientCount()
+
+		room_count, room_client_count, room_stat := route.GetRoomCount(1000)
+		
 		app_obj := make(map[string]interface{})
 		app_obj["clientset_count"] = clientset_count
 		app_obj["client_count"] = client_count
+		app_obj["room_count"] = room_count
+		app_obj["room_client_count"] = room_client_count
+		app_obj["room_stat"] = room_stat
 		k := fmt.Sprintf("app_%d", appid)
 		obj[k] = app_obj
 	}

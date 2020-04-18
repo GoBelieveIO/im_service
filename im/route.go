@@ -21,6 +21,20 @@ func NewRoute(appid int64) *Route {
 	return route
 }
 
+func (route *Route) GetRoomCount(low_level int) (int, int, map[int64]int) {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+	stat := make(map[int64]int)
+	count := 0
+	for k, v := range(route.room_clients) {
+		if len(v) >= low_level {
+			stat[k] = len(v)
+		}
+		count += len(v)
+	}
+	return len(route.room_clients), count, stat
+}
+
 func (route *Route) AddRoomClient(room_id int64, client *Client) {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
