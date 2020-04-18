@@ -3,6 +3,9 @@ package main
 import "net/http"
 import "encoding/json"
 import "os"
+import "fmt"
+import "net/url"
+import "strconv"
 import "runtime"
 import "runtime/pprof"
 import log "github.com/golang/glog"
@@ -10,6 +13,7 @@ import log "github.com/golang/glog"
 type ServerSummary struct {
 	nconnections      int64
 	nclients          int64
+	clientset_count   int64 //重复uid的client对象不计数
 	in_message_count  int64
 	out_message_count int64
 }
@@ -21,13 +25,29 @@ func NewServerSummary() *ServerSummary {
 
 
 func Summary(rw http.ResponseWriter, req *http.Request) {
+	m, _ := url.ParseQuery(req.URL.RawQuery)
+
+	appid, _ := strconv.ParseInt(m.Get("appid"), 10, 64)
+
+	
 	obj := make(map[string]interface{})
 	obj["goroutine_count"] = runtime.NumGoroutine()
 	obj["connection_count"] = server_summary.nconnections
 	obj["client_count"] = server_summary.nclients
+	obj["clientset_count"] = server_summary.clientset_count
 	obj["in_message_count"] = server_summary.in_message_count
 	obj["out_message_count"] = server_summary.out_message_count
 
+	if appid != 0 {
+		route := app_route.FindOrAddRoute(appid)
+		clientset_count, client_count := route.GetClientCount()
+		app_obj := make(map[string]interface{})
+		app_obj["clientset_count"] = clientset_count
+		app_obj["client_count"] = client_count
+		k := fmt.Sprintf("app_%d", appid)
+		obj[k] = app_obj
+	}
+	
 	res, err := json.Marshal(obj)
 	if err != nil {
 		log.Info("json marshal:", err)

@@ -158,13 +158,19 @@ func (client *Client) Read() {
 }
 
 func (client *Client) RemoveClient() {
+	if client.uid == 0 {
+		return
+	}
 	route := app_route.FindRoute(client.appid)
 	if route == nil {
 		log.Warning("can't find app route")
 		return
 	}
-	route.RemoveClient(client)
+	_, is_delete := route.RemoveClient(client)
 
+	if is_delete {
+		atomic.AddInt64(&server_summary.clientset_count, -1)
+	}
 	if client.room_id > 0 {
 		route.RemoveRoomClient(client.room_id, client)
 	}
@@ -278,12 +284,16 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.PeerClient.Login()
 
 	CountDAU(client.appid, client.uid)
-	atomic.AddInt64(&server_summary.nclients, 1)
 }
 
 func (client *Client) AddClient() {
 	route := app_route.FindOrAddRoute(client.appid)
-	route.AddClient(client)
+	is_new := route.AddClient(client)
+
+	atomic.AddInt64(&server_summary.nclients, 1)
+	if is_new {
+		atomic.AddInt64(&server_summary.clientset_count, 1)
+	}	
 }
 
 
@@ -315,7 +325,8 @@ func (client *Client) SendMessages(seq int) int {
 	e := messages.Front();	
 	for e != nil {
 		msg := e.Value.(*Message)
-		if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+		if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
+			msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
 			atomic.AddInt64(&server_summary.out_message_count, 1)
 		}
 		
@@ -348,7 +359,8 @@ func (client *Client) Write() {
 				log.Infof("client:%d socket closed", client.uid)
 				break
 			}
-			if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+			if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
+				msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
 
@@ -364,7 +376,8 @@ func (client *Client) Write() {
 			client.send(vmsg)
 		case messages := <- client.pwt:
 			for _, msg := range(messages) {
-				if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+				if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
+					msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
 					atomic.AddInt64(&server_summary.out_message_count, 1)
 				}
 

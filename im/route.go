@@ -3,6 +3,8 @@ package main
 import "sync"
 import log "github.com/golang/glog"
 
+//一个聊天室中不允许有多个相同uid的client
+const ROOM_SINGLE = true
 
 type Route struct {
 	appid  int64
@@ -27,8 +29,23 @@ func (route *Route) AddRoomClient(room_id int64, client *Client) {
 		set = NewClientSet()
 		route.room_clients[room_id] = set
 	}
+
+	if ROOM_SINGLE {
+		var old *Client
+		for k, _ := range set {
+			//根据uid去重
+			if k.uid == client.uid {
+				old = client
+				break
+			}
+		}
+		if old != nil {
+			set.Remove(old)
+		}
+	}
 	set.Add(client)
 }
+
 
 //todo optimise client set clone
 func (route *Route) FindRoomClientSet(room_id int64) ClientSet {
@@ -57,29 +74,46 @@ func (route *Route) RemoveRoomClient(room_id int64, client *Client) bool {
 	return false
 }
 
-func (route *Route) AddClient(client *Client) {
+
+func (route *Route) GetClientCount() (int, int) {
+	route.mutex.Lock()
+	defer route.mutex.Unlock()
+
+	count := 0
+	for _, v := range(route.clients) {
+		count += len(v)
+	}
+	return len(route.clients), count
+}
+
+func (route *Route) AddClient(client *Client) bool {
+	is_new := false
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
 	set, ok := route.clients[client.uid]; 
 	if !ok {
 		set = NewClientSet()
 		route.clients[client.uid] = set
+		is_new = true
 	}
 	set.Add(client)
+	return is_new
 }
 
-func (route *Route) RemoveClient(client *Client) bool {
+func (route *Route) RemoveClient(client *Client) (bool, bool) {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
 	if set, ok := route.clients[client.uid]; ok {
+		is_delete := false		
 		set.Remove(client)
 		if set.Count() == 0 {
 			delete(route.clients, client.uid)
+			is_delete = true
 		}
-		return true
+		return true, is_delete
 	}
 	log.Info("client non exists")
-	return false
+	return false, false
 }
 
 func (route *Route) FindClientSet(uid int64) ClientSet {
