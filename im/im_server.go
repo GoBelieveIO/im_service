@@ -298,9 +298,11 @@ func main() {
 		filter = sensitive.New()
 		filter.LoadWordDict(config.word_file)
 	}
-	
-	group_manager = NewGroupManager()
-	group_manager.Start()
+
+	if len(config.mysqldb_datasource) > 0 {
+		group_manager = NewGroupManager()
+		group_manager.Start()
+	}
 
 	group_message_delivers = make([]*GroupMessageDeliver, config.group_deliver_count)
 	for i := 0; i < config.group_deliver_count; i++ {

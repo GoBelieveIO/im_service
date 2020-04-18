@@ -121,7 +121,7 @@ func read_cfg(cfg_path string) *Config {
 	config.redis_db = int(db)
 
 	config.pending_root = get_string(app_cfg, "pending_root")
-	config.mysqldb_datasource = get_string(app_cfg, "mysqldb_source")
+	config.mysqldb_datasource = get_opt_string(app_cfg, "mysqldb_source")
 
 	config.ws_address = get_opt_string(app_cfg, "ws_address")
 	
