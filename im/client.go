@@ -33,7 +33,6 @@ type Client struct {
 	*GroupClient
 	*RoomClient
 	*CustomerClient
-	public_ip int32
 }
 
 func NewClient(conn interface{}) *Client {
@@ -41,15 +40,6 @@ func NewClient(conn interface{}) *Client {
 
 	//初始化Connection
 	client.conn = conn // conn is net.Conn or engineio.Conn
-
-	if net_conn, ok := conn.(net.Conn); ok {
-		addr := net_conn.LocalAddr()
-		if taddr, ok := addr.(*net.TCPAddr); ok {
-			ip4 := taddr.IP.To4()
-			client.public_ip = int32(ip4[0]) << 24 | int32(ip4[1]) << 16 | int32(ip4[2]) << 8 | int32(ip4[3])
-		}
-	}
-
 	client.wt = make(chan *Message, 300)
 	//'10'对于用户拥有非常多的超级群，读线程还是有可能会阻塞
 	client.pwt = make(chan []*Message, 10)
@@ -66,20 +56,17 @@ func NewClient(conn interface{}) *Client {
 	return client
 }
 
-func handle_client(conn net.Conn) {
-	log.Infoln("handle new connection, remote address:", conn.RemoteAddr())
+func handle_client(conn interface{}) {
+	low := atomic.LoadInt32(&low_memory)
+	if low != 0 {
+		log.Warning("low memory, drop new connection")
+		return
+	}
 	client := NewClient(conn)
 	client.Run()
 }
 
-func handle_ssl_client(conn net.Conn) {
-	log.Infoln("handle new ssl connection,  remote address:", conn.RemoteAddr())
-	client := NewClient(conn)
-	client.Run()
-}
-
-
-func Listen(f func(net.Conn), port int) {
+func ListenClient(port int) {
 	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
 	listen, err := net.Listen("tcp", listen_addr)
 	if err != nil {
@@ -93,17 +80,14 @@ func Listen(f func(net.Conn), port int) {
 	}
 
 	for {
-		client, err := tcp_listener.AcceptTCP()
+		conn, err := tcp_listener.AcceptTCP()
 		if err != nil {
 			log.Errorf("accept err:%s", err)
 			return
 		}
-		f(client)
+		log.Infoln("handle new connection, remote address:", conn.RemoteAddr())
+		handle_client(conn)
 	}
-}
-
-func ListenClient() {
-	Listen(handle_client, config.port)
 }
 
 func ListenSSL(port int, cert_file, key_file string) {
@@ -125,7 +109,8 @@ func ListenSSL(port int, cert_file, key_file string) {
 		if err != nil {
 			log.Fatal("ssl accept err:", err)
 		}
-		handle_ssl_client(conn)
+		log.Infoln("handle new ssl connection,  remote address:", conn.RemoteAddr())
+		handle_client(conn)
 	}
 }
 

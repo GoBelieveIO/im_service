@@ -60,6 +60,8 @@ type Config struct {
 	word_file           string //关键词字典文件
 	friend_permission   bool //验证好友关系
 	enable_blacklist    bool //验证是否在对方的黑名单中
+
+	memory_limit        int64  //rss超过limit，不接受新的链接
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -183,5 +185,18 @@ func read_cfg(cfg_path string) *Config {
 	config.word_file = get_opt_string(app_cfg, "word_file")
 	config.friend_permission = get_opt_int(app_cfg, "friend_permission") != 0
 	config.enable_blacklist = get_opt_int(app_cfg, "enable_blacklist") != 0
+	mem_limit := get_opt_string(app_cfg, "memory_limit")
+	mem_limit = strings.TrimSpace(mem_limit)
+	if mem_limit != "" {
+		if strings.HasSuffix(mem_limit, "M") {
+			mem_limit = mem_limit[0:len(mem_limit)-1]
+			n, _ := strconv.ParseInt(mem_limit, 10, 64)
+			config.memory_limit = n*1024*1024
+		} else if strings.HasSuffix(mem_limit, "G") {
+			mem_limit = mem_limit[0:len(mem_limit)-1]
+			n, _ := strconv.ParseInt(mem_limit, 10, 64)
+			config.memory_limit = n*1024*1024*1024
+		}
+	}
 	return config
 }
