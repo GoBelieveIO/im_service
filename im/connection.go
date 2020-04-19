@@ -31,7 +31,7 @@ import "container/list"
 const CLIENT_TIMEOUT = (60 * 6)
 
 //待发送的消息数量限制
-const MESSAGE_QUEUE_LIMIT = 1000
+const MESSAGE_QUEUE_LIMIT = 300
 
 type Connection struct {
 	conn   interface{}
@@ -250,7 +250,7 @@ func (client *Connection) send(m *Message) {
 			log.Info("can't write data to blocked socket")
 			return
 		}
-		conn.SetWriteDeadline(time.Now().Add(60 * time.Second))
+		conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 		err := SendMessage(conn, msg)
 		if err != nil {
 			atomic.AddInt32(&client.tc, 1)
@@ -262,7 +262,7 @@ func (client *Connection) send(m *Message) {
 			log.Info("can't write data to blocked websocket")
 			return
 		}
-		conn.SetWriteDeadline(time.Now().Add(60 * time.Second))
+		conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 		err := SendWebsocketBinaryMessage(conn, msg)
 		if err != nil {
 			atomic.AddInt32(&client.tc, 1)

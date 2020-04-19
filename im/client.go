@@ -51,9 +51,10 @@ func NewClient(conn interface{}) *Client {
 	}
 
 	client.wt = make(chan *Message, 300)
-	client.lwt = make(chan int, 1)//only need 1
 	//'10'对于用户拥有非常多的超级群，读线程还是有可能会阻塞
 	client.pwt = make(chan []*Message, 10)
+
+	client.lwt = make(chan int, 1)//only need 1	
 	client.messages = list.New()
 	
 	atomic.AddInt64(&server_summary.nconnections, 1)
