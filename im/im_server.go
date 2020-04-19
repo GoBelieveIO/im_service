@@ -267,8 +267,8 @@ func MemStatService() {
 	platform := runtime.GOOS
 	pagesize := os.Getpagesize();
 	pid := os.Getpid()	
-	//5 min
-	ticker := time.NewTicker(time.Second * 10)
+	//3 min
+	ticker := time.NewTicker(time.Second * 60 * 3)
 	for range ticker.C {
 		rss := ReadRSS(platform, pid, pagesize)
 		if rss > config.memory_limit {
