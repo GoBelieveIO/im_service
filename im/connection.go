@@ -33,6 +33,9 @@ const CLIENT_TIMEOUT = (60 * 6)
 //待发送的消息数量限制
 const MESSAGE_QUEUE_LIMIT = 300
 
+//socket阻塞状态下消息的数量限制,此时socket可能已经被对端异常关闭
+const MESSAGE_QUEUE_BLOCK_LIMIT = 30
+
 type Connection struct {
 	conn   interface{}
 	closed int32
@@ -43,6 +46,8 @@ type Connection struct {
 
 	sync_count int64 //点对点消息同步计数，用于判断是否是首次同步
 	tc     int32 //write channel timeout count
+	blocking int32 //write blocking
+	
 	wt     chan *Message
 	lwt    chan int
 	//离线消息
@@ -130,9 +135,15 @@ func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *
 		return false
 	}
 
+	blocking := atomic.LoadInt32(&client.blocking)
+	queue_limit := MESSAGE_QUEUE_LIMIT
+	if blocking != 0 {
+		queue_limit = MESSAGE_QUEUE_BLOCK_LIMIT
+	}
+	
 	dropped := false
 	client.mutex.Lock()
-	if client.messages.Len() >= MESSAGE_QUEUE_LIMIT {
+	if client.messages.Len() >= queue_limit {
 		//队列阻塞，丢弃之前的消息
 		client.messages.Remove(client.messages.Front())
 		dropped = true
@@ -140,7 +151,7 @@ func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *
 	client.messages.PushBack(msg)
 
 	if sub_msg != nil {
-		if client.messages.Len() >= MESSAGE_QUEUE_LIMIT {
+		if client.messages.Len() >= queue_limit {
 			//队列阻塞，丢弃之前的消息
 			client.messages.Remove(client.messages.Front())
 			dropped = true
@@ -244,6 +255,15 @@ func (client *Connection) send(m *Message) {
 			body:m.body,
 		}
 	}
+
+	complete_c := make(chan int, 1)
+	block := func() {
+		//running in other goroutine, must do very little work
+		atomic.StoreInt32(&client.blocking, 1)
+		complete_c <- 1
+	}
+
+	timer := time.AfterFunc(10*time.Millisecond, block)	
 	if conn, ok := client.conn.(net.Conn); ok {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {
@@ -268,6 +288,14 @@ func (client *Connection) send(m *Message) {
 			atomic.AddInt32(&client.tc, 1)
 			log.Info("send msg:", Command(msg.cmd),  " websocket err:", err)
 		}
+	}
+
+	r := timer.Stop()
+	if !r {
+		log.Info("send message blocked")
+		//waiting function block completed
+		<- complete_c
+		atomic.StoreInt32(&client.blocking, 0)
 	}
 }
 
