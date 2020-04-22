@@ -45,11 +45,11 @@ func (route *Route) AddRoomClient(room_id int64, client *Client) {
 	}
 
 	if ROOM_SINGLE {
-		var old *Client
+		var old *Client = nil
 		for k, _ := range set {
 			//根据uid去重
 			if k.uid == client.uid {
-				old = client
+				old = k
 				break
 			}
 		}
