@@ -147,9 +147,9 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 
 		end := time.Now()
 		d := end.Sub(begin)
-		//if i % 100 == 0 {
+		if i % 100 == 0 {
 			log.Printf("send message duration:%d", d)			
-		//}		
+		}
 		if param.wait != 0 {
 			if d >= time.Duration(param.wait)*time.Second {
 				continue
