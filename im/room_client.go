@@ -112,7 +112,8 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 		return
 	}
 
-	m := &Message{cmd:MSG_ROOM_IM, body:room_im}
+	
+	m := &Message{cmd:MSG_ROOM_IM, body:room_im, body_data:room_im.ToData()}
 	DispatchMessageToRoom(m, room_id, client.appid, client.Client())
 
 	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:m}

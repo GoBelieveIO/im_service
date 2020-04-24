@@ -241,12 +241,15 @@ type Message struct {
 	flag int
 	
 	body interface{}
+	body_data []byte
 
 	meta *Metadata //non searialize
 }
 
 func (message *Message) ToData() []byte {
-	if message.body != nil {
+	if message.body_data != nil {
+		return message.body_data
+	} else if message.body != nil {
 		if m, ok := message.body.(IMessage); ok {
 			return m.ToData()
 		}
