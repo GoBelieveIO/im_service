@@ -52,7 +52,8 @@ type Connection struct {
 	lwt    chan int
 	//离线消息
 	pwt    chan []*Message
-	
+
+	sequence int //send message seq
 	//客户端协议版本号
 	version int
 
@@ -245,6 +246,7 @@ func (client *Connection) read() *Message {
 
 // 根据连接类型发送消息
 func (client *Connection) send(m *Message) {
+	client.sequence += 1
 	msg := m
 	if msg.version != client.version {
 		msg = &Message{
@@ -255,6 +257,7 @@ func (client *Connection) send(m *Message) {
 			body:m.body,
 		}
 	}
+	msg.seq = client.sequence
 
 	complete_c := make(chan int, 1)
 	block := func() {

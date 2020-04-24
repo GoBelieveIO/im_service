@@ -297,12 +297,12 @@ func (client *Client) HandleACK(ack *MessageACK) {
 }
 
 //发送等待队列中的消息
-func (client *Client) SendMessages(seq int) int {
+func (client *Client) SendMessages() {
 	var messages *list.List
 	client.mutex.Lock()
 	if (client.messages.Len() == 0) {
 		client.mutex.Unlock()		
-		return seq
+		return
 	}
 	messages = client.messages
 	client.messages = list.New()
@@ -317,22 +317,15 @@ func (client *Client) SendMessages(seq int) int {
 		}
 		
 		if msg.meta != nil {
-			seq++
-			meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+			meta_msg := &Message{cmd:MSG_METADATA, version:client.version, body:msg.meta}
 			client.send(meta_msg)
 		}
-		seq++
-		//以当前客户端所用版本号发送消息
-		vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
-		client.send(vmsg)
-		
+		client.send(msg)
 		e = e.Next()
 	}
-	return seq
 }
 
 func (client *Client) Write() {
-	seq := 0
 	running := true
 	
 	//发送在线消息
@@ -351,15 +344,10 @@ func (client *Client) Write() {
 			}
 
 			if msg.meta != nil {
-				seq++
-				meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+				meta_msg := &Message{cmd:MSG_METADATA, version:client.version, body:msg.meta}
 				client.send(meta_msg)
 			}
-			
-			seq++
-			//以当前客户端所用版本号发送消息
-			vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
-			client.send(vmsg)
+			client.send(msg)
 		case messages := <- client.pwt:
 			for _, msg := range(messages) {
 				if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
@@ -368,19 +356,14 @@ func (client *Client) Write() {
 				}
 
 				if msg.meta != nil {
-					seq++
-					meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+					meta_msg := &Message{cmd:MSG_METADATA,  version:client.version, body:msg.meta}
 					client.send(meta_msg)
 				}
-				seq++					
-				//以当前客户端所用版本号发送消息
-				vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
-				client.send(vmsg)
+				client.send(msg)
 			}
 		case <- client.lwt:
-			seq = client.SendMessages(seq)
+			client.SendMessages()
 			break
-
 		}
 	}
 
