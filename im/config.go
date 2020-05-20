@@ -30,7 +30,6 @@ type Config struct {
 	port                int
 	ssl_port            int
 	mysqldb_datasource  string
-	mysqldb_appdatasource  string
 	pending_root        string
 	
 	kefu_appid          int64
@@ -40,9 +39,6 @@ type Config struct {
 	redis_db            int
 
 	http_listen_address string
-	rpc_listen_address  string
-	
-	
 
 	//websocket listen address
 	ws_address          string
@@ -116,7 +112,6 @@ func read_cfg(cfg_path string) *Config {
 	config.port = get_int(app_cfg, "port")
 	config.ssl_port = int(get_opt_int(app_cfg, "ssl_port"))
 	config.http_listen_address = get_string(app_cfg, "http_listen_address")
-	config.rpc_listen_address = get_string(app_cfg, "rpc_listen_address")
 	config.redis_address = get_string(app_cfg, "redis_address")
 	config.redis_password = get_opt_string(app_cfg, "redis_password")
 	db := get_opt_int(app_cfg, "redis_db")
