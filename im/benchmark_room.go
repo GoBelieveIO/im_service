@@ -9,11 +9,6 @@ import "flag"
 import "math/rand"
 import "github.com/gomodule/redigo/redis"
 
-//const HOST = "172.19.177.11"
-//const PORT = 23000
-//const redis_address = "172.19.177.11:6379"
-//const redis_password = ""
-//const redis_db = 0
 
 const HOST = "127.0.0.1"
 const PORT = 23000
@@ -31,7 +26,9 @@ type Param struct {
 
 var param Param
 
-var c chan bool
+var send_c chan bool
+var recv_c chan bool
+
 var redis_pool *redis.Pool
 var seededRand *rand.Rand
 
@@ -84,7 +81,7 @@ func recv(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 		}
 	}
 	log.Printf("%d received:%d", uid, received_num)
-	c <- true
+	recv_c <- true
 }
 
 func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int) {
@@ -163,7 +160,7 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 
 	conn.Close()
 	log.Printf("%d send complete", uid)
-	c <- true
+	send_c <- true
 }
 
 
@@ -204,7 +201,8 @@ func main() {
 	seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	redis_pool = NewRedisPool(redis_address, redis_password, redis_db)
 	
-	c = make(chan bool, 100)
+	send_c = make(chan bool, 100)
+	recv_c = make(chan bool, 10000)
 	u := int64(1000)
 
 	concurrent := param.concurrent
@@ -241,8 +239,8 @@ func main() {
 		go send(uid, room_id, conns[i+recv_count], param.count, param.concurrent)
 	}
 
-	for i := 0; i < concurrent + recv_count; i++ {
-		<-c
+	for i := 0; i < concurrent; i++ {
+		<- send_c
 	}
 
 	end := time.Now().UnixNano()
@@ -252,4 +250,10 @@ func main() {
 		tps = int64(1000*1000*1000*concurrent*count) / (end - begin)
 	}
 	fmt.Println("tps:", tps)
+
+	fmt.Println("waiting recv completed...")
+	for i := 0; i < recv_count; i++ {
+		<- recv_c
+	}
+	fmt.Println("recv completed")
 }
