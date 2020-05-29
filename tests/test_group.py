@@ -10,6 +10,7 @@ import uuid
 import base64
 import hashlib
 import sys
+import datetime
 from protocol import *
 from client import *
 import random
@@ -28,9 +29,9 @@ def send_client(uid, receiver, msg_type):
     im.sender = uid
     im.receiver = receiver
     if msg_type == MSG_IM:
-        im.content = "test im"
+        im.content = json.dumps({"text":"test im " + str(datetime.datetime.now())})
     else:
-        im.content = "test group im"
+        im.content = json.dumps({"text":"test group im " + str(datetime.datetime.now())})
     seq += 1
     send_message(msg_type, seq, im, sock)
     msg_seq = seq
