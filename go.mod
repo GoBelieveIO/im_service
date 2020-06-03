@@ -20,3 +20,5 @@ require (
 	golang.org/x/net v0.0.0-20190813141303-74dc4d7220e7
 	google.golang.org/grpc v1.23.0
 )
+
+replace github.com/GoBelieveIO/im_service/lru => ./lru
