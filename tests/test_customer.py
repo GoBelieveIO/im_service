@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import struct
 import socket
@@ -7,7 +8,6 @@ import requests
 import json
 import uuid
 import base64
-import md5
 import sys
 from protocol import *
 from client import *
@@ -25,7 +25,7 @@ def recv_customer_message_client(uid, port=23000):
 
     kefu_recv_client(uid, port, handle_message)
     task += 1
-    print "recv customer message success"
+    print("recv customer message success")
 
     
 def send_customer_message(uid, seller_id):
@@ -41,7 +41,7 @@ def send_customer_message(uid, seller_id):
     m.persistent = True
     seq += 1
     send_message(MSG_CUSTOMER, seq, m, sock)
-    print "send customer message success"
+    print("send customer message success")
     task += 1
 
     
@@ -49,14 +49,14 @@ def recv_customer_support_message_client(uid, port=23000):
     global task
     def handle_message(cmd, s, msg):
         if cmd == MSG_CUSTOMER_SUPPORT:
-            print "mmm:", msg
+            print("mmm:", msg)
             return True
         else:
             return False
 
     recv_client(uid, port, handle_message)
     task += 1
-    print "recv customer support message success"
+    print("recv customer support message success")
     
 
 def send_customer_support_message(seller_id, customer_id):
@@ -72,7 +72,7 @@ def send_customer_support_message(seller_id, customer_id):
     m.persistent = True
     seq += 1
     send_message(MSG_CUSTOMER_SUPPORT, seq, m, sock)
-    print "send customer support message success"
+    print("send customer support message success")
     task += 1
 
     
@@ -93,7 +93,7 @@ def TestCustomerSupportMessage():
     while task < 2:
         time.sleep(1)
 
-    print "test customer support message completed"
+    print("test customer support message completed")
 
     
 def TestCustomerMessage():
@@ -113,7 +113,7 @@ def TestCustomerMessage():
     while task < 2:
         time.sleep(1)
 
-    print "test customer message completed"
+    print("test customer message completed")
 
 
 def main():

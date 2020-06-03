@@ -25,6 +25,12 @@ import "runtime"
 import "math/rand"
 import "net/http"
 import "path"
+import "io/ioutil"
+import "strconv"
+import "strings"
+import "os"
+import "os/exec"
+import "sync/atomic"
 
 import "github.com/gomodule/redigo/redis"
 import log "github.com/golang/glog"
@@ -64,19 +70,19 @@ var sync_c chan *SyncHistory
 var group_sync_c chan *SyncGroupHistory
 
 var relationship_pool *RelationshipPool
-var redis_channel *RedisChannel
 
 //round-robin
 var current_deliver_index uint64
 var group_message_delivers []*GroupMessageDeliver
 var filter *sensitive.Filter
 
+var low_memory int32//低内存状态
+
 func init() {
 	app_route = NewAppRoute()
 	server_summary = NewServerSummary()
 	sync_c = make(chan *SyncHistory, 100)
 	group_sync_c = make(chan *SyncGroupHistory, 100)
-	redis_channel = NewRedisChannel()
 }
 
 
@@ -112,16 +118,19 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 //过滤敏感词
 func FilterDirtyWord(msg *IMMessage) {
 	if filter == nil {
+		log.Info("filter is null")
 		return
 	}
 
 	obj, err := simplejson.NewJson([]byte(msg.content))
 	if err != nil {
+		log.Info("filter dirty word, can't decode json")
 		return
 	}
 
 	text, err := obj.Get("text").String()
 	if err != nil {
+		log.Info("filter dirty word, can't get text")
 		return
 	}
 
@@ -136,6 +145,7 @@ func FilterDirtyWord(msg *IMMessage) {
 			return
 		}
 		msg.content = string(c)
+		log.Infof("filter dirty word, replace text %s with %s", text, replacedText)
 	}
 }
 
@@ -155,7 +165,8 @@ func StartHttpServer(addr string) {
 
 	//rpc function
 	http.HandleFunc("/post_group_notification", PostGroupNotification)
-	http.HandleFunc("/post_im_message", PostIMMessage)
+	http.HandleFunc("/post_peer_message", PostPeerMessage)		
+	http.HandleFunc("/post_group_message", PostGroupMessage)	
 	http.HandleFunc("/load_latest_message", LoadLatestMessage)
 	http.HandleFunc("/load_history_message", LoadHistoryMessage)
 	http.HandleFunc("/post_system_message", SendSystemMessage)
@@ -164,9 +175,8 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
 	http.HandleFunc("/post_customer_support_message", SendCustomerSupportMessage)
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
-	http.HandleFunc("/init_message_queue", InitMessageQueue)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
-	http.HandleFunc("/dequeue_message", DequeueMessage)
+
 
 	handler := loggingHandler{http.DefaultServeMux}
 	
@@ -198,6 +208,78 @@ func SyncKeyService() {
 	}
 }
 
+func formatStdOut(stdout []byte, userfulIndex int) []string {
+	eol := "\n"
+	infoArr := strings.Split(string(stdout), eol)[userfulIndex]
+	ret := strings.Fields(infoArr)
+	return ret
+}
+
+func ReadRSSDarwin(pid int) int64 {
+	args := "-o rss -p"
+	stdout, _ := exec.Command("ps", args, strconv.Itoa(pid)).Output()
+	ret := formatStdOut(stdout, 1)
+	if len(ret) == 0 {
+		log.Warning("can't find process")
+		return 0
+	}
+
+	rss, _ := strconv.ParseInt(ret[0], 10, 64)
+	return rss*1024
+}
+
+func ReadRSSLinux(pid int, pagesize int) int64 {
+	//http://man7.org/linux/man-pages/man5/proc.5.html
+	procStatFileBytes, err := ioutil.ReadFile(path.Join("/proc", strconv.Itoa(pid), "stat"))
+	if err != nil {
+		log.Warning("read file err:", err)
+		return 0
+	}
+	
+	splitAfter := strings.SplitAfter(string(procStatFileBytes), ")")
+
+	if len(splitAfter) == 0 || len(splitAfter) == 1 {
+		log.Warning("Can't find process ")
+		return 0
+	}
+	
+	infos := strings.Split(splitAfter[1], " ")
+	if len(infos) < 23 {
+		//impossible
+		return 0
+	}
+
+	rss, _ := strconv.ParseInt(infos[22], 10, 64)
+	return rss*int64(pagesize)
+}
+
+func ReadRSS(platform string, pid int, pagesize int) int64 {
+	if platform == "linux" {
+		return ReadRSSLinux(pid, pagesize)
+	} else if platform == "darwin" {
+		return ReadRSSDarwin(pid)
+	} else {
+		return 0
+	}
+}
+
+func MemStatService() {
+	platform := runtime.GOOS
+	pagesize := os.Getpagesize();
+	pid := os.Getpid()	
+	//3 min
+	ticker := time.NewTicker(time.Second * 60 * 3)
+	for range ticker.C {
+		rss := ReadRSS(platform, pid, pagesize)
+		if rss > config.memory_limit {
+			atomic.StoreInt32(&low_memory, 1)
+		} else {
+			atomic.StoreInt32(&low_memory, 0)
+		}
+		log.Infof("process rss:%dk low memory:%d", rss/1024, low_memory)
+	}
+}
+
 func main() {
 	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
 	rand.Seed(time.Now().UnixNano())
@@ -219,11 +301,13 @@ func main() {
 	log.Info("group route addressed:", config.group_route_addrs)	
 	log.Info("kefu appid:", config.kefu_appid)
 	log.Info("pending root:", config.pending_root)
+
+	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)	
+	log.Infof("cert file:%s key file:%s", config.cert_file, config.key_file)
 	
-	log.Infof("socket io address:%s tls_address:%s cert file:%s key file:%s",
-		config.socket_io_address, config.tls_address, config.cert_file, config.key_file)
-	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
 	log.Info("group deliver count:", config.group_deliver_count)
+	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
+	log.Infof("memory limit:%d", config.memory_limit)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
@@ -240,6 +324,7 @@ func main() {
 		dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
 		dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
 		dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
+		dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
 		dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
 		dispatcher.AddFunc("GetLatestMessage", GetLatestMessageInterface)
 
@@ -261,6 +346,7 @@ func main() {
 			dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
 			dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
 			dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
+			dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
 			dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
 
 			dc := dispatcher.NewFuncClient(c)
@@ -293,9 +379,11 @@ func main() {
 		filter = sensitive.New()
 		filter.LoadWordDict(config.word_file)
 	}
-	
-	group_manager = NewGroupManager()
-	group_manager.Start()
+
+	if len(config.mysqldb_datasource) > 0 {
+		group_manager = NewGroupManager()
+		group_manager.Start()
+	}
 
 	group_message_delivers = make([]*GroupMessageDeliver, config.group_deliver_count)
 	for i := 0; i < config.group_deliver_count; i++ {
@@ -309,25 +397,27 @@ func main() {
 	go ListenRedis()
 	go SyncKeyService()
 
-	if config.friend_permission {
+	if config.memory_limit > 0 {
+		go MemStatService()
+	}
+
+	if config.friend_permission || config.enable_blacklist {
 		relationship_pool = NewRelationshipPool()
-		redis_channel.AddSubscriber(relationship_pool)
-		go relationship_pool.RecycleLoop()
-		redis_channel.Start()
+		relationship_pool.Start()
 	}
 	
-	
 	go StartHttpServer(config.http_listen_address)
-	StartRPCServer(config.rpc_listen_address)
 
-	go StartSocketIO(config.socket_io_address, config.tls_address, 
-		config.cert_file, config.key_file)
-	go StartWSServer(config.ws_address, config.wss_address, 
-		config.cert_file, config.key_file)
-
+	if len(config.ws_address) > 0 {
+		go StartWSServer(config.ws_address)
+	}
+	if len(config.wss_address) > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
+		go StartWSSServer(config.wss_address, config.cert_file, config.key_file)
+	}
+	
 	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
 		go ListenSSL(config.ssl_port, config.cert_file, config.key_file)
 	}
-	ListenClient()
+	ListenClient(config.port)
 	log.Infof("exit")
 }

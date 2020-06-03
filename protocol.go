@@ -88,32 +88,32 @@ func SendMessage(conn io.Writer, msg *Message) error {
 	return nil
 }
 
-func ReceiveLimitMessage(conn io.Reader, limit_size int, external bool) *Message {
+func ReceiveLimitMessage(conn io.Reader, limit_size int, external bool) (*Message, error) {
 	buff := make([]byte, 12)
 	_, err := io.ReadFull(conn, buff)
 	if err != nil {
 		log.Info("sock read error:", err)
-		return nil
+		return nil, err
 	}
 
 	length, seq, cmd, version, flag := ReadHeader(buff)
 	if length < 0 || length >= limit_size {
 		log.Info("invalid len:", length)
-		return nil
+		return nil, errors.New("invalid length")
 	}
 
 	//0 <= cmd <= 255
 	//收到客户端非法消息，断开链接
 	if external && !external_messages[cmd] {
 		log.Warning("invalid external message cmd:", Command(cmd))
-		return nil
+		return nil, errors.New("invalid cmd")		
 	}
 	
 	buff = make([]byte, length)
 	_, err = io.ReadFull(conn, buff)
 	if err != nil {
 		log.Info("sock read error:", err)
-		return nil
+		return nil, err
 	}
 
 	message := new(Message)
@@ -124,29 +124,39 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int, external bool) *Message
 	if !message.FromData(buff) {
 		log.Warningf("parse error:%d, %d %d %d %s", cmd, seq, version,
 			flag, hex.EncodeToString(buff))
-		return nil
+		return nil, errors.New("parse error")		
 	}
-	return message
+	return message, nil
 }
 
 
 func ReceiveMessage(conn io.Reader) *Message {
+	m, _ := ReceiveLimitMessage(conn, 32*1024, false)
+	return m
+}
+
+//used by benchmark
+func ReceiveServerMessage(conn io.Reader) (*Message, error) {
 	return ReceiveLimitMessage(conn, 32*1024, false)
 }
 
+
 //接受客户端消息(external messages)
 func ReceiveClientMessage(conn io.Reader) *Message {
-	return ReceiveLimitMessage(conn, 32*1024, true)
+	m, _ :=  ReceiveLimitMessage(conn, 32*1024, true)
+	return m
 }
 
 //消息大小限制在32M
 func ReceiveStorageSyncMessage(conn io.Reader) *Message {
-	return ReceiveLimitMessage(conn, 32*1024*1024, false)
+	m, _ :=  ReceiveLimitMessage(conn, 32*1024*1024, false)
+	return m
 }
 
 //消息大小限制在1M
 func ReceiveStorageMessage(conn io.Reader) *Message {
-	return ReceiveLimitMessage(conn, 1024*1024, false)
+	m, _ := ReceiveLimitMessage(conn, 1024*1024, false)
+	return m
 }
 
 

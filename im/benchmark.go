@@ -6,23 +6,18 @@ import "log"
 import "runtime"
 import "time"
 import "flag"
-import "strings"
-import "io/ioutil"
-import "net/http"
-import "encoding/base64"
-import "crypto/md5"
-import "encoding/json"
-import "github.com/bitly/go-simplejson"
+import "math/rand"
+import "github.com/gomodule/redigo/redis"
+
 
 const HOST = "127.0.0.1"
 const PORT = 23000
+const redis_address = "127.0.0.1"
+const redis_password = ""
+const redis_db = 0
 
-const APP_ID = 7
-const APP_KEY = "sVDIlIiDUm7tWPYWhi6kfNbrqui3ez44"
-const APP_SECRET = "0WiCxAU1jh76SbgaaFC7qIaBPm2zkyM1"
-const URL = "http://192.168.33.10:5000"
-
-
+var redis_pool *redis.Pool
+var seededRand *rand.Rand
 var concurrent int
 var count int
 var c chan bool
@@ -33,45 +28,14 @@ func init() {
 }
 
 
-func login(uid int64) string {
-	url := URL + "/auth/grant"
-	secret := fmt.Sprintf("%x", md5.Sum([]byte(APP_SECRET)))
-	s := fmt.Sprintf("%d:%s", APP_ID, secret)
-	basic := base64.StdEncoding.EncodeToString([]byte(s))
-
-	v := make(map[string]interface{})
-	v["uid"] = uid
-
-	body, _ := json.Marshal(v)
-
-	client := &http.Client{}
-	req, _ := http.NewRequest("POST", url, strings.NewReader(string(body)))
-	req.Header.Set("Authorization", "Basic " + basic)
-	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
-
-	res, err := client.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer res.Body.Close()
-	
-	b, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return ""
-	}
-	obj, err := simplejson.NewJson(b)
-	token, _ := obj.Get("data").Get("token").String()
-	return token
-}
 
 func send(uid int64, receiver int64, sem chan int) {
 	ip := net.ParseIP(HOST)
 	addr := net.TCPAddr{ip, PORT, ""}
 
-	token := login(uid)
-
-	if token == "" {
-		panic("")
+	token, err := login(uid)
+	if err != nil {
+		panic(err)
 	}
 
 	conn, err := net.DialTCP("tcp4", nil, &addr)
@@ -132,10 +96,10 @@ func receive(uid int64, limit int,  sem chan int) {
 	ip := net.ParseIP(HOST)
 	addr := net.TCPAddr{ip, PORT, ""}
 
-	token := login(uid)
+	token, err := login(uid)
 
-	if token == "" {
-		panic("")
+	if err != nil {
+		panic(err)
 	}
 
 	conn, err := net.DialTCP("tcp4", nil, &addr)
@@ -250,6 +214,9 @@ func main() {
 
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 
+	seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	redis_pool = NewRedisPool(redis_address, redis_password, redis_db)
+	
 	c = make(chan bool, 100)
 	u := int64(13635273140)
 

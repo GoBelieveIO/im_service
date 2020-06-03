@@ -7,11 +7,9 @@ import requests
 import json
 import uuid
 import base64
-import md5
 import sys
 
 MSG_HEARTBEAT = 1
-#MSG_AUTH = 2
 MSG_AUTH_STATUS = 3
 MSG_IM = 4
 MSG_ACK = 5
@@ -117,7 +115,7 @@ class CustomerMessage:
     
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
-        b = struct.pack("!BB", msg.platform_id, len(msg.token)) + msg.token + struct.pack("!B", len(msg.device_id)) + msg.device_id
+        b = struct.pack("!BB", msg.platform_id, len(msg.token)) + bytes(msg.token, "utf-8") + struct.pack("!B", len(msg.device_id)) + bytes(msg.device_id, "utf-8")
         length = len(b)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h+b)
@@ -125,20 +123,15 @@ def send_message(cmd, seq, msg, sock):
         length = 24 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qqii", msg.sender, msg.receiver, msg.timestamp, msg.msgid)
-        sock.sendall(h+b+msg.content)
+        sock.sendall(h+b+bytes(msg.content, "utf-8"))
     elif cmd == MSG_RT or cmd == MSG_ROOM_IM:
         length = 16 + len(msg.content)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!qq", msg.sender, msg.receiver)
-        sock.sendall(h+b+msg.content)
+        sock.sendall(h+b+bytes(msg.content, "utf-8"))
     elif cmd == MSG_ACK:
         h = struct.pack("!iibbbb", 4, seq, cmd, PROTOCOL_VERSION, 0, 0)
         b = struct.pack("!i", msg)
-        sock.sendall(h + b)
-    elif cmd == MSG_INPUTING:
-        sender, receiver = msg
-        h = struct.pack("!iibbbb", 16, seq, cmd, PROTOCOL_VERSION, 0, 0)
-        b = struct.pack("!qq", sender, receiver)
         sock.sendall(h + b)
     elif cmd == MSG_PING:
         h = struct.pack("!iibbbb", 0, seq, cmd, PROTOCOL_VERSION, 0, 0)
@@ -161,12 +154,12 @@ def send_message(cmd, seq, msg, sock):
         flag = 0
         if not msg.persistent:
             flag = MESSAGE_FLAG_UNPERSISTENT
-        print "send message flag:", flag
+        print("send message flag:", flag)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, flag, 0)
         b = struct.pack("!qqqqi", msg.customer_appid, msg.customer_id, msg.store_id, msg.seller_id, msg.timestamp)
-        sock.sendall(h+b+msg.content)
+        sock.sendall(h+b+bytes(msg.content, "utf-8"))
     else:
-        print "eeeeee"
+        print("eeeeee")
 
 def recv_message_(sock):
     buf = sock.recv(12)
@@ -231,10 +224,10 @@ def recv_message_(sock):
         sync_key, prev_sync_key = struct.unpack("!qq", content[:16])
         return cmd, seq, flag, (sync_key, prev_sync_key)
     else:
-        print "unknow cmd:", cmd
+        print("unknow cmd:", cmd)
         return cmd, seq, flag, content
 
 def recv_message(sock):
     cmd, seq, flag, content = recv_message_(sock)
-    print "recv message cmd:", cmd, "seq:", seq, "flag:", hex(flag), "content:", content
+    print("recv message cmd:", cmd, "seq:", seq, "flag:", hex(flag), "content:", content)
     return cmd, seq, flag, content

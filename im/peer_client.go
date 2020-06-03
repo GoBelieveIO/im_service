@@ -150,7 +150,11 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
 		return
 	}
-
+	
+	var rs Relationship = NoneRelationship
+	if config.friend_permission || config.enable_blacklist {
+		rs = relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
+	}
 	if config.friend_permission {
 		rs := relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
 		if !rs.IsMyFriend() {
@@ -166,7 +170,8 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
 			return
 		}
-
+	}
+	if config.enable_blacklist {
 		if rs.IsInYourBlacklist() {
 			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_IN_YOUR_BLACKLIST}}
 			client.EnqueueMessage(ack)

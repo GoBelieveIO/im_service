@@ -25,14 +25,16 @@ import "unsafe"
 import "sync"
 import "sync/atomic"
 import log "github.com/golang/glog"
-import "github.com/googollee/go-engine.io"
 import "github.com/gorilla/websocket"
 import "container/list"
 
 const CLIENT_TIMEOUT = (60 * 6)
 
 //待发送的消息数量限制
-const MESSAGE_QUEUE_LIMIT = 1000
+const MESSAGE_QUEUE_LIMIT = 300
+
+//socket阻塞状态下消息的数量限制,此时socket可能已经被对端异常关闭
+const MESSAGE_QUEUE_BLOCK_LIMIT = 30
 
 type Connection struct {
 	conn   interface{}
@@ -44,11 +46,14 @@ type Connection struct {
 
 	sync_count int64 //点对点消息同步计数，用于判断是否是首次同步
 	tc     int32 //write channel timeout count
+	blocking int32 //write blocking
+	
 	wt     chan *Message
 	lwt    chan int
 	//离线消息
 	pwt    chan []*Message
-	
+
+	sequence int //send message seq
 	//客户端协议版本号
 	version int
 
@@ -131,9 +136,15 @@ func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *
 		return false
 	}
 
+	blocking := atomic.LoadInt32(&client.blocking)
+	queue_limit := MESSAGE_QUEUE_LIMIT
+	if blocking != 0 {
+		queue_limit = MESSAGE_QUEUE_BLOCK_LIMIT
+	}
+	
 	dropped := false
 	client.mutex.Lock()
-	if client.messages.Len() >= MESSAGE_QUEUE_LIMIT {
+	if client.messages.Len() >= queue_limit {
 		//队列阻塞，丢弃之前的消息
 		client.messages.Remove(client.messages.Front())
 		dropped = true
@@ -141,7 +152,7 @@ func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *
 	client.messages.PushBack(msg)
 
 	if sub_msg != nil {
-		if client.messages.Len() >= MESSAGE_QUEUE_LIMIT {
+		if client.messages.Len() >= queue_limit {
 			//队列阻塞，丢弃之前的消息
 			client.messages.Remove(client.messages.Front())
 			dropped = true
@@ -152,7 +163,10 @@ func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *
 	if dropped {
 		log.Info("message queue full, drop a message")
 	}
-	
+
+	if client.messages.Len() > 50 {
+		log.Warning("message queue jam, connection:%d", client.uid)
+	}
 	//nonblock
 	select {
 	case client.lwt <- 1:
@@ -223,8 +237,6 @@ func (client *Connection) read() *Message {
 	if conn, ok := client.conn.(net.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
 		return ReceiveClientMessage(conn)
-	} else if conn, ok := client.conn.(engineio.Conn); ok {
-		return ReadEngineIOMessage(conn)
 	} else if conn, ok := client.conn.(*websocket.Conn); ok {
 		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
 		return ReadWebsocketMessage(conn)
@@ -234,6 +246,7 @@ func (client *Connection) read() *Message {
 
 // 根据连接类型发送消息
 func (client *Connection) send(m *Message) {
+	client.sequence += 1
 	msg := m
 	if msg.version != client.version {
 		msg = &Message{
@@ -244,41 +257,54 @@ func (client *Connection) send(m *Message) {
 			body:m.body,
 		}
 	}
+	msg.seq = client.sequence
+
+	complete_c := make(chan int, 1)
+	block := func() {
+		//running in other goroutine, must do very little work
+		atomic.StoreInt32(&client.blocking, 1)
+		complete_c <- 1
+	}
+
+	timer := time.AfterFunc(10*time.Millisecond, block)	
 	if conn, ok := client.conn.(net.Conn); ok {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {
 			log.Info("can't write data to blocked socket")
 			return
 		}
-		conn.SetWriteDeadline(time.Now().Add(60 * time.Second))
+		conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 		err := SendMessage(conn, msg)
 		if err != nil {
 			atomic.AddInt32(&client.tc, 1)
 			log.Info("send msg:", Command(msg.cmd),  " tcp err:", err)
 		}
-	} else if conn, ok := client.conn.(engineio.Conn); ok {
-		SendEngineIOBinaryMessage(conn, msg)
 	} else if conn, ok := client.conn.(*websocket.Conn); ok {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {
 			log.Info("can't write data to blocked websocket")
 			return
 		}
-		conn.SetWriteDeadline(time.Now().Add(60 * time.Second))
+		conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 		err := SendWebsocketBinaryMessage(conn, msg)
 		if err != nil {
 			atomic.AddInt32(&client.tc, 1)
 			log.Info("send msg:", Command(msg.cmd),  " websocket err:", err)
 		}
 	}
+
+	r := timer.Stop()
+	if !r {
+		log.Info("send message blocked")
+		//waiting function block completed
+		<- complete_c
+		atomic.StoreInt32(&client.blocking, 0)
+	}
 }
 
 // 根据连接类型关闭
 func (client *Connection) close() {
 	if conn, ok := client.conn.(net.Conn); ok {
-		conn.Close()
-	} else if conn, ok := client.conn.(engineio.Conn); ok {
-		//bug:https://github.com/googollee/go-engine.io/issues/34
 		conn.Close()
 	} else if conn, ok := client.conn.(*websocket.Conn); ok {
 		conn.Close()

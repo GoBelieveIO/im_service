@@ -32,6 +32,15 @@ func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
 	return rpc_clients[index]
 }
 
+func GetStorageRPCIndex(uid int64) int64 {
+	if uid < 0 {
+		uid = -uid
+	}
+	index := uid%int64(len(rpc_clients))
+	return index
+}
+
+
 //超级群消息
 func GetGroupStorageRPCClient(group_id int64) *gorpc.DispatcherClient {
 	if group_id < 0 {
@@ -95,6 +104,33 @@ func SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (in
 	prev_msgid := r[1]
 	log.Infof("save group message:%d %d %d\n", appid, gid, msgid)
 	return msgid, prev_msgid, nil
+}
+
+func SavePeerGroupMessage(appid int64, members []int64, device_id int64, m *Message) ([]int64, error) {
+
+	if len(members) == 0 {
+		return nil, nil
+	}
+	
+	dc := GetStorageRPCClient(members[0])
+	
+	pm := &PeerGroupMessage{
+		AppID:appid,
+		Members:members,
+		DeviceID:device_id,
+		Cmd:int32(m.cmd),
+		Raw:m.ToData(),
+	}
+
+	resp, err := dc.Call("SavePeerGroupMessage", pm)
+	if err != nil {
+		log.Error("save peer group message err:", err)
+		return nil, err
+	}
+
+	r := resp.([]int64)
+	log.Infof("save peer group message:%d %v %d %v\n", appid, members, device_id, r)
+	return r, nil
 }
 
 func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, int64, error) {

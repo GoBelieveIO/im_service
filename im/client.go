@@ -33,7 +33,6 @@ type Client struct {
 	*GroupClient
 	*RoomClient
 	*CustomerClient
-	public_ip int32
 }
 
 func NewClient(conn interface{}) *Client {
@@ -41,19 +40,11 @@ func NewClient(conn interface{}) *Client {
 
 	//初始化Connection
 	client.conn = conn // conn is net.Conn or engineio.Conn
-
-	if net_conn, ok := conn.(net.Conn); ok {
-		addr := net_conn.LocalAddr()
-		if taddr, ok := addr.(*net.TCPAddr); ok {
-			ip4 := taddr.IP.To4()
-			client.public_ip = int32(ip4[0]) << 24 | int32(ip4[1]) << 16 | int32(ip4[2]) << 8 | int32(ip4[3])
-		}
-	}
-
 	client.wt = make(chan *Message, 300)
-	client.lwt = make(chan int, 1)//only need 1
 	//'10'对于用户拥有非常多的超级群，读线程还是有可能会阻塞
 	client.pwt = make(chan []*Message, 10)
+
+	client.lwt = make(chan int, 1)//only need 1	
 	client.messages = list.New()
 	
 	atomic.AddInt64(&server_summary.nconnections, 1)
@@ -65,20 +56,17 @@ func NewClient(conn interface{}) *Client {
 	return client
 }
 
-func handle_client(conn net.Conn) {
-	log.Infoln("handle new connection")
+func handle_client(conn interface{}) {
+	low := atomic.LoadInt32(&low_memory)
+	if low != 0 {
+		log.Warning("low memory, drop new connection")
+		return
+	}
 	client := NewClient(conn)
 	client.Run()
 }
 
-func handle_ssl_client(conn net.Conn) {
-	log.Infoln("handle new ssl connection")
-	client := NewClient(conn)
-	client.Run()
-}
-
-
-func Listen(f func(net.Conn), port int) {
+func ListenClient(port int) {
 	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
 	listen, err := net.Listen("tcp", listen_addr)
 	if err != nil {
@@ -92,17 +80,14 @@ func Listen(f func(net.Conn), port int) {
 	}
 
 	for {
-		client, err := tcp_listener.AcceptTCP()
+		conn, err := tcp_listener.AcceptTCP()
 		if err != nil {
 			log.Errorf("accept err:%s", err)
 			return
 		}
-		f(client)
+		log.Infoln("handle new connection, remote address:", conn.RemoteAddr())
+		handle_client(conn)
 	}
-}
-
-func ListenClient() {
-	Listen(handle_client, config.port)
 }
 
 func ListenSSL(port int, cert_file, key_file string) {
@@ -124,7 +109,8 @@ func ListenSSL(port int, cert_file, key_file string) {
 		if err != nil {
 			log.Fatal("ssl accept err:", err)
 		}
-		handle_ssl_client(conn)
+		log.Infoln("handle new ssl connection,  remote address:", conn.RemoteAddr())
+		handle_client(conn)
 	}
 }
 
@@ -158,13 +144,19 @@ func (client *Client) Read() {
 }
 
 func (client *Client) RemoveClient() {
+	if client.uid == 0 {
+		return
+	}
 	route := app_route.FindRoute(client.appid)
 	if route == nil {
 		log.Warning("can't find app route")
 		return
 	}
-	route.RemoveClient(client)
+	_, is_delete := route.RemoveClient(client)
 
+	if is_delete {
+		atomic.AddInt64(&server_summary.clientset_count, -1)
+	}
 	if client.room_id > 0 {
 		route.RemoveRoomClient(client.room_id, client)
 	}
@@ -205,12 +197,17 @@ func (client *Client) HandleMessage(msg *Message) {
 
 
 func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
-	appid, uid, forbidden, notification_on, err := LoadUserAccessToken(token)
+	appid, uid, err := LoadUserAccessToken(token)
 
 	if err != nil {
 		return 0, 0, 0, false, err
 	}
-
+	
+	forbidden, notification_on, err := GetUserPreferences(appid, uid)
+	if err != nil {
+		return 0, 0, 0, false, err
+	}
+	
 	return appid, uid, forbidden, notification_on, nil
 }
 
@@ -236,7 +233,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		return
 	}
 
-	if login.platform_id != PLATFORM_WEB && len(login.device_id) > 0{
+	if login.platform_id != PLATFORM_WEB && len(login.device_id) > 0 {
 		client.device_ID, err = GetDeviceID(login.device_id, int(login.platform_id))
 		if err != nil {
 			log.Info("auth token uid==0")
@@ -273,12 +270,16 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.PeerClient.Login()
 
 	CountDAU(client.appid, client.uid)
-	atomic.AddInt64(&server_summary.nclients, 1)
 }
 
 func (client *Client) AddClient() {
 	route := app_route.FindOrAddRoute(client.appid)
-	route.AddClient(client)
+	is_new := route.AddClient(client)
+
+	atomic.AddInt64(&server_summary.nclients, 1)
+	if is_new {
+		atomic.AddInt64(&server_summary.clientset_count, 1)
+	}	
 }
 
 
@@ -296,12 +297,12 @@ func (client *Client) HandleACK(ack *MessageACK) {
 }
 
 //发送等待队列中的消息
-func (client *Client) SendMessages(seq int) int {
+func (client *Client) SendMessages() {
 	var messages *list.List
 	client.mutex.Lock()
 	if (client.messages.Len() == 0) {
 		client.mutex.Unlock()		
-		return seq
+		return
 	}
 	messages = client.messages
 	client.messages = list.New()
@@ -310,27 +311,21 @@ func (client *Client) SendMessages(seq int) int {
 	e := messages.Front();	
 	for e != nil {
 		msg := e.Value.(*Message)
-		if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+		if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
+			msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
 			atomic.AddInt64(&server_summary.out_message_count, 1)
 		}
 		
 		if msg.meta != nil {
-			seq++
-			meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+			meta_msg := &Message{cmd:MSG_METADATA, version:client.version, body:msg.meta}
 			client.send(meta_msg)
 		}
-		seq++
-		//以当前客户端所用版本号发送消息
-		vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
-		client.send(vmsg)
-		
+		client.send(msg)
 		e = e.Next()
 	}
-	return seq
 }
 
 func (client *Client) Write() {
-	seq := 0
 	running := true
 	
 	//发送在线消息
@@ -343,40 +338,32 @@ func (client *Client) Write() {
 				log.Infof("client:%d socket closed", client.uid)
 				break
 			}
-			if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+			if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
+				msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
 				atomic.AddInt64(&server_summary.out_message_count, 1)
 			}
 
 			if msg.meta != nil {
-				seq++
-				meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+				meta_msg := &Message{cmd:MSG_METADATA, version:client.version, body:msg.meta}
 				client.send(meta_msg)
 			}
-			
-			seq++
-			//以当前客户端所用版本号发送消息
-			vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
-			client.send(vmsg)
+			client.send(msg)
 		case messages := <- client.pwt:
 			for _, msg := range(messages) {
-				if msg.cmd == MSG_RT || msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
+				if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
+					msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
 					atomic.AddInt64(&server_summary.out_message_count, 1)
 				}
 
 				if msg.meta != nil {
-					seq++
-					meta_msg := &Message{cmd:MSG_METADATA, seq:seq, version:client.version, body:msg.meta}
+					meta_msg := &Message{cmd:MSG_METADATA,  version:client.version, body:msg.meta}
 					client.send(meta_msg)
 				}
-				seq++					
-				//以当前客户端所用版本号发送消息
-				vmsg := &Message{cmd:msg.cmd, seq:seq, version:client.version, flag:msg.flag, body:msg.body}
-				client.send(vmsg)
+				client.send(msg)
 			}
 		case <- client.lwt:
-			seq = client.SendMessages(seq)
+			client.SendMessages()
 			break
-
 		}
 	}
 

@@ -112,12 +112,19 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 		return
 	}
 
-	m := &Message{cmd:MSG_ROOM_IM, body:room_im}
+	
+	m := &Message{cmd:MSG_ROOM_IM, body:room_im, body_data:room_im.ToData()}
 	DispatchMessageToRoom(m, room_id, client.appid, client.Client())
 
 	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:m}
 	channel := GetRoomChannel(client.room_id)
 	channel.PublishRoom(amsg)
 
-	client.wt <- &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
+	r := client.EnqueueMessage(ack)
+	if !r {
+		log.Warning("send room message ack error")
+	}
+
+	atomic.AddInt64(&server_summary.in_message_count, 1)	
 }
