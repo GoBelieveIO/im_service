@@ -238,6 +238,10 @@ class Client(object):
         self.sock = None
         self.sync_key = 0
 
+        self.syncing = False
+        self.sync_timestamp = 0
+        self.next_sync_key = 0
+
     def connect_server(self, device_id, token, host=None):
         if host is not None:
             address = (host, PORT)
@@ -283,7 +287,46 @@ class Client(object):
                 return 0, 0, None
             if rlist:
                 cmd, s, _, m = recv_message(self.sock)
+                self.handle_message(cmd, s, m)
                 return cmd, s, m
+
+    def handle_message(self, cmd, s, m):
+        if cmd == MSG_IM:
+           #handle im
+           print("im:", m.sender, m.receiver, m.timestamp, m.content)
+           self.ack_message(s)
+        elif cmd == MSG_GROUP_IM:
+            #handle group im
+            self.ack_message(s)
+        elif cmd == MSG_SYSTEM:
+            #handle system
+            print("system:", m)
+            self.ack_message(s)
+        elif cmd == MSG_PONG:
+            print("pong...")
+        elif cmd == MSG_SYNC_NOTIFY:
+            new_sync_key = m
+            now = int(time.time())
+            #避免重复同步消息
+            if new_sync_key > self.sync_key and (not self.syncing or now - self.sync_timestamp > 3):
+                self.send_sync()
+                self.syncing = True
+                self.sync_timestamp = int(time.time())
+            elif new_sync_key > self.next_sync_key:
+                self.next_sync_key = new_sync_key
+        elif cmd == MSG_SYNC_END:
+            new_sync_key = m
+            if new_sync_key > self.sync_key:
+                self.sync_key = new_sync_key
+                self.send_sync_key()
+            self.syncing = False
+            if self.next_sync_key > self.sync_key:
+                self.send_sync()
+                self.syncing = True
+                self.sync_timestamp = int(time.time())
+                self.next_sync_key = 0                
+        else:
+            print("unknow message:", cmd)
 
     def send_peer_message(self, msg):
         self.seq += 1
@@ -301,8 +344,11 @@ class Client(object):
         self.seq += 1
         send_message(MSG_SYNC_KEY, self.seq, self.sync_key, self.sock)                
 
+
 DEVICE_ID = "ec452582-a7a9-11e5-87d3-34363bd464b2"
-if __name__ == "__main__":
+
+
+def main():
     #调用app自身的服务器获取连接im服务必须的access token
     url = "http://demo.gobelieve.io/auth/token";
     headers = {'Content-Type': 'application/json; charset=UTF-8'}
@@ -322,7 +368,6 @@ if __name__ == "__main__":
             if not r:
                 continue
             client.send_sync()
-            
             while True:
                 print("recv message...")
                 cmd, s, m = client.recv_message()
@@ -335,32 +380,18 @@ if __name__ == "__main__":
                 if cmd == MSG_IM:
                     #handle im
                     print("im:", m.sender, m.receiver, m.timestamp, m.content)
-                    client.ack_message(s)
                 elif cmd == MSG_GROUP_IM:
                     #handle group im
                     print("group im:", m.sender, m.receiver, m.timestamp, m.content)
-                    client.ack_message(s)
                 elif cmd == MSG_SYSTEM:
                     #handle system
                     print("system:", m)
-                    client.ack_message(s)
-                elif cmd == MSG_PONG:
-                    print("pong...")
-                    continue
-                elif cmd == MSG_SYNC_NOTIFY:
-                    new_sync_key = m
-                    if new_sync_key > client.sync_key:
-                        client.send_sync()
-                elif cmd == MSG_SYNC_END:
-                    new_sync_key = m
-                    if new_sync_key > client.sync_key:
-                        client.sync_key = new_sync_key
-                        client.send_sync_key()
-                else:
-                    print("unknow message:", cmd)
-                    continue
 
         except Exception as e:
             traceback.print_exc()            
             time.sleep(1)
             continue
+
+if __name__ == "__main__":
+    main()
+        
