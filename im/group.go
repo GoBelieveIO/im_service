@@ -131,73 +131,11 @@ func (group *Group) IsEmpty() bool {
 
 
 
-func CreateGroup(db *sql.DB, appid int64, master int64, name string, super int8) int64 {
-	log.Info("create group super:", super)
-	stmtIns, err := db.Prepare("INSERT INTO `group`(appid, master, name, super) VALUES( ?, ?, ?, ? )")
-	if err != nil {
-		log.Info("error:", err)
-		return 0
-	}
-	defer stmtIns.Close()
-	result, err := stmtIns.Exec(appid, master, name, super)
-	if err != nil {
-		log.Info("error:", err)
-		return 0
-	}
-	gid, err := result.LastInsertId()
-	if err != nil {
-		log.Info("error:", err)
-		return 0
-	}
-	return gid
-}
-
-func DeleteGroup(db *sql.DB, group_id int64) bool {
-	var stmt1, stmt2 *sql.Stmt
-
-	tx, err := db.Begin()
-	if err != nil {
-		log.Info("error:", err)
-		return false
-	}
-
-	stmt1, err = tx.Prepare("DELETE FROM `group` WHERE id=?")
-	if err != nil {
-		log.Info("error:", err)
-		goto ROLLBACK
-	}
-	defer stmt1.Close()
-	_, err = stmt1.Exec(group_id)
-	if err != nil {
-		log.Info("error:", err)
-		goto ROLLBACK
-	}
-
-	stmt2, err = tx.Prepare("DELETE FROM group_member WHERE group_id=?")
-	if err != nil {
-		log.Info("error:", err)
-		goto ROLLBACK
-	}
-	defer stmt2.Close()
-	_, err = stmt2.Exec(group_id)
-	if err != nil {
-		log.Info("error:", err)
-		goto ROLLBACK
-	}
-
-	tx.Commit()
-	return true
-
-ROLLBACK:
-	tx.Rollback()
-	return false
-}
-
 func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
-	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group` WHERE id=?")
+	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group` WHERE id=? AND deleted=0")
 	if err == mysql.ErrInvalidConn {
 		log.Info("db prepare error:", err)
-		stmtIns, err = db.Prepare("SELECT id, appid, super FROM `group` WHERE id=?")
+		stmtIns, err = db.Prepare("SELECT id, appid, super FROM `group` WHERE id=? AND deleted=0")
 	}
 	if err != nil {
 		log.Info("db prepare error:", err)
@@ -233,43 +171,11 @@ func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 	return group, nil	
 }
 
-func LoadAllGroup(db *sql.DB) (map[int64]*Group, error) {
-	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group`")
-	if err != nil {
-		log.Info("error:", err)
-		return nil, err
-	}
-
-	defer stmtIns.Close()
-	groups := make(map[int64]*Group)
-	rows, err := stmtIns.Query()
-	for rows.Next() {
-		var id int64
-		var appid int64
-		var super int8
-		rows.Scan(&id, &appid, &super)
-		members, err := LoadGroupMember(db, id)
-		if err != nil {
-			log.Info("error:", err)
-			return nil, err
-		}
-
-		if super != 0 {
-			group := NewSuperGroup(id, appid, members)
-			groups[group.gid] = group
-		} else {
-			group := NewGroup(id, appid, members)
-			groups[group.gid] = group
-		}
-	}
-	return groups, nil
-}
-
 func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int64, error) {
-	stmtIns, err := db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=?")
+	stmtIns, err := db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=? AND deleted=0")
 	if err == mysql.ErrInvalidConn {
 		log.Info("db prepare error:", err)		
-		stmtIns, err = db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=?")
+		stmtIns, err = db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=? AND deleted=0")
 	}
 	if err != nil {
 		log.Info("db prepare error:", err)		
