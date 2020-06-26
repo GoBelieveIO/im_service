@@ -321,7 +321,7 @@ func (auth *AuthenticationToken) ToData() []byte {
 }
 
 func (auth *AuthenticationToken) FromData(buff []byte) bool {
-	var l int8
+	var l uint8
 	if (len(buff) <= 3) {
 		return false
 	}
