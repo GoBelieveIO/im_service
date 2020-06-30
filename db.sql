@@ -9,6 +9,7 @@ CREATE TABLE `group` (
   `super` tinyint(4) NOT NULL DEFAULT '0',
   `name` varchar(255) DEFAULT NULL,
   `notice` varchar(255) DEFAULT NULL COMMENT '公告',
+  `deleted` tinyint(1) NOT NULL COMMENT '删除标志',  
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
@@ -18,6 +19,7 @@ CREATE TABLE `group_member` (
   `timestamp` int(11) DEFAULT NULL COMMENT '入群时间,单位：秒',
   `nickname` varchar(255) DEFAULT NULL COMMENT '群内昵称',
   `mute` tinyint(1) DEFAULT '0' COMMENT '群内禁言',
+  `deleted` tinyint(1) NOT NULL COMMENT '删除标志',
   PRIMARY KEY (`group_id`,`uid`),
   KEY `idx_group_member_uid` (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
