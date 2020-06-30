@@ -4,7 +4,9 @@ import "sync"
 import log "github.com/golang/glog"
 
 //一个聊天室中不允许有多个相同uid的client
-const ROOM_SINGLE = true
+const ROOM_SINGLE = false
+//一个聊天室中不允许有多个相同uid和deviceid的client
+const ROOM_DEVICE_SINGLE = true
 
 type Route struct {
 	appid  int64
@@ -49,6 +51,18 @@ func (route *Route) AddRoomClient(room_id int64, client *Client) {
 		for k, _ := range set {
 			//根据uid去重
 			if k.uid == client.uid {
+				old = k
+				break
+			}
+		}
+		if old != nil {
+			set.Remove(old)
+		}
+	} else if ROOM_DEVICE_SINGLE && client.device_ID > 0 {
+		var old *Client = nil
+		for k, _ := range set {
+			//根据uid&device_id去重
+			if k.uid == client.uid && k.device_ID == client.device_ID {
 				old = k
 				break
 			}
