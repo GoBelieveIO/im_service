@@ -22,7 +22,7 @@ import "net/http"
 import "encoding/json"
 import "net/url"
 import "strconv"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 func WriteHttpObj(data map[string]interface{}, w http.ResponseWriter) {

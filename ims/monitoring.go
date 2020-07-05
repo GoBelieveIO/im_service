@@ -5,7 +5,7 @@ import "encoding/json"
 import "os"
 import "runtime"
 import "runtime/pprof"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 type ServerSummary struct {
 	nrequests         int64

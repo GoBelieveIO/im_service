@@ -1,7 +1,7 @@
 package main
 
 import "sync"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 //一个聊天室中不允许有多个相同uid的client
 const ROOM_SINGLE = false

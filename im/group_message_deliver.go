@@ -26,7 +26,7 @@ import "sync"
 import "time"
 import "encoding/binary"
 import "sync/atomic"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 

@@ -23,7 +23,7 @@ import "strings"
 import "strconv"
 import "sync/atomic"
 import "github.com/gomodule/redigo/redis"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 func HandleForbidden(data string) {

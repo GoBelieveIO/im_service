@@ -24,7 +24,7 @@ import "time"
 import "unsafe"
 import "sync"
 import "sync/atomic"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "github.com/gorilla/websocket"
 import "container/list"
 

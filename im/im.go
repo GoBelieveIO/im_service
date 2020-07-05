@@ -21,7 +21,7 @@ package main
 import "time"
 import "sync/atomic"
 import "github.com/valyala/gorpc"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 //个人消息／普通群消息／客服消息
 func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {

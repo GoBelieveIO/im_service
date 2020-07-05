@@ -27,7 +27,7 @@ import "encoding/binary"
 import "path/filepath"
 import "strings"
 import "strconv"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 const HEADER_SIZE = 32

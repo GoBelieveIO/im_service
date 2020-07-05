@@ -26,7 +26,7 @@ import "os"
 import "time"
 import "bytes"
 import "encoding/binary"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 const GROUP_INDEX_FILE_NAME = "group_index.v2"
 

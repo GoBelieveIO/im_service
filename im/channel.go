@@ -22,7 +22,7 @@ package main
 import "net"
 import "time"
 import "sync"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 type Subscriber struct {
 	uids map[int64]int

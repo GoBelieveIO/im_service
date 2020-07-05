@@ -28,7 +28,7 @@ import "path/filepath"
 import "strings"
 import "strconv"
 import "io"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "github.com/GoBelieveIO/im_service/lru"
 
 const HEADER_SIZE = 32

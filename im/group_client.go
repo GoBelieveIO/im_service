@@ -21,7 +21,7 @@ package main
 import "time"
 import "sync/atomic"
 import "errors"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 type GroupClient struct {
 	*Connection

@@ -22,7 +22,7 @@ package main
 import "sync"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "github.com/gomodule/redigo/redis"
 import "fmt"
 import "strconv"

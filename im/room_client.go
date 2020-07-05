@@ -19,7 +19,7 @@
 
 package main
 
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "sync/atomic"
 
 type RoomClient struct {

@@ -22,7 +22,7 @@ package main
 import "net"
 import "time"
 import "sync/atomic"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "container/list"
 import "crypto/tls"
 import "fmt"

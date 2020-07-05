@@ -24,7 +24,7 @@ import "time"
 import "net/url"
 import "strconv"
 import "sync/atomic"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "io/ioutil"
 import "github.com/bitly/go-simplejson"
 

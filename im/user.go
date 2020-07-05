@@ -21,7 +21,7 @@ package main
 
 import "fmt"
 import "time"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "github.com/gomodule/redigo/redis"
 import "errors"
 

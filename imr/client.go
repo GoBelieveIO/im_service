@@ -19,7 +19,7 @@
 
 package main
 import "net"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 type Push struct {

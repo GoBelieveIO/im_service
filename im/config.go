@@ -58,6 +58,12 @@ type Config struct {
 	enable_blacklist    bool //验证是否在对方的黑名单中
 
 	memory_limit        int64  //rss超过limit，不接受新的链接
+
+	log_filename        string
+	log_level           string
+	log_backup          int  //log files
+	log_age             int  //days
+	log_caller          bool
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -180,6 +186,13 @@ func read_cfg(cfg_path string) *Config {
 	config.word_file = get_opt_string(app_cfg, "word_file")
 	config.friend_permission = get_opt_int(app_cfg, "friend_permission") != 0
 	config.enable_blacklist = get_opt_int(app_cfg, "enable_blacklist") != 0
+
+	config.log_filename = get_opt_string(app_cfg, "log_filename")
+	config.log_level = get_opt_string(app_cfg, "log_level")
+	config.log_backup = int(get_opt_int(app_cfg, "log_backup"))
+	config.log_age = int(get_opt_int(app_cfg, "log_age"))
+	config.log_caller = get_opt_int(app_cfg, "log_caller") != 0
+	
 	mem_limit := get_opt_string(app_cfg, "memory_limit")
 	mem_limit = strings.TrimSpace(mem_limit)
 	if mem_limit != "" {

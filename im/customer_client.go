@@ -20,7 +20,7 @@
 package main
 
 import "time"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 type CustomerClient struct {

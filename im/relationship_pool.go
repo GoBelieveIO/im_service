@@ -29,7 +29,7 @@ import "strings"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import "github.com/gomodule/redigo/redis"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 const EXPIRE_DURATION = 60*60 //60min
 const ACTIVE_DURATION = 10*60

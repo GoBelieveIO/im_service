@@ -8,7 +8,7 @@ import "net/url"
 import "strconv"
 import "runtime"
 import "runtime/pprof"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 type ServerSummary struct {
 	nconnections      int64

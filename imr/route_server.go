@@ -26,7 +26,8 @@ import "fmt"
 import "time"
 import "net/http"
 import "math/rand"
-import log "github.com/golang/glog"
+import "gopkg.in/natefinch/lumberjack.v2"
+import log "github.com/sirupsen/logrus"
 import "github.com/gomodule/redigo/redis"
 
 
@@ -42,6 +43,7 @@ var config *RouteConfig
 var clients ClientSet
 var mutex   sync.Mutex
 var redis_pool *redis.Pool
+
 
 func init() {
 	clients = NewClientSet()
@@ -200,6 +202,33 @@ func StartHttpServer(addr string) {
 	}
 }
 
+func initLog() {
+	if config.log_filename != "" {
+		writer := &lumberjack.Logger{
+			Filename:   config.log_filename,
+			MaxSize:    1024, // megabytes
+			MaxBackups: config.log_backup,
+			MaxAge:     config.log_age, //days
+			Compress:   false,
+		}
+		log.SetOutput(writer)
+		log.StandardLogger().SetNoLock()
+	}
+
+	log.SetReportCaller(config.log_caller)
+
+	level := config.log_level
+	if level == "debug" {
+		log.SetLevel(log.DebugLevel)
+	} else if level == "info" {
+		log.SetLevel(log.InfoLevel)
+	} else if level == "warn" {
+		log.SetLevel(log.WarnLevel)
+	} else if level == "fatal" {
+		log.SetLevel(log.FatalLevel)
+	}
+}
+
 
 func main() {
 	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
@@ -213,11 +242,19 @@ func main() {
 	}
 
 	config = read_route_cfg(flag.Args()[0])
+	
+	initLog()
+
+	log.Info("startup...")
+	
 	log.Infof("listen:%s\n", config.listen)
 
 	log.Infof("redis address:%s password:%s db:%d\n", 
 		config.redis_address, config.redis_password, config.redis_db)
 
+	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
+		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
+	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
 

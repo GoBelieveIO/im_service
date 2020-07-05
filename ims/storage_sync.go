@@ -22,7 +22,7 @@ package main
 import "net"
 import "sync"
 import "time"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 type SyncClient struct {

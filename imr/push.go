@@ -21,7 +21,7 @@ package main
 import "fmt"
 import "time"
 import "encoding/json"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 const PUSH_QUEUE_TIMEOUT = 300
 

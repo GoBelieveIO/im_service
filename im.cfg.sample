@@ -48,3 +48,13 @@ pending_root=/tmp/pending
 
 #客服的appid 可选项
 kefu_appid=0
+
+#可选日志配置
+log_filename=im.log
+log_level=info
+#rotate log保存的文件数
+log_backup=3
+#log保存天数
+log_age=30
+#是否打印file&line
+log_caller=1

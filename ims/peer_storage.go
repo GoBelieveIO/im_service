@@ -26,7 +26,7 @@ import "os"
 import "time"
 import "bytes"
 import "encoding/binary"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 const BATCH_SIZE = 1000

@@ -27,7 +27,7 @@ import "errors"
 import "github.com/gomodule/redigo/redis"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 
 const GROUP_EXPIRE_DURATION = 60*60 //60min

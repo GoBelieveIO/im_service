@@ -46,6 +46,12 @@ type StorageConfig struct {
 	group_limit         int  //普通群离线消息的数量限制
 	limit               int  //单次离线消息的数量限制
 	hard_limit          int  //离线消息总的数量限制
+
+	log_filename        string
+	log_level           string
+	log_backup          int  //log files
+	log_age             int  //days
+	log_caller          bool
 }
 
 func get_int(app_cfg map[string]string, key string) int64 {
@@ -107,6 +113,13 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.limit = int(get_opt_int(app_cfg, "limit", OFFLINE_DEFAULT_LIMIT))
 	config.group_limit = int(get_opt_int(app_cfg, "group_limit", GROUP_OFFLINE_DEFAULT_LIMIT))
 	config.hard_limit = int(get_opt_int(app_cfg, "hard_limit", OFFLINE_DEFAULT_HARD_LIMIT))
+
+	config.log_filename = get_opt_string(app_cfg, "log_filename")
+	config.log_level = get_opt_string(app_cfg, "log_level")
+	config.log_backup = int(get_opt_int(app_cfg, "log_backup", 0))
+	config.log_age = int(get_opt_int(app_cfg, "log_age", 0))
+	config.log_caller = get_opt_int(app_cfg, "log_caller", 0) != 0
+	
 	return config
 }
 

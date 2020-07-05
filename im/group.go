@@ -23,7 +23,7 @@ import "time"
 import "sync"
 import "database/sql"
 import mysql "github.com/go-sql-driver/mysql"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 type Group struct {
 	gid     int64

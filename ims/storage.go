@@ -22,7 +22,7 @@ package main
 import "os"
 import "bytes"
 
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 
 type Storage struct {
 	*StorageFile

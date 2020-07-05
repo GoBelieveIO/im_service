@@ -33,7 +33,8 @@ import "os/exec"
 import "sync/atomic"
 
 import "github.com/gomodule/redigo/redis"
-import log "github.com/golang/glog"
+import "gopkg.in/natefinch/lumberjack.v2"
+import log "github.com/sirupsen/logrus"
 import "github.com/valyala/gorpc"
 import "github.com/importcjj/sensitive"
 import "github.com/bitly/go-simplejson"
@@ -77,6 +78,7 @@ var group_message_delivers []*GroupMessageDeliver
 var filter *sensitive.Filter
 
 var low_memory int32//低内存状态
+
 
 func init() {
 	app_route = NewAppRoute()
@@ -280,6 +282,34 @@ func MemStatService() {
 	}
 }
 
+func initLog() {
+	if config.log_filename != "" {
+		writer := &lumberjack.Logger{
+			Filename:   config.log_filename,
+			MaxSize:    1024, // megabytes
+			MaxBackups: config.log_backup,
+			MaxAge:     config.log_age, //days
+			Compress:   false,
+		}
+		log.SetOutput(writer)
+		log.StandardLogger().SetNoLock()
+	}
+
+	log.SetReportCaller(config.log_caller)
+
+	level := config.log_level
+	if level == "debug" {
+		log.SetLevel(log.DebugLevel)
+	} else if level == "info" {
+		log.SetLevel(log.InfoLevel)
+	} else if level == "warn" {
+		log.SetLevel(log.WarnLevel)
+	} else if level == "fatal" {
+		log.SetLevel(log.FatalLevel)
+	}
+}
+
+
 func main() {
 	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
 	rand.Seed(time.Now().UnixNano())
@@ -291,6 +321,10 @@ func main() {
 	}
 	
 	config = read_cfg(flag.Args()[0])
+
+	initLog()
+
+	log.Info("startup...")
 	log.Infof("port:%d\n", config.port)
 
 	log.Infof("redis address:%s password:%s db:%d\n", 
@@ -308,6 +342,9 @@ func main() {
 	log.Info("group deliver count:", config.group_deliver_count)
 	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
 	log.Infof("memory limit:%d", config.memory_limit)
+
+	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
+		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)

@@ -22,7 +22,7 @@ package main
 import "io"
 import "bytes"
 import "encoding/binary"
-import log "github.com/golang/glog"
+import log "github.com/sirupsen/logrus"
 import "errors"
 import "encoding/hex"
 

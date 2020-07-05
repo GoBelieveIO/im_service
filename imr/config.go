@@ -30,6 +30,12 @@ type RouteConfig struct {
 	redis_db            int
 	is_push_system      bool
 	http_listen_address string
+
+	log_filename        string
+	log_level           string
+	log_backup          int  //log files
+	log_age             int  //days
+	log_caller          bool
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -88,5 +94,12 @@ func read_route_cfg(cfg_path string) *RouteConfig {
 	config.redis_db = int(db)
 	config.is_push_system = get_opt_int(app_cfg, "is_push_system") == 1
 	config.http_listen_address = get_opt_string(app_cfg, "http_listen_address")
+	
+	config.log_filename = get_opt_string(app_cfg, "log_filename")
+	config.log_level = get_opt_string(app_cfg, "log_level")
+	config.log_backup = int(get_opt_int(app_cfg, "log_backup"))
+	config.log_age = int(get_opt_int(app_cfg, "log_age"))
+	config.log_caller = get_opt_int(app_cfg, "log_caller") != 0
+	
 	return config
 }
