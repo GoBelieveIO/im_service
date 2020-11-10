@@ -635,89 +635,9 @@ func (ctl *VOIPControl) FromData(buff []byte) bool {
 }
 
 
-type AppUserID struct {
-	appid    int64
-	uid      int64
-}
-
-func (id *AppUserID) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, id.appid)
-	binary.Write(buffer, binary.BigEndian, id.uid)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (id *AppUserID) FromData(buff []byte) bool {
-	if len(buff) < 16 {
-		return false
-	}
-
-	buffer := bytes.NewBuffer(buff)	
-	binary.Read(buffer, binary.BigEndian, &id.appid)
-	binary.Read(buffer, binary.BigEndian, &id.uid)
-
-	return true
-}
-
-type AppRoomID struct {
-	appid    int64
-	room_id      int64
-}
-
-func (id *AppRoomID) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, id.appid)
-	binary.Write(buffer, binary.BigEndian, id.room_id)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (id *AppRoomID) FromData(buff []byte) bool {
-	if len(buff) < 16 {
-		return false
-	}
-
-	buffer := bytes.NewBuffer(buff)	
-	binary.Read(buffer, binary.BigEndian, &id.appid)
-	binary.Read(buffer, binary.BigEndian, &id.room_id)
-
-	return true
-}
-
-type AppGroupMemberID struct {
-	appid  int64
-	gid    int64
-	uid    int64
-}
-
-func (id *AppGroupMemberID) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, id.appid)
-	binary.Write(buffer, binary.BigEndian, id.gid)
-	binary.Write(buffer, binary.BigEndian, id.uid)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (id *AppGroupMemberID) FromData(buff []byte) bool {
-	if len(buff) < 24 {
-		return false
-	}
-
-	buffer := bytes.NewBuffer(buff)	
-	binary.Read(buffer, binary.BigEndian, &id.appid)
-	binary.Read(buffer, binary.BigEndian, &id.gid)
-	binary.Read(buffer, binary.BigEndian, &id.uid)
-
-	return true
-}
-
-
 type SyncKey struct {
 	sync_key int64
 }
-
 
 func (id *SyncKey) ToData() []byte {
 	buffer := new(bytes.Buffer)

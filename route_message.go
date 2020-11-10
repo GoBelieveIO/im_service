@@ -202,8 +202,6 @@ func (amsg *AppMessage) FromData(buff []byte) bool {
 }
 
 
-
-
 type SubscribeMessage struct {
 	appid    int64
 	uid      int64
@@ -231,3 +229,55 @@ func (sub *SubscribeMessage) FromData(buff []byte) bool {
 	
 	return true
 }
+
+
+type AppUserID struct {
+	appid    int64
+	uid      int64
+}
+
+func (id *AppUserID) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.appid)
+	binary.Write(buffer, binary.BigEndian, id.uid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *AppUserID) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.appid)
+	binary.Read(buffer, binary.BigEndian, &id.uid)
+
+	return true
+}
+
+type AppRoomID struct {
+	appid    int64
+	room_id      int64
+}
+
+func (id *AppRoomID) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, id.appid)
+	binary.Write(buffer, binary.BigEndian, id.room_id)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (id *AppRoomID) FromData(buff []byte) bool {
+	if len(buff) < 16 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)	
+	binary.Read(buffer, binary.BigEndian, &id.appid)
+	binary.Read(buffer, binary.BigEndian, &id.room_id)
+
+	return true
+}
+
