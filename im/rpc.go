@@ -21,6 +21,7 @@ package main
 import "net/http"
 import "encoding/json"
 import "time"
+import "bytes"
 import "net/url"
 import "strconv"
 import "sync/atomic"
@@ -353,15 +354,7 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	hm := resp.([]*HistoryMessage)
-	messages := make([]*EMessage, 0)
-	for _, msg := range(hm) {
-		m := &Message{cmd:int(msg.Cmd), version:DEFAULT_VERSION}
-		m.FromData(msg.Raw)
-		e := &EMessage{msgid:msg.MsgID, device_id:msg.DeviceID, msg:m}
-		messages = append(messages, e)
-	}
-
+	messages := resp.([]*HistoryMessage)
 	if len(messages) > 0 {
 		//reverse
 		size := len(messages)
@@ -374,22 +367,26 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 
 	msg_list := make([]map[string]interface{}, 0, len(messages))
 	for _, emsg := range messages {
-		if emsg.msg.cmd == MSG_IM || 
-			emsg.msg.cmd == MSG_GROUP_IM {
-			im := emsg.msg.body.(*IMMessage)
+
+		msg := &Message{cmd:int(emsg.Cmd), version:DEFAULT_VERSION}
+		msg.FromData(emsg.Raw)
+		
+		if msg.cmd == MSG_IM || 
+			msg.cmd == MSG_GROUP_IM {
+			im := msg.body.(*IMMessage)
 			
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
 			obj["timestamp"] = im.timestamp
 			obj["sender"] = im.sender
 			obj["receiver"] = im.receiver
-			obj["command"] = emsg.msg.cmd
-			obj["id"] = emsg.msgid
+			obj["command"] = msg.cmd
+			obj["id"] = emsg.MsgID
 			msg_list = append(msg_list, obj)
 			
-		} else if emsg.msg.cmd == MSG_CUSTOMER ||
-			emsg.msg.cmd == MSG_CUSTOMER_SUPPORT {
-			im := emsg.msg.body.(*CustomerMessage)
+		} else if msg.cmd == MSG_CUSTOMER ||
+			msg.cmd == MSG_CUSTOMER_SUPPORT {
+			im := msg.body.(*CustomerMessage)
 			
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
@@ -398,8 +395,8 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 			obj["customer_id"] = im.customer_id
 			obj["store_id"] = im.store_id
 			obj["seller_id"] = im.seller_id
-			obj["command"] = emsg.msg.cmd
-			obj["id"] = emsg.msgid
+			obj["command"] = msg.cmd
+			obj["id"] = emsg.MsgID
 			msg_list = append(msg_list, obj)
 		}
 	}
@@ -657,7 +654,10 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request) {
 
 	DispatchMessageToRoom(msg, room_id, appid, nil)
 
-	amsg := &AppMessage{appid:appid, receiver:room_id, msg:msg}
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+	amsg := &AppMessage{appid:appid, receiver:room_id, msg:msg_buf}
 	channel := GetRoomChannel(room_id)
 	channel.PublishRoom(amsg)
 

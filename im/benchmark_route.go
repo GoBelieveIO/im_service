@@ -3,12 +3,13 @@ package main
 import "time"
 import "flag"
 import "log"
+import "bytes"
 
 var route_addr string = "127.0.0.1:4444"
 var appid int64 = 8
 
 func Dispatch(amsg *AppMessage) {
-	log.Printf("amsg appid:%d receiver:%d cmd:%d", amsg.appid, amsg.receiver, amsg.msg.cmd)
+	log.Printf("amsg appid:%d receiver:%d", amsg.appid, amsg.receiver)
 }
 func main() {
 	flag.Parse()
@@ -29,10 +30,15 @@ func main() {
 	im.content = "test"
 	msg := &Message{cmd:MSG_IM, body:im}
 
+	
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+
 	amsg := &AppMessage{}
 	amsg.appid = appid
 	amsg.receiver = 1000
-	amsg.msg = msg
+	amsg.msg = msg_buf
 	channel2.Publish(amsg)
 
 	time.Sleep(3*time.Second)

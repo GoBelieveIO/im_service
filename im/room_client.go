@@ -21,6 +21,7 @@ package main
 
 import log "github.com/sirupsen/logrus"
 import "sync/atomic"
+import "bytes"
 
 type RoomClient struct {
 	*Connection
@@ -116,7 +117,10 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 	m := &Message{cmd:MSG_ROOM_IM, body:room_im, body_data:room_im.ToData()}
 	DispatchMessageToRoom(m, room_id, client.appid, client.Client())
 
-	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:m}
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, m)
+	msg_buf := mbuffer.Bytes()
+	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:msg_buf}
 	channel := GetRoomChannel(client.room_id)
 	channel.PublishRoom(amsg)
 

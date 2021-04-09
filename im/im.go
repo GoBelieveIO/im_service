@@ -19,6 +19,7 @@
 
 package main
 import "time"
+import "bytes"
 import "sync/atomic"
 import "github.com/valyala/gorpc"
 import log "github.com/sirupsen/logrus"
@@ -191,10 +192,16 @@ func PushMessage(appid int64, uid int64, m *Message) {
 
 func PublishMessage(appid int64, uid int64, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:uid, timestamp:now, msg:msg}
+
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+	
+	amsg := &AppMessage{appid:appid, receiver:uid, timestamp:now, msg:msg_buf}
 	if msg.meta != nil {
-		amsg.msgid = msg.meta.sync_key
-		amsg.prev_msgid = msg.meta.prev_sync_key
+		meta := msg.meta.(*Metadata)
+		amsg.msgid = meta.sync_key
+		amsg.prev_msgid = meta.prev_sync_key
 	}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
@@ -202,10 +209,16 @@ func PublishMessage(appid int64, uid int64, msg *Message) {
 
 func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group_id, timestamp:now, msg:msg}
+	
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+	
+	amsg := &AppMessage{appid:appid, receiver:group_id, timestamp:now, msg:msg_buf}
 	if msg.meta != nil {
-		amsg.msgid = msg.meta.sync_key
-		amsg.prev_msgid = msg.meta.prev_sync_key
+		meta := msg.meta.(*Metadata)		
+		amsg.msgid = meta.sync_key
+		amsg.prev_msgid = meta.prev_sync_key
 	}
 	channel := GetGroupChannel(group_id)
 	channel.PublishGroup(amsg)
@@ -213,7 +226,11 @@ func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 
 func SendAppGroupMessage(appid int64, group *Group, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:group.gid, msgid:0, timestamp:now, msg:msg}
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+	
+	amsg := &AppMessage{appid:appid, receiver:group.gid, msgid:0, timestamp:now, msg:msg_buf}
 	channel := GetGroupChannel(group.gid)
 	channel.PublishGroup(amsg)
 	DispatchMessageToGroup(msg, group, appid, nil)
@@ -221,7 +238,11 @@ func SendAppGroupMessage(appid int64, group *Group, msg *Message) {
 
 func SendAppMessage(appid int64, uid int64, msg *Message) {
 	now := time.Now().UnixNano()
-	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg}
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+	
+	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg_buf}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
 	DispatchMessageToPeer(msg, uid, appid, nil)
@@ -230,50 +251,71 @@ func SendAppMessage(appid int64, uid int64, msg *Message) {
 func DispatchAppMessage(amsg *AppMessage) {
 	now := time.Now().UnixNano()
 	d := now - amsg.timestamp
-	log.Infof("dispatch app message:%s %d %d", Command(amsg.msg.cmd), amsg.msg.flag, d)
+
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch message")
+		return 
+	}
+
+	log.Infof("dispatch app message:%s %d %d", Command(msg.cmd), msg.flag, d)
 	if d > int64(time.Second) {
 		log.Warning("dispatch app message slow...")
 	}
 
 	if amsg.msgid > 0 {
-		if (amsg.msg.flag & MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", amsg.msg.flag)
+		if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.flag)
 		}
 		meta := &Metadata{sync_key:amsg.msgid, prev_sync_key:amsg.prev_msgid}
-		amsg.msg.meta = meta
+		msg.meta = meta
 	}
-	DispatchMessageToPeer(amsg.msg, amsg.receiver, amsg.appid, nil)
+	DispatchMessageToPeer(msg, amsg.receiver, amsg.appid, nil)
 }
 
 func DispatchRoomMessage(amsg *AppMessage) {
-	log.Info("dispatch room message", Command(amsg.msg.cmd))
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch room message")
+		return 
+	}
+	
+	log.Info("dispatch room message", Command(msg.cmd))
 	
 	room_id := amsg.receiver
-	DispatchMessageToRoom(amsg.msg, room_id, amsg.appid, nil)
+	DispatchMessageToRoom(msg, room_id, amsg.appid, nil)
 }
 
 func DispatchGroupMessage(amsg *AppMessage) {
 	now := time.Now().UnixNano()
 	d := now - amsg.timestamp
-	log.Infof("dispatch group message:%s %d %d", Command(amsg.msg.cmd), amsg.msg.flag, d)
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch room message")
+		return 
+	}
+	log.Infof("dispatch group message:%s %d %d", Command(msg.cmd), msg.flag, d)
 	if d > int64(time.Second) {
 		log.Warning("dispatch group message slow...")
 	}
 
 	if amsg.msgid > 0 {
-		if (amsg.msg.flag & MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", amsg.msg.flag)
+		if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.flag)
 		}
-		if (amsg.msg.flag & MESSAGE_FLAG_SUPER_GROUP) == 0 {
-			log.Fatal("invalid message flag", amsg.msg.flag)
+		if (msg.flag & MESSAGE_FLAG_SUPER_GROUP) == 0 {
+			log.Fatal("invalid message flag", msg.flag)
 		}
 		
 		meta := &Metadata{sync_key:amsg.msgid, prev_sync_key:amsg.prev_msgid}
-		amsg.msg.meta = meta
+		msg.meta = meta
 	}
-	
+
 	deliver := GetGroupMessageDeliver(amsg.receiver)
-	deliver.DispatchMessage(amsg)
+	deliver.DispatchMessage(msg, amsg.receiver, amsg.appid)
 }
 
 func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Client) bool {

@@ -40,6 +40,12 @@ type GroupLoader struct {
 	c   chan *Group
 }
 
+type GroupMessageDispatch struct {
+	gid int64
+	appid int64
+	msg *Message
+}
+
 //后台发送普通群消息
 //普通群消息首先保存到临时文件中，之后按照保存到文件中的顺序依次派发
 type GroupMessageDeliver struct {
@@ -56,7 +62,7 @@ type GroupMessageDeliver struct {
 
 	//保证单个群组结构只会在一个线程中被加载
 	lt     chan *GroupLoader //加载group结构到内存
-	dt     chan *AppMessage  //dispatch 群组消息
+	dt     chan *GroupMessageDispatch  //dispatch 群组消息
 
 
 	cb_mutex               sync.Mutex //callback变量的锁
@@ -80,7 +86,7 @@ func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
 
 	storage.wt = make(chan int64, 10)
 	storage.lt = make(chan *GroupLoader)
-	storage.dt = make(chan *AppMessage, 1000)
+	storage.dt = make(chan *GroupMessageDispatch, 1000)
 	storage.callbacks = make(map[int64]chan *Metadata)
 	storage.callbackid_to_msgid = make(map[int64]int64)
 	
@@ -607,26 +613,27 @@ func (storage *GroupMessageDeliver) LoadGroup(gid int64) *Group {
 }
 
 
-func (storage *GroupMessageDeliver) DispatchMessage(msg *AppMessage) {
-	group := group_manager.FindGroup(msg.receiver)
+func (storage *GroupMessageDeliver) DispatchMessage(msg *Message, group_id int64, appid int64) {
+	//assert(msg.appid > 0)
+	group := group_manager.FindGroup(group_id)
 	if group != nil {
-		DispatchMessageToGroup(msg.msg, group, msg.appid, nil)
+		DispatchMessageToGroup(msg, group, appid, nil)
 	} else {
 		select {
-		case storage.dt <- msg:
+		case storage.dt <- &GroupMessageDispatch{gid:group_id, appid:appid, msg:msg}:
 		default:
 			log.Warning("can't dispatch group message nonblock")
 		}		
 	}
 }
 
-func (storage *GroupMessageDeliver) dispatchMessage(msg *AppMessage) {
-	group := group_manager.LoadGroup(msg.receiver)
+func (storage *GroupMessageDeliver) dispatchMessage(msg *Message, group_id int64, appid int64) {
+	group := group_manager.LoadGroup(group_id)
 	if group == nil {
 		log.Warning("load group nil, can't dispatch group message")
 		return
 	}
-	DispatchMessageToGroup(msg.msg, group, msg.appid, nil)
+	DispatchMessageToGroup(msg, group, appid, nil)
 }
 
 func (storage *GroupMessageDeliver) loadGroup(gl *GroupLoader) {
@@ -642,7 +649,7 @@ func (storage *GroupMessageDeliver) run2() {
 		case gl := <-storage.lt:
 			storage.loadGroup(gl)			
 		case m := <-storage.dt:
-			storage.dispatchMessage(m)
+			storage.dispatchMessage(m.msg, m.gid, m.appid)
 		}
 	}
 }
