@@ -156,7 +156,6 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 		rs = relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
 	}
 	if config.friend_permission {
-		rs := relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
 		if !rs.IsMyFriend() {
 			ack := &Message{cmd: MSG_ACK, version:client.version, body: &MessageACK{seq:int32(seq), status:ACK_NOT_MY_FRIEND}}
 			client.EnqueueMessage(ack)
