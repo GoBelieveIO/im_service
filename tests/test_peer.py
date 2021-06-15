@@ -25,9 +25,9 @@ def send_client(uid, receiver, msg_type):
     im.sender = uid
     im.receiver = receiver
     if msg_type == MSG_IM:
-        im.content = "test im"
+        im.content = json.dumps({"uuid":str(uuid.uuid1()), "text":"test im"})
     else:
-        im.content = "test group im"
+        im.content = json.dumps({"uuid":str(uuid.uuid1()), "text":"test group im"})
     seq += 1
     send_message(msg_type, seq, im, sock)
     msg_seq = seq
@@ -134,7 +134,7 @@ def recv_rt_message_client(uid, port=23000):
     
 def send_http_peer_message(uid, receiver):
     global task
-    content = json.dumps({"text":"test"})    
+    content = json.dumps({"text":"test", "uuid":str(uuid.uuid1())})    
     res = rpc.post_peer_message(APP_ID, uid, receiver, content)
     if res.status_code != 200:
         print(res.status_code, res.content)

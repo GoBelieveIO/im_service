@@ -29,9 +29,9 @@ def send_client(uid, receiver, msg_type):
     im.sender = uid
     im.receiver = receiver
     if msg_type == MSG_IM:
-        im.content = json.dumps({"text":"test im " + str(datetime.datetime.now())})
+        im.content = json.dumps({"uuid":str(uuid.uuid1()), "text":"test im " + str(datetime.datetime.now())})
     else:
-        im.content = json.dumps({"text":"test group im " + str(datetime.datetime.now())})
+        im.content = json.dumps({"uuid":str(uuid.uuid1()), "text":"test group im " + str(datetime.datetime.now())})
     seq += 1
     send_message(msg_type, seq, im, sock)
     msg_seq = seq
@@ -52,7 +52,7 @@ def send_client(uid, receiver, msg_type):
 
 def send_http_group_message(uid, receiver):
     global task
-    content = json.dumps({"text":"test"})
+    content = json.dumps({"uuid":str(uuid.uuid1()), "text":"test"})
     res = rpc.post_group_message(APP_ID, uid, receiver, content)
     if res.status_code != 200:
         print(res.status_code, res.content)
