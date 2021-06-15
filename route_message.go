@@ -143,7 +143,7 @@ type AppMessage struct {
 	prev_msgid int64
 	device_id int64
 	timestamp int64 //纳秒,测试消息从im->imr->im的时间
-	msg      *Message
+	msg      []byte
 }
 
 
@@ -158,9 +158,7 @@ func (amsg *AppMessage) ToData() []byte {
 	binary.Write(buffer, binary.BigEndian, amsg.msgid)
 	binary.Write(buffer, binary.BigEndian, amsg.device_id)
 	binary.Write(buffer, binary.BigEndian, amsg.timestamp)
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, amsg.msg)
-	msg_buf := mbuffer.Bytes()
+	msg_buf := amsg.msg
 	var l int16 = int16(len(msg_buf))
 	binary.Write(buffer, binary.BigEndian, l)
 	buffer.Write(msg_buf)
@@ -190,13 +188,7 @@ func (amsg *AppMessage) FromData(buff []byte) bool {
 	msg_buf := make([]byte, l)
 	buffer.Read(msg_buf)
 
-	mbuffer := bytes.NewBuffer(msg_buf)
-	//recusive
-	msg := ReceiveMessage(mbuffer)
-	if msg == nil {
-		return false
-	}
-	amsg.msg = msg
+	amsg.msg = msg_buf
 
 	return true
 }

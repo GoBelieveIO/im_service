@@ -25,13 +25,31 @@ import "encoding/binary"
 import log "github.com/sirupsen/logrus"
 import "errors"
 import "encoding/hex"
+import "fmt"
 
-//平台号
-const PLATFORM_IOS = 1
-const PLATFORM_ANDROID = 2
-const PLATFORM_WEB = 3
+
 
 const DEFAULT_VERSION = 2
+
+
+//消息标志
+//文本消息 c <-> s
+const MESSAGE_FLAG_TEXT = 0x01
+//消息不持久化 c <-> s
+const MESSAGE_FLAG_UNPERSISTENT = 0x02
+
+//群组消息 c -> s
+const MESSAGE_FLAG_GROUP = 0x04
+
+//离线消息由当前登录的用户在当前设备发出 c <- s
+const MESSAGE_FLAG_SELF = 0x08
+
+//消息由服务器主动推到客户端 c <- s
+const MESSAGE_FLAG_PUSH = 0x10
+
+//超级群消息 c <- s
+const MESSAGE_FLAG_SUPER_GROUP = 0x20
+
 
 const MSG_HEADER_SIZE = 12
 
@@ -45,6 +63,86 @@ var vmessage_creators map[int]VersionMessageCreator = make(map[int]VersionMessag
 
 //true client->server
 var external_messages [256]bool;
+
+
+type Command int
+func (cmd Command) String() string {
+	c := int(cmd)
+	if desc, ok := message_descriptions[c]; ok {
+		return desc
+	} else {
+		return fmt.Sprintf("%d", c)
+	}
+}
+
+type IMessage interface {
+	ToData() []byte
+	FromData(buff []byte) bool
+}
+
+type IVersionMessage interface {
+	ToData(version int) []byte
+	FromData(version int, buff []byte) bool
+}
+
+type Message struct {
+	cmd  int
+	seq  int
+	version int
+	flag int
+	
+	body interface{}
+	body_data []byte
+
+	meta interface{} //non searialize
+}
+
+func (message *Message) ToData() []byte {
+	if message.body_data != nil {
+		return message.body_data
+	} else if message.body != nil {
+		if m, ok := message.body.(IMessage); ok {
+			return m.ToData()
+		}
+		if m, ok := message.body.(IVersionMessage); ok {
+			return m.ToData(message.version)
+		}
+		return nil
+	} else {
+		return nil
+	}
+}
+
+func (message *Message) FromData(buff []byte) bool {
+	cmd := message.cmd
+	if creator, ok := message_creators[cmd]; ok {
+		c := creator()
+		r := c.FromData(buff)
+		message.body = c
+		return r
+	}
+	if creator, ok := vmessage_creators[cmd]; ok {
+		c := creator()
+		r := c.FromData(message.version, buff)
+		message.body = c
+		return r
+	}
+
+	return len(buff) == 0
+}
+
+//保存在磁盘中但不再需要处理的消息
+type IgnoreMessage struct {
+	
+}
+
+func (ignore *IgnoreMessage) ToData() []byte {
+	return nil
+}
+
+func (ignore *IgnoreMessage) FromData(buff []byte) bool {
+	return true
+}
 
 
 func WriteHeader(len int32, seq int32, cmd byte, version byte, flag byte, buffer io.Writer) {

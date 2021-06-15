@@ -125,7 +125,7 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 
 
 func (client *Client) HandlePublishGroup(amsg *AppMessage) {
-	log.Infof("publish message appid:%d group id:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
+	log.Infof("publish message appid:%d group id:%d msgid:%d", amsg.appid, amsg.receiver, amsg.msgid)
 
 	//群发给所有接入服务器
 	s := GetClientSet()
@@ -176,7 +176,7 @@ func (client *Client) HandlePush(pmsg *BatchPushMessage) {
 }
 
 func (client *Client) HandlePublish(amsg *AppMessage) {
-	log.Infof("publish message appid:%d uid:%d msgid:%d cmd:%s", amsg.appid, amsg.receiver, amsg.msgid, Command(amsg.msg.cmd))
+	log.Infof("publish message appid:%d uid:%d msgid:%d", amsg.appid, amsg.receiver, amsg.msgid)
 
 	receiver := &AppUserID{appid:amsg.appid, uid:amsg.receiver}
 	s := FindClientSet(receiver)
@@ -203,7 +203,7 @@ func (client *Client) HandleUnsubscribeRoom(id *AppRoomID) {
 }
 
 func (client *Client) HandlePublishRoom(amsg *AppMessage) {
-	log.Infof("publish room message appid:%d room id:%d cmd:%s", amsg.appid, amsg.receiver, Command(amsg.msg.cmd))
+	log.Infof("publish room message appid:%d room id:%d", amsg.appid, amsg.receiver)
 	receiver := &AppRoomID{appid:amsg.appid, room_id:amsg.receiver}
 	s := FindRoomClientSet(receiver)
 
