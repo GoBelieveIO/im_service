@@ -101,6 +101,8 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	deliver := GetGroupMessageDeliver(msg.receiver)
 	group := deliver.LoadGroup(msg.receiver)
 	if group == nil {
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq), status:ACK_GROUP_NONEXIST}}
+		client.EnqueueMessage(ack)
 		log.Warning("can't find group:", msg.receiver)
 		return
 	}
