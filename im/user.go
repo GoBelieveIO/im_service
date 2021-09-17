@@ -23,7 +23,7 @@ import "fmt"
 import "time"
 import log "github.com/sirupsen/logrus"
 import "github.com/gomodule/redigo/redis"
-import "errors"
+
 
 func GetSyncKey(appid int64, uid int64) int64 {
 	conn := redis_pool.Get()
@@ -102,47 +102,6 @@ func GetUserPreferences(appid int64, uid int64) (int, bool, error) {
 	}	
 
 	return forbidden, notification_on != 0, nil
-}
-
-func LoadUserAccessToken(token string) (int64, int64, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	key := fmt.Sprintf("access_token_%s", token)
-	var uid int64
-	var appid int64
-
-	err := conn.Send("EXISTS", key)
-	if err != nil {
-		return 0, 0, err
-	}
-	err = conn.Send("HMGET", key, "user_id", "app_id")
-	if err != nil {
-		return 0, 0, err
-	}
-	err = conn.Flush()
-	if err != nil {
-		return 0, 0, err
-	}
-
-	exists, err := redis.Bool(conn.Receive())
-	if err != nil {
-		return 0, 0, err
-	}
-	reply, err := redis.Values(conn.Receive())
-	if err != nil {
-		return 0, 0, err
-	}
-	
-	if !exists {
-		return 0, 0, errors.New("token non exists")
-	}
-	_, err = redis.Scan(reply, &uid, &appid)
-	if err != nil {
-		return 0, 0, err
-	}
-	
-	return appid, uid, nil	
 }
 
 func CountUser(appid int64, uid int64) {

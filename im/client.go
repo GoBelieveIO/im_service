@@ -197,7 +197,7 @@ func (client *Client) HandleMessage(msg *Message) {
 
 
 func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
-	appid, uid, err := LoadUserAccessToken(token)
+	appid, uid, err := auth.LoadUserAccessToken(token)
 
 	if err != nil {
 		return 0, 0, 0, false, err

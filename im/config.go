@@ -64,6 +64,9 @@ type Config struct {
 	log_backup          int  //log files
 	log_age             int  //days
 	log_caller          bool
+
+	auth_method         string //jwt or redis
+	jwt_signing_key     []byte
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -187,6 +190,16 @@ func read_cfg(cfg_path string) *Config {
 	config.friend_permission = get_opt_int(app_cfg, "friend_permission") != 0
 	config.enable_blacklist = get_opt_int(app_cfg, "enable_blacklist") != 0
 
+	config.auth_method = get_opt_string(app_cfg, "auth")
+	if config.auth_method == "" {
+		config.auth_method = "redis"
+	}
+
+	if config.auth_method == "jwt" {
+		signing_key := get_string(app_cfg, "jwt_signing_key")	
+		config.jwt_signing_key = []byte(signing_key)
+	}
+	
 	config.log_filename = get_opt_string(app_cfg, "log_filename")
 	config.log_level = get_opt_string(app_cfg, "log_level")
 	config.log_backup = int(get_opt_int(app_cfg, "log_backup"))

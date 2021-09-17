@@ -47,6 +47,7 @@ var (
 	GIT_BRANCH string
 )
 
+var auth Auth;
 //storage server,  peer, group, customer message
 var rpc_clients []*gorpc.DispatcherClient
 
@@ -343,11 +344,16 @@ func main() {
 	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
 	log.Infof("memory limit:%d", config.memory_limit)
 
+	log.Infof("auth method:%s", config.auth_method)
+	log.Infof("jwt sign key:%s", string(config.jwt_signing_key))
+	
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
+
+	auth = NewAuth(config.auth_method)
 
 	rpc_clients = make([]*gorpc.DispatcherClient, 0)
 	for _, addr := range(config.storage_rpc_addrs) {
