@@ -96,7 +96,7 @@ func PublishMessage(appid int64, uid int64, msg *Message) {
 	WriteMessage(mbuffer, msg)
 	msg_buf := mbuffer.Bytes()
 	
-	amsg := &AppMessage{appid:appid, receiver:uid, timestamp:now, msg:msg_buf}
+	amsg := &RouteMessage{appid:appid, receiver:uid, timestamp:now, msg:msg_buf}
 	if msg.meta != nil {
 		meta := msg.meta.(*Metadata)
 		amsg.msgid = meta.sync_key
@@ -113,7 +113,7 @@ func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	WriteMessage(mbuffer, msg)
 	msg_buf := mbuffer.Bytes()
 	
-	amsg := &AppMessage{appid:appid, receiver:group_id, timestamp:now, msg:msg_buf}
+	amsg := &RouteMessage{appid:appid, receiver:group_id, timestamp:now, msg:msg_buf}
 	if msg.meta != nil {
 		meta := msg.meta.(*Metadata)		
 		amsg.msgid = meta.sync_key
@@ -129,7 +129,7 @@ func SendAppGroupMessage(appid int64, group *Group, msg *Message) {
 	WriteMessage(mbuffer, msg)
 	msg_buf := mbuffer.Bytes()
 	
-	amsg := &AppMessage{appid:appid, receiver:group.gid, msgid:0, timestamp:now, msg:msg_buf}
+	amsg := &RouteMessage{appid:appid, receiver:group.gid, msgid:0, timestamp:now, msg:msg_buf}
 	channel := GetGroupChannel(group.gid)
 	channel.PublishGroup(amsg)
 	DispatchMessageToGroup(msg, group, appid, nil)
@@ -141,13 +141,13 @@ func SendAppMessage(appid int64, uid int64, msg *Message) {
 	WriteMessage(mbuffer, msg)
 	msg_buf := mbuffer.Bytes()
 	
-	amsg := &AppMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg_buf}
+	amsg := &RouteMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg_buf}
 	channel := GetChannel(uid)
 	channel.Publish(amsg)
 	DispatchMessageToPeer(msg, uid, appid, nil)
 }
 
-func DispatchAppMessage(amsg *AppMessage) {
+func DispatchAppMessage(amsg *RouteMessage) {
 	now := time.Now().UnixNano()
 	d := now - amsg.timestamp
 
@@ -173,7 +173,7 @@ func DispatchAppMessage(amsg *AppMessage) {
 	DispatchMessageToPeer(msg, amsg.receiver, amsg.appid, nil)
 }
 
-func DispatchRoomMessage(amsg *AppMessage) {
+func DispatchRoomMessage(amsg *RouteMessage) {
 	mbuffer := bytes.NewBuffer(amsg.msg)
 	msg := ReceiveMessage(mbuffer)
 	if msg == nil {
@@ -187,7 +187,7 @@ func DispatchRoomMessage(amsg *AppMessage) {
 	DispatchMessageToRoom(msg, room_id, amsg.appid, nil)
 }
 
-func DispatchGroupMessage(amsg *AppMessage) {
+func DispatchGroupMessage(amsg *RouteMessage) {
 	now := time.Now().UnixNano()
 	d := now - amsg.timestamp
 	mbuffer := bytes.NewBuffer(amsg.msg)

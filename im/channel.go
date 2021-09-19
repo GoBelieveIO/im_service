@@ -43,14 +43,14 @@ type Channel struct {
 	mutex           sync.Mutex
 	subscribers     map[int64]*Subscriber
 
-	dispatch        func(*AppMessage)
-	dispatch_group  func(*AppMessage)
-	dispatch_room   func(*AppMessage)
+	dispatch        func(*RouteMessage)
+	dispatch_group  func(*RouteMessage)
+	dispatch_room   func(*RouteMessage)
 
 }
 
-func NewChannel(addr string, f func(*AppMessage), 
-	f2 func(*AppMessage), f3 func(*AppMessage)) *Channel {
+func NewChannel(addr string, f func(*RouteMessage), 
+	f2 func(*RouteMessage), f3 func(*RouteMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
@@ -169,12 +169,12 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
 	}
 }
 
-func (channel *Channel) Publish(amsg *AppMessage) {
+func (channel *Channel) Publish(amsg *RouteMessage) {
 	msg := &Message{cmd: MSG_PUBLISH, body: amsg}
 	channel.wt <- msg
 }
 
-func (channel *Channel) PublishGroup(amsg *AppMessage) {
+func (channel *Channel) PublishGroup(amsg *RouteMessage) {
 	msg := &Message{cmd: MSG_PUBLISH_GROUP, body: amsg}
 	channel.wt <- msg
 }
@@ -254,7 +254,7 @@ func (channel *Channel) UnsubscribeRoom(appid int64, room_id int64) {
 	}
 }
 
-func (channel *Channel) PublishRoom(amsg *AppMessage) {
+func (channel *Channel) PublishRoom(amsg *RouteMessage) {
 	msg := &Message{cmd: MSG_PUBLISH_ROOM, body: amsg}
 	channel.wt <- msg
 }
@@ -309,17 +309,17 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 			}
 			log.Info("channel recv message:", Command(msg.cmd))
 			if msg.cmd == MSG_PUBLISH {
-				amsg := msg.body.(*AppMessage)
+				amsg := msg.body.(*RouteMessage)
 				if channel.dispatch != nil {
 					channel.dispatch(amsg)
 				}
 			} else if msg.cmd == MSG_PUBLISH_ROOM {
-				amsg := msg.body.(*AppMessage)
+				amsg := msg.body.(*RouteMessage)
 				if channel.dispatch_room != nil {
 					channel.dispatch_room(amsg)
 				}
 			} else if msg.cmd == MSG_PUBLISH_GROUP {
-				amsg := msg.body.(*AppMessage)
+				amsg := msg.body.(*RouteMessage)
 				if channel.dispatch_group != nil {
 					channel.dispatch_group(amsg)
 				}

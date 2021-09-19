@@ -94,9 +94,9 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_UNSUBSCRIBE:
 		client.HandleUnsubscribe(msg.body.(*AppUserID))
 	case MSG_PUBLISH:
-		client.HandlePublish(msg.body.(*AppMessage))
+		client.HandlePublish(msg.body.(*RouteMessage))
 	case MSG_PUBLISH_GROUP:
-		client.HandlePublishGroup(msg.body.(*AppMessage))
+		client.HandlePublishGroup(msg.body.(*RouteMessage))
 	case MSG_PUSH:
 		client.HandlePush(msg.body.(*BatchPushMessage))
 	case MSG_SUBSCRIBE_ROOM:
@@ -104,7 +104,7 @@ func (client *Client) HandleMessage(msg *Message) {
 	case MSG_UNSUBSCRIBE_ROOM:
 		client.HandleUnsubscribeRoom(msg.body.(*AppRoomID))
 	case MSG_PUBLISH_ROOM:
-		client.HandlePublishRoom(msg.body.(*AppMessage))
+		client.HandlePublishRoom(msg.body.(*RouteMessage))
 	default:
 		log.Warning("unknown message cmd:", msg.cmd)
 	}
@@ -124,7 +124,7 @@ func (client *Client) HandleUnsubscribe(id *AppUserID) {
 }
 
 
-func (client *Client) HandlePublishGroup(amsg *AppMessage) {
+func (client *Client) HandlePublishGroup(amsg *RouteMessage) {
 	log.Infof("publish message appid:%d group id:%d msgid:%d", amsg.appid, amsg.receiver, amsg.msgid)
 
 	//群发给所有接入服务器
@@ -175,7 +175,7 @@ func (client *Client) HandlePush(pmsg *BatchPushMessage) {
 	}
 }
 
-func (client *Client) HandlePublish(amsg *AppMessage) {
+func (client *Client) HandlePublish(amsg *RouteMessage) {
 	log.Infof("publish message appid:%d uid:%d msgid:%d", amsg.appid, amsg.receiver, amsg.msgid)
 
 	receiver := &AppUserID{appid:amsg.appid, uid:amsg.receiver}
@@ -202,7 +202,7 @@ func (client *Client) HandleUnsubscribeRoom(id *AppRoomID) {
 	route.RemoveRoomID(id.room_id)
 }
 
-func (client *Client) HandlePublishRoom(amsg *AppMessage) {
+func (client *Client) HandlePublishRoom(amsg *RouteMessage) {
 	log.Infof("publish room message appid:%d room id:%d", amsg.appid, amsg.receiver)
 	receiver := &AppRoomID{appid:amsg.appid, room_id:amsg.receiver}
 	s := FindRoomClientSet(receiver)

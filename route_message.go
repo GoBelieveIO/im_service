@@ -36,14 +36,14 @@ const MSG_PUBLISH_ROOM = 138
 func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(SubscribeMessage)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
-	message_creators[MSG_PUBLISH] = func()IMessage{return new(AppMessage)}
+	message_creators[MSG_PUBLISH] = func()IMessage{return new(RouteMessage)}
 
 	message_creators[MSG_PUSH] = func()IMessage{return new(BatchPushMessage)}	
-	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(AppMessage)}
+	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(RouteMessage)}
 	
 	message_creators[MSG_SUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
 	message_creators[MSG_UNSUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
-	message_creators[MSG_PUBLISH_ROOM] = func()IMessage{return new(AppMessage)}
+	message_creators[MSG_PUBLISH_ROOM] = func()IMessage{return new(RouteMessage)}
 
 	message_descriptions[MSG_SUBSCRIBE] = "MSG_SUBSCRIBE"
 	message_descriptions[MSG_UNSUBSCRIBE] = "MSG_UNSUBSCRIBE"
@@ -136,7 +136,7 @@ func (amsg *BatchPushMessage) FromData(buff []byte) bool {
 }
 
 
-type AppMessage struct {
+type RouteMessage struct {
 	appid    int64
 	receiver int64
 	msgid    int64
@@ -147,7 +147,7 @@ type AppMessage struct {
 }
 
 
-func (amsg *AppMessage) ToData() []byte {
+func (amsg *RouteMessage) ToData() []byte {
 	if amsg.msg == nil {
 		return nil
 	}
@@ -167,7 +167,7 @@ func (amsg *AppMessage) ToData() []byte {
 	return buf
 }
 
-func (amsg *AppMessage) FromData(buff []byte) bool {
+func (amsg *RouteMessage) FromData(buff []byte) bool {
 	if len(buff) < 42 {
 		return false
 	}

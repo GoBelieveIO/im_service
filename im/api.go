@@ -625,7 +625,7 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request) {
 	mbuffer := new(bytes.Buffer)
 	WriteMessage(mbuffer, msg)
 	msg_buf := mbuffer.Bytes()
-	amsg := &AppMessage{appid:appid, receiver:room_id, msg:msg_buf}
+	amsg := &RouteMessage{appid:appid, receiver:room_id, msg:msg_buf}
 	channel := GetRoomChannel(room_id)
 	channel.PublishRoom(amsg)
 
