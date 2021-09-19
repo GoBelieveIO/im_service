@@ -64,13 +64,13 @@ func (client *CustomerClient) HandleCustomerSupportMessage(msg *Message) {
 		return
 	}
 	
-	msgid, prev_msgid, err := SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
+	msgid, prev_msgid, err := rpc_storage.SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer support message err:", err)
 		return
 	}
 
-	msgid2, prev_msgid2, err := SaveMessage(client.appid, cm.seller_id, client.device_ID, msg)
+	msgid2, prev_msgid2, err := rpc_storage.SaveMessage(client.appid, cm.seller_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer support message err:", err)
 		return
@@ -130,13 +130,13 @@ func (client *CustomerClient) HandleCustomerMessage(msg *Message) {
 		return
 	}
 	
-	msgid, prev_msgid, err := SaveMessage(config.kefu_appid, cm.seller_id, client.device_ID, msg)
+	msgid, prev_msgid, err := rpc_storage.SaveMessage(config.kefu_appid, cm.seller_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return
 	}
 
-	msgid2, prev_msgid2, err := SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
+	msgid2, prev_msgid2, err := rpc_storage.SaveMessage(cm.customer_appid, cm.customer_id, client.device_ID, msg)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return

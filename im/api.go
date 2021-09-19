@@ -36,7 +36,7 @@ func SendGroupNotification(appid int64, gid int64,
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
 
 	for member := range(members) {
-		msgid, _, err := SaveMessage(appid, member, 0, msg)
+		msgid, _, err := rpc_storage.SaveMessage(appid, member, 0, msg)
 		if err != nil {
 			break
 		}
@@ -52,7 +52,7 @@ func SendSuperGroupNotification(appid int64, gid int64,
 
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
 
-	msgid, _, err := SaveGroupMessage(appid, gid, 0, msg)
+	msgid, _, err := rpc_storage.SaveGroupMessage(appid, gid, 0, msg)
 
 	if err != nil {
 		log.Errorf("save group message: %d err:%s", gid, err)
@@ -76,7 +76,7 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 		return
 	}
 	if group.super {
-		msgid, _, err := SaveGroupMessage(appid, im.receiver, 0, m)
+		msgid, _, err := rpc_storage.SaveGroupMessage(appid, im.receiver, 0, m)
 		if err != nil {
 			return
 		}
@@ -113,13 +113,13 @@ func SendGroupIMMessage(im *IMMessage, appid int64) {
 
 func SendIMMessage(im *IMMessage, appid int64) {
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: im}
-	msgid, _, err := SaveMessage(appid, im.receiver, 0, m)
+	msgid, _, err := rpc_storage.SaveMessage(appid, im.receiver, 0, m)
 	if err != nil {
 		return
 	}
 
 	//保存到发送者自己的消息队列
-	msgid2, _, err := SaveMessage(appid, im.sender, 0, m)
+	msgid2, _, err := rpc_storage.SaveMessage(appid, im.sender, 0, m)
 	if err != nil {
 		return
 	}
@@ -339,22 +339,12 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 	}
 	log.Infof("appid:%d uid:%d limit:%d", appid, uid, limit)
 
-	rpc := GetStorageRPCClient(uid)
-
-	s := &HistoryRequest{
-		AppID:appid, 
-		Uid:uid, 
-		Limit:int32(limit),
-	}
-
-	resp, err := rpc.Call("GetLatestMessage", s)
+	messages, err := rpc_storage.GetLatestMessage(appid, uid, int32(limit))
 	if err != nil {
 		log.Warning("get latest message err:", err)
 		WriteHttpError(400, "internal error", w)		
-		return
+		return		
 	}
-
-	messages := resp.([]*HistoryMessage)
 	if len(messages) > 0 {
 		//reverse
 		size := len(messages)
@@ -434,23 +424,7 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-
-	rpc := GetStorageRPCClient(uid)
-
-	s := &SyncHistory{
-		AppID:appid, 
-		Uid:uid, 
-		DeviceID:0, 
-		LastMsgID:msgid,
-	}
-
-	resp, err := rpc.Call("SyncMessage", s)
-	if err != nil {
-		log.Warning("sync message err:", err)
-		return
-	}
-
-	ph := resp.(*PeerHistoryMessage)
+	ph, err := rpc_storage.SyncMessage(appid, uid, 0, msgid)
 	messages := ph.Messages
 
 	if len(messages) > 0 {
@@ -526,18 +500,12 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request){
 	if err != nil || last_id == 0 {
 		last_id = GetSyncKey(appid, uid)		
 	}
-	sync_key := SyncHistory{AppID:appid, Uid:uid, LastMsgID:last_id}
-	
-	dc := GetStorageRPCClient(uid)
-
-	resp, err := dc.Call("GetNewCount", sync_key)
-
+	count, err := rpc_storage.GetNewCount(appid, uid, last_id)
 	if err != nil {
 		log.Warning("get new count err:", err)
 		WriteHttpError(500, "server internal error", w)
 		return
 	}
-	count := resp.(int64)
 
 	log.Infof("get offline appid:%d uid:%d sync_key:%d count:%d", appid, uid, last_id, count)
 	obj := make(map[string]interface{})
@@ -600,7 +568,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
 	sys := &SystemMessage{string(body)}
 	msg := &Message{cmd:MSG_SYSTEM, body:sys}
 
-	msgid, _, err := SaveMessage(appid, uid, 0, msg)
+	msgid, _, err := rpc_storage.SaveMessage(appid, uid, 0, msg)
 	if err != nil {
 		WriteHttpError(500, "internal server error", w)
 		return
@@ -726,14 +694,14 @@ func SendCustomerSupportMessage(w http.ResponseWriter, req *http.Request) {
 	m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
 
 
-	msgid, _, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
+	msgid, _, err := rpc_storage.SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
 		return
 	}
 	
-	msgid2, _, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
+	msgid2, _, err := rpc_storage.SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
@@ -814,13 +782,13 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 	m := &Message{cmd:MSG_CUSTOMER, body:cm}
 
 
-	msgid, _, err := SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
+	msgid, _, err := rpc_storage.SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
 		return
 	}
-	msgid2, _, err := SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
+	msgid2, _, err := rpc_storage.SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)

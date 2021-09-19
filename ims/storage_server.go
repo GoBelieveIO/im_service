@@ -26,11 +26,11 @@ import "runtime"
 import "flag"
 import "math/rand"
 import "os"
+import "net/rpc"
 import "net/http"
 import "os/signal"
 import "syscall"
 import "github.com/gomodule/redigo/redis"
-import "github.com/valyala/gorpc"
 import "gopkg.in/natefinch/lumberjack.v2"
 import log "github.com/sirupsen/logrus"
 
@@ -178,6 +178,19 @@ func StartHttpServer(addr string) {
 
 
 func ListenRPCClient() {
+	rpc_storage := new(RPCStorage)
+	rpc.Register(rpc_storage)
+	rpc.HandleHTTP()
+
+	l, err := net.Listen("tcp", config.rpc_listen)
+	if err != nil {
+		log.Fatalf("can't start rpc server:%s", err)
+	}
+
+	http.Serve(l, nil)
+	
+	
+	/*
 	dispatcher := gorpc.NewDispatcher()
 	dispatcher.AddFunc("SyncMessage", SyncMessage)
 	dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessage)
@@ -194,7 +207,7 @@ func ListenRPCClient() {
 
 	if err := s.Serve(); err != nil {
 		log.Fatalf("Cannot start rpc server: %s", err)
-	}
+	}*/
 }
 
 

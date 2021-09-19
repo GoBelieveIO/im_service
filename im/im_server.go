@@ -35,9 +35,11 @@ import "sync/atomic"
 import "github.com/gomodule/redigo/redis"
 import "gopkg.in/natefinch/lumberjack.v2"
 import log "github.com/sirupsen/logrus"
-import "github.com/valyala/gorpc"
 import "github.com/importcjj/sensitive"
 import "github.com/bitly/go-simplejson"
+
+
+
 
 var (
     VERSION    string
@@ -48,11 +50,8 @@ var (
 )
 
 var auth Auth;
-//storage server,  peer, group, customer message
-var rpc_clients []*gorpc.DispatcherClient
 
-//super group storage server
-var group_rpc_clients []*gorpc.DispatcherClient
+var rpc_storage *RPCStorage
 
 //route server
 var route_channels []*Channel
@@ -117,6 +116,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		},
 	}
 }
+
 
 //过滤敏感词
 func FilterDirtyWord(msg *IMMessage) {
@@ -355,51 +355,8 @@ func main() {
 
 	auth = NewAuth(config.auth_method)
 
-	rpc_clients = make([]*gorpc.DispatcherClient, 0)
-	for _, addr := range(config.storage_rpc_addrs) {
-		c := &gorpc.Client{
-			Conns: 4,
-			Addr: addr,
-		}
-		c.Start()
-
-		dispatcher := gorpc.NewDispatcher()
-		dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
-		dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
-		dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
-		dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
-		dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
-		dispatcher.AddFunc("GetLatestMessage", GetLatestMessageInterface)
-
-		dc := dispatcher.NewFuncClient(c)
-
-		rpc_clients = append(rpc_clients, dc)
-	}
-
-	if len(config.group_storage_rpc_addrs) > 0 {
-		group_rpc_clients = make([]*gorpc.DispatcherClient, 0)
-		for _, addr := range(config.group_storage_rpc_addrs) {
-			c := &gorpc.Client{
-				Conns: 4,
-				Addr: addr,
-			}
-			c.Start()
-
-			dispatcher := gorpc.NewDispatcher()
-			dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
-			dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
-			dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
-			dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
-			dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
-
-			dc := dispatcher.NewFuncClient(c)
-
-			group_rpc_clients = append(group_rpc_clients, dc)
-		}
-	} else {
-		group_rpc_clients = rpc_clients
-	}
-
+	rpc_storage = NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
+	
 	route_channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
 		channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)

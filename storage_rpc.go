@@ -44,20 +44,6 @@ type GroupMessage struct {
 	Raw       []byte
 }
 
-type HistoryMessage struct {
-	MsgID     int64
-	DeviceID  int64   //消息发送者所在的设备ID
-	Cmd       int32
-	Raw       []byte
-}
-
-type PeerHistoryMessage struct {
-	Messages []*HistoryMessage
-	LastMsgID int64
-	HasMore   bool
-}
-
-type GroupHistoryMessage PeerHistoryMessage
 
 type SyncHistory struct {
 	AppID     int64
@@ -81,31 +67,32 @@ type HistoryRequest struct {
 	Limit     int32
 }
 
-func SyncMessageInterface(addr string, sync_key *SyncHistory) *PeerHistoryMessage {
-	return nil
+
+type HistoryMessageID struct {
+	MsgID     int64
+	PrevMsgID int64
 }
 
-func SyncGroupMessageInterface(addr string , sync_key *SyncGroupHistory) *GroupHistoryMessage {
-	return nil
+type GroupHistoryMessageID struct {
+	MessageIDs []*HistoryMessageID
 }
 
-func SavePeerMessageInterface(addr string, m *PeerMessage) ([2]int64, error) {
-	return [2]int64{}, nil
+type HistoryMessage struct {
+	MsgID     int64
+	DeviceID  int64   //消息发送者所在的设备ID
+	Cmd       int32
+	Raw       []byte
 }
 
-func SavePeerGroupMessageInterface(addr string, m *PeerGroupMessage) ([]int64, error) {
-	return nil, nil
+type PeerHistoryMessage struct {
+	Messages []*HistoryMessage
+	LastMsgID int64
+	HasMore   bool
 }
 
-func SaveGroupMessageInterface(addr string, m *GroupMessage) ([2]int64, error) {
-	return [2]int64{}, nil
+type GroupHistoryMessage PeerHistoryMessage
+
+type LatestMessage struct {
+	Messages []*HistoryMessage
 }
 
-//获取是否接收到新消息,只会返回0/1
-func GetNewCountInterface(addr string, s *SyncHistory) (int64, error) {
-	return 0, nil
-}
-
-func GetLatestMessageInterface(addr string, r *HistoryRequest) []*HistoryMessage {
-	return nil
-}

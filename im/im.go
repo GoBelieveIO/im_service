@@ -21,35 +21,7 @@ package main
 import "time"
 import "bytes"
 import "sync/atomic"
-import "github.com/valyala/gorpc"
 import log "github.com/sirupsen/logrus"
-
-//个人消息／普通群消息／客服消息
-func GetStorageRPCClient(uid int64) *gorpc.DispatcherClient {
-	if uid < 0 {
-		uid = -uid
-	}
-	index := uid%int64(len(rpc_clients))
-	return rpc_clients[index]
-}
-
-func GetStorageRPCIndex(uid int64) int64 {
-	if uid < 0 {
-		uid = -uid
-	}
-	index := uid%int64(len(rpc_clients))
-	return index
-}
-
-
-//超级群消息
-func GetGroupStorageRPCClient(group_id int64) *gorpc.DispatcherClient {
-	if group_id < 0 {
-		group_id = -group_id
-	}
-	index := group_id%int64(len(group_rpc_clients))
-	return group_rpc_clients[index]
-}
 
 func GetChannel(uid int64) *Channel{
 	if uid < 0 {
@@ -83,79 +55,6 @@ func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
 	deliver_index := atomic.AddUint64(&current_deliver_index, 1)
 	index := deliver_index%uint64(len(group_message_delivers))
 	return group_message_delivers[index]
-}
-
-func SaveGroupMessage(appid int64, gid int64, device_id int64, msg *Message) (int64, int64, error) {
-	dc := GetGroupStorageRPCClient(gid)
-	
-	gm := &GroupMessage{
-		AppID:appid,
-		GroupID:gid,
-		DeviceID:device_id,
-		Cmd:int32(msg.cmd),
-		Raw:msg.ToData(),
-	}
-	resp, err := dc.Call("SaveGroupMessage", gm)
-	if err != nil {
-		log.Warning("save group message err:", err)
-		return 0, 0, err
-	}
-	r := resp.([2]int64)
-	msgid := r[0]
-	prev_msgid := r[1]
-	log.Infof("save group message:%d %d %d\n", appid, gid, msgid)
-	return msgid, prev_msgid, nil
-}
-
-func SavePeerGroupMessage(appid int64, members []int64, device_id int64, m *Message) ([]int64, error) {
-
-	if len(members) == 0 {
-		return nil, nil
-	}
-	
-	dc := GetStorageRPCClient(members[0])
-	
-	pm := &PeerGroupMessage{
-		AppID:appid,
-		Members:members,
-		DeviceID:device_id,
-		Cmd:int32(m.cmd),
-		Raw:m.ToData(),
-	}
-
-	resp, err := dc.Call("SavePeerGroupMessage", pm)
-	if err != nil {
-		log.Error("save peer group message err:", err)
-		return nil, err
-	}
-
-	r := resp.([]int64)
-	log.Infof("save peer group message:%d %v %d %v\n", appid, members, device_id, r)
-	return r, nil
-}
-
-func SaveMessage(appid int64, uid int64, device_id int64, m *Message) (int64, int64, error) {
-	dc := GetStorageRPCClient(uid)
-	
-	pm := &PeerMessage{
-		AppID:appid,
-		Uid:uid,
-		DeviceID:device_id,
-		Cmd:int32(m.cmd),
-		Raw:m.ToData(),
-	}
-
-	resp, err := dc.Call("SavePeerMessage", pm)
-	if err != nil {
-		log.Error("save peer message err:", err)
-		return 0, 0, err
-	}
-
-	r := resp.([2]int64)
-	msgid := r[0]
-	prev_msgid := r[1]
-	log.Infof("save peer message:%d %d %d %d\n", appid, uid, device_id, msgid)
-	return msgid, prev_msgid, nil
 }
 
 //群消息通知(apns, gcm...)

@@ -67,27 +67,14 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 		last_id = GetSyncKey(client.appid, client.uid)
 	}
 
-	rpc := GetStorageRPCClient(client.uid)
+	log.Infof("syncing message:%d %d %d %d", client.appid, client.uid, client.device_ID, last_id)	
 
-	s := &SyncHistory{
-		AppID:client.appid, 
-		Uid:client.uid, 
-		DeviceID:client.device_ID, 
-		LastMsgID:last_id,
-	}
-
-	log.Infof("syncing message:%d %d %d %d", client.appid, client.uid, client.device_ID, last_id)
-
-	resp, err := rpc.Call("SyncMessage", s)
+	ph, err := rpc_storage.SyncMessage(client.appid, client.uid, client.device_ID, last_id)
 	if err != nil {
 		log.Warning("sync message err:", err)
 		return
 	}
-	client.sync_count += 1
-	
-	ph := resp.(*PeerHistoryMessage)
 	messages := ph.Messages
-
 	msgs := make([]*Message, 0, len(messages) + 2)
 	
 	sk := &SyncKey{last_id}
@@ -186,14 +173,14 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version:DEFAULT_VERSION, body: msg}
 
-	msgid, prev_msgid, err := SaveMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := rpc_storage.SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
 		return
 	}
 
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
-	msgid2, prev_msgid2, err := SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	msgid2, prev_msgid2, err := rpc_storage.SaveMessage(client.appid, msg.sender, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:", msg.sender, msg.receiver, err)
 		return
