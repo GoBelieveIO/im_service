@@ -35,14 +35,14 @@ const MSG_PUBLISH_ROOM = 138
 
 func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(SubscribeMessage)}
-	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(AppUserID)}
+	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(RouteUserID)}
 	message_creators[MSG_PUBLISH] = func()IMessage{return new(RouteMessage)}
 
 	message_creators[MSG_PUSH] = func()IMessage{return new(BatchPushMessage)}	
 	message_creators[MSG_PUBLISH_GROUP] = func()IMessage{return new(RouteMessage)}
 	
-	message_creators[MSG_SUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
-	message_creators[MSG_UNSUBSCRIBE_ROOM] = func()IMessage{return new(AppRoomID)}
+	message_creators[MSG_SUBSCRIBE_ROOM] = func()IMessage{return new(RouteRoomID)}
+	message_creators[MSG_UNSUBSCRIBE_ROOM] = func()IMessage{return new(RouteRoomID)}
 	message_creators[MSG_PUBLISH_ROOM] = func()IMessage{return new(RouteMessage)}
 
 	message_descriptions[MSG_SUBSCRIBE] = "MSG_SUBSCRIBE"
@@ -223,12 +223,12 @@ func (sub *SubscribeMessage) FromData(buff []byte) bool {
 }
 
 
-type AppUserID struct {
+type RouteUserID struct {
 	appid    int64
 	uid      int64
 }
 
-func (id *AppUserID) ToData() []byte {
+func (id *RouteUserID) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, id.appid)
 	binary.Write(buffer, binary.BigEndian, id.uid)
@@ -236,7 +236,7 @@ func (id *AppUserID) ToData() []byte {
 	return buf
 }
 
-func (id *AppUserID) FromData(buff []byte) bool {
+func (id *RouteUserID) FromData(buff []byte) bool {
 	if len(buff) < 16 {
 		return false
 	}
@@ -248,12 +248,12 @@ func (id *AppUserID) FromData(buff []byte) bool {
 	return true
 }
 
-type AppRoomID struct {
+type RouteRoomID struct {
 	appid    int64
 	room_id      int64
 }
 
-func (id *AppRoomID) ToData() []byte {
+func (id *RouteRoomID) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, id.appid)
 	binary.Write(buffer, binary.BigEndian, id.room_id)
@@ -261,7 +261,7 @@ func (id *AppRoomID) ToData() []byte {
 	return buf
 }
 
-func (id *AppRoomID) FromData(buff []byte) bool {
+func (id *RouteRoomID) FromData(buff []byte) bool {
 	if len(buff) < 16 {
 		return false
 	}

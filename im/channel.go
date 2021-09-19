@@ -158,7 +158,7 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
 	log.Info("unsub count:", count, online_count)
 	if count == 1 {
 		//用户断开全部连接
-		id := &AppUserID{appid: appid, uid: uid}
+		id := &RouteUserID{appid: appid, uid: uid}
 		msg := &Message{cmd: MSG_UNSUBSCRIBE, body: id}
 		channel.wt <- msg
 	} else if count > 1 && online_count == 1 && online {
@@ -220,14 +220,14 @@ func (channel *Channel) RemoveSubscribeRoom(appid, room_id int64) int {
 	return count
 }
 
-func (channel *Channel) GetAllRoomSubscriber() []*AppRoomID {
+func (channel *Channel) GetAllRoomSubscriber() []*RouteRoomID {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 
-	subs := make([]*AppRoomID, 0, 100)
+	subs := make([]*RouteRoomID, 0, 100)
 	for appid, s := range channel.subscribers {
 		for room_id, _ := range s.room_ids {
-			id := &AppRoomID{appid: appid, room_id: room_id}
+			id := &RouteRoomID{appid: appid, room_id: room_id}
 			subs = append(subs, id)
 		}
 	}
@@ -238,7 +238,7 @@ func (channel *Channel) SubscribeRoom(appid int64, room_id int64) {
 	count := channel.AddSubscribeRoom(appid, room_id)
 	log.Info("sub room count:", count)
 	if count == 0 {
-		id := &AppRoomID{appid: appid, room_id: room_id}
+		id := &RouteRoomID{appid: appid, room_id: room_id}
 		msg := &Message{cmd: MSG_SUBSCRIBE_ROOM, body: id}
 		channel.wt <- msg
 	}
@@ -248,7 +248,7 @@ func (channel *Channel) UnsubscribeRoom(appid int64, room_id int64) {
 	count := channel.RemoveSubscribeRoom(appid, room_id)
 	log.Info("unsub room count:", count)
 	if count == 1 {
-		id := &AppRoomID{appid: appid, room_id: room_id}
+		id := &RouteRoomID{appid: appid, room_id: room_id}
 		msg := &Message{cmd: MSG_UNSUBSCRIBE_ROOM, body: id}
 		channel.wt <- msg
 	}

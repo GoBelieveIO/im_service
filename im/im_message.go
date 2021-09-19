@@ -75,7 +75,6 @@ const MSG_NOTIFICATION = 36
 const MSG_METADATA = 37
 
 
-const MSG_VOIP_CONTROL = 64
 
 
 //im实例使用
@@ -126,8 +125,6 @@ func init() {
 	
 	message_creators[MSG_NOTIFICATION] = func()IMessage{return new(SystemMessage)}
 	message_creators[MSG_METADATA] = func()IMessage{return new(Metadata)}
-	
-	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
 	message_creators[MSG_AUTH_STATUS] = func()IMessage{return new(AuthenticationStatus)}
 
@@ -161,7 +158,6 @@ func init() {
 
 	message_descriptions[MSG_NOTIFICATION] = "MSG_NOTIFICATION"
 	message_descriptions[MSG_METADATA] = "MSG_METADATA"	
-	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 
 	message_descriptions[MSG_PENDING_GROUP_MESSAGE] = "MSG_PENDING_GROUP_MESSAGE"	
 	
@@ -325,34 +321,6 @@ func (room *Room) RoomID() int64 {
 	return int64(*room)
 }
 
-
-
-type VOIPControl struct {
-	sender   int64
-	receiver int64
-	content  []byte
-}
-
-func (ctl *VOIPControl) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, ctl.sender)
-	binary.Write(buffer, binary.BigEndian, ctl.receiver)
-	buffer.Write([]byte(ctl.content))
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (ctl *VOIPControl) FromData(buff []byte) bool {
-	if len(buff) <= 16 {
-		return false
-	}
-
-	buffer := bytes.NewBuffer(buff[:16])
-	binary.Read(buffer, binary.BigEndian, &ctl.sender)
-	binary.Read(buffer, binary.BigEndian, &ctl.receiver)
-	ctl.content = buff[16:]
-	return true
-}
 
 
 type SyncKey struct {

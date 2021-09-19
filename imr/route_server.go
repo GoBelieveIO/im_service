@@ -76,7 +76,7 @@ func GetClientSet() ClientSet {
 	return s
 }
 
-func FindClientSet(id *AppUserID) ClientSet {
+func FindClientSet(id *RouteUserID) ClientSet {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -91,7 +91,7 @@ func FindClientSet(id *AppUserID) ClientSet {
 }
 
 
-func FindRoomClientSet(id *AppRoomID) ClientSet {
+func FindRoomClientSet(id *RouteRoomID) ClientSet {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -109,7 +109,7 @@ func IsUserOnline(appid, uid int64) bool {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	id := &AppUserID{appid:appid, uid:uid}
+	id := &RouteUserID{appid:appid, uid:uid}
 
 	for c := range(clients) {
 		if c.IsAppUserOnline(id) {
