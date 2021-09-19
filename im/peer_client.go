@@ -21,6 +21,7 @@ package main
 import "time"
 import "sync/atomic"
 import log "github.com/sirupsen/logrus"
+import "github.com/GoBelieveIO/im_service/storage"
 
 type PeerClient struct {
 	*Connection
@@ -116,7 +117,7 @@ func (client *PeerClient) HandleSyncKey(sync_key *SyncKey) {
 	last_id := sync_key.sync_key
 	log.Infof("sync key:%d %d %d %d", client.appid, client.uid, client.device_ID, last_id)
 	if last_id > 0 {
-		s := &SyncHistory{
+		s := &storage.SyncHistory{
 			AppID:client.appid, 
 			Uid:client.uid, 
 			LastMsgID:last_id,

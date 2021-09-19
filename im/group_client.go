@@ -22,6 +22,7 @@ import "time"
 import "sync/atomic"
 import "errors"
 import log "github.com/sirupsen/logrus"
+import "github.com/GoBelieveIO/im_service/storage"
 
 type GroupClient struct {
 	*Connection
@@ -214,7 +215,7 @@ func (client *GroupClient) HandleGroupSyncKey(group_sync_key *GroupSyncKey) {
 
 	log.Info("group sync key:", group_sync_key.sync_key, last_id)
 	if last_id > 0 {
-		s := &SyncGroupHistory{
+		s := &storage.SyncGroupHistory{
 			AppID:client.appid, 
 			Uid:client.uid, 
 			GroupID:group_id, 

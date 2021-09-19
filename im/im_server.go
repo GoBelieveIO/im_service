@@ -37,8 +37,7 @@ import "gopkg.in/natefinch/lumberjack.v2"
 import log "github.com/sirupsen/logrus"
 import "github.com/importcjj/sensitive"
 import "github.com/bitly/go-simplejson"
-
-
+import "github.com/GoBelieveIO/im_service/storage"
 
 
 var (
@@ -67,8 +66,8 @@ var redis_pool *redis.Pool
 var config *Config
 var server_summary *ServerSummary
 
-var sync_c chan *SyncHistory
-var group_sync_c chan *SyncGroupHistory
+var sync_c chan *storage.SyncHistory
+var group_sync_c chan *storage.SyncGroupHistory
 
 var relationship_pool *RelationshipPool
 
@@ -83,8 +82,8 @@ var low_memory int32//低内存状态
 func init() {
 	app_route = NewAppRoute()
 	server_summary = NewServerSummary()
-	sync_c = make(chan *SyncHistory, 100)
-	group_sync_c = make(chan *SyncGroupHistory, 100)
+	sync_c = make(chan *storage.SyncHistory, 100)
+	group_sync_c = make(chan *storage.SyncGroupHistory, 100)
 }
 
 

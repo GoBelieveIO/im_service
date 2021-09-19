@@ -33,7 +33,7 @@ import "syscall"
 import "github.com/gomodule/redigo/redis"
 import "gopkg.in/natefinch/lumberjack.v2"
 import log "github.com/sirupsen/logrus"
-
+import rpc_storage "github.com/GoBelieveIO/im_service/storage"
 
 var (
     VERSION    string
@@ -178,7 +178,8 @@ func StartHttpServer(addr string) {
 
 
 func ListenRPCClient() {
-	rpc_storage := new(RPCStorage)
+	var rpc_storage rpc_storage.RPCStorage
+	rpc_storage = new(RPCStorage)
 	rpc.Register(rpc_storage)
 	rpc.HandleHTTP()
 
@@ -188,26 +189,7 @@ func ListenRPCClient() {
 	}
 
 	http.Serve(l, nil)
-	
-	
-	/*
-	dispatcher := gorpc.NewDispatcher()
-	dispatcher.AddFunc("SyncMessage", SyncMessage)
-	dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessage)
-	dispatcher.AddFunc("SavePeerMessage", SavePeerMessage)
-	dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessage)
-	dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessage)
-	dispatcher.AddFunc("GetNewCount", GetNewCount)
-	dispatcher.AddFunc("GetLatestMessage", GetLatestMessage)
-	
-	s := &gorpc.Server{
-		Addr: config.rpc_listen,
-		Handler: dispatcher.NewHandlerFunc(),
-	}
 
-	if err := s.Serve(); err != nil {
-		log.Fatalf("Cannot start rpc server: %s", err)
-	}*/
 }
 
 

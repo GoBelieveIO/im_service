@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package storage
 
 type PeerMessage struct {
 	AppID     int64
@@ -96,3 +96,21 @@ type LatestMessage struct {
 	Messages []*HistoryMessage
 }
 
+
+type RPCStorage interface {
+	SyncMessage(sync_key *SyncHistory, result *PeerHistoryMessage) error
+
+	SyncGroupMessage(sync_key *SyncGroupHistory, result *GroupHistoryMessage) error
+
+	SavePeerMessage(m *PeerMessage, result *HistoryMessageID) error
+
+	SavePeerGroupMessage(m *PeerGroupMessage, result *GroupHistoryMessageID) error
+
+	SaveGroupMessage(m *GroupMessage, result *HistoryMessageID) error
+
+	GetNewCount(sync_key *SyncHistory, new_count *int64) error
+
+	GetLatestMessage(r *HistoryRequest, l *LatestMessage) error
+
+	Ping(int, *int) error
+}
