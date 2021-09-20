@@ -124,26 +124,12 @@ func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 }
 
 func SendAppGroupMessage(appid int64, group *Group, msg *Message) {
-	now := time.Now().UnixNano()
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, msg)
-	msg_buf := mbuffer.Bytes()
-	
-	amsg := &RouteMessage{appid:appid, receiver:group.gid, msgid:0, timestamp:now, msg:msg_buf}
-	channel := GetGroupChannel(group.gid)
-	channel.PublishGroup(amsg)
+	PublishGroupMessage(appid, group.gid, msg)
 	DispatchMessageToGroup(msg, group, appid, nil)
 }
 
 func SendAppMessage(appid int64, uid int64, msg *Message) {
-	now := time.Now().UnixNano()
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, msg)
-	msg_buf := mbuffer.Bytes()
-	
-	amsg := &RouteMessage{appid:appid, receiver:uid, msgid:0, timestamp:now, msg:msg_buf}
-	channel := GetChannel(uid)
-	channel.Publish(amsg)
+	PublishMessage(appid, uid, msg)
 	DispatchMessageToPeer(msg, uid, appid, nil)
 }
 

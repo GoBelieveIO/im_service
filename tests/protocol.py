@@ -54,6 +54,9 @@ MSG_NOTIFICATION = 36
 #消息的meta信息
 MSG_METADATA = 37
 
+MSG_CUSTOMER_V2 = 64
+
+
 #消息标志
 #文本消息
 MESSAGE_FLAG_TEXT = 0x01
@@ -113,6 +116,19 @@ class CustomerMessage:
         return str((self.customer_appid, self.customer_id, self.store_id, self.seller_id, self.timestamp, self.content))
 
     
+class CustomerMessageV2:
+    def __init__(self):
+        self.sender_appid = 0
+        self.sender = 0
+        self.receiver_appid = 0
+        self.receiver = 0
+        self.timestamp = 0
+        self.content = ""
+
+    def __str__(self):
+        return str((self.sender_appid, self.sender, self.receiver_appid, self.receiver, self.timestamp, self.content))
+    
+        
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
         b = struct.pack("!BB", msg.platform_id, len(msg.token)) + bytes(msg.token, "utf-8") + struct.pack("!B", len(msg.device_id)) + bytes(msg.device_id, "utf-8")
@@ -158,6 +174,12 @@ def send_message(cmd, seq, msg, sock):
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, flag, 0)
         b = struct.pack("!qqqqi", msg.customer_appid, msg.customer_id, msg.store_id, msg.seller_id, msg.timestamp)
         sock.sendall(h+b+bytes(msg.content, "utf-8"))
+    elif cmd == MSG_CUSTOMER_V2:
+        content = bytes(msg.content, "utf-8")        
+        length = 36 + len(content)
+        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        b = struct.pack("!qqqqi", msg.sender_appid, msg.sender, msg.receiver_appid, msg.receiver, msg.timestamp)
+        sock.sendall(h+b+content)
     else:
         print("eeeeee")
 
@@ -220,6 +242,12 @@ def recv_message_(sock):
             struct.unpack("!qqqqi", content[:36])
         cm.content = content[36:]
         return cmd, seq, flag, cm
+    elif cmd == MSG_CUSTOMER_V2:
+        cm = CustomerMessageV2()
+        cm.sender_appid, cm.sender, cm.receiver_appid, cm.receiver, cm.timestamp = \
+            struct.unpack("!qqqqi", content[:36])
+        cm.content = content[36:]
+        return cmd, seq, flag, cm        
     elif cmd == MSG_METADATA:
         sync_key, prev_sync_key = struct.unpack("!qq", content[:16])
         return cmd, seq, flag, (sync_key, prev_sync_key)

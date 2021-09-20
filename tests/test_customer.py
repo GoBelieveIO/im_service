@@ -15,6 +15,37 @@ from client import *
 
 task = 0
 
+
+def recv_customer_message_client_v2(appid, uid, port=23000):
+    global task
+    def handle_message(cmd, s, msg):
+        if cmd == MSG_CUSTOMER_V2:
+            return True
+        else:
+            return False
+
+    recv_client(uid, port, handle_message, appid)
+    task += 1
+    print("recv customer message v2 success")
+
+    
+def send_customer_message_v2(sender_appid, uid, receiver_appid, receiver):
+    global task
+    sock, seq = connect_server(uid, 23000, sender_appid)
+
+    m = CustomerMessageV2()
+    m.sender_appid = sender_appid
+    m.sender = uid
+    m.receiver_appid = receiver_appid
+    m.receiver = receiver
+    m.timestamp = 0
+    m.content = json.dumps({"text":"test"})
+    seq += 1
+    send_message(MSG_CUSTOMER_V2, seq, m, sock)
+    print("send customer message v2 success")
+    task += 1
+
+    
 def recv_customer_message_client(uid, port=23000):
     global task
     def handle_message(cmd, s, msg):
@@ -115,10 +146,30 @@ def TestCustomerMessage():
 
     print("test customer message completed")
 
+def TestCustomerMessageV2():
+    global task
+    task = 0
+    
+    t3 = threading.Thread(target=recv_customer_message_client_v2, args=(KEFU_APP_ID, 2))
+    t3.setDaemon(True)
+    t3.start()
 
+    time.sleep(1)
+    
+    t2 = threading.Thread(target=send_customer_message_v2, args=(APP_ID, 1, KEFU_APP_ID, 2))
+    t2.setDaemon(True)
+    t2.start()
+    
+    while task < 2:
+        time.sleep(1)
+
+    print("test customer message v2 completed")
+
+    
 def main():
     TestCustomerMessage()
     TestCustomerSupportMessage()
+    TestCustomerMessageV2()
     
 if __name__ == "__main__":
     main()

@@ -21,18 +21,6 @@ package main
 import "bytes"
 import "encoding/binary"
 
-//路由服务器消息
-const MSG_SUBSCRIBE = 130
-const MSG_UNSUBSCRIBE = 131
-const MSG_PUBLISH = 132
-
-const MSG_PUSH = 134
-const MSG_PUBLISH_GROUP = 135
-
-const MSG_SUBSCRIBE_ROOM = 136
-const MSG_UNSUBSCRIBE_ROOM = 137
-const MSG_PUBLISH_ROOM = 138
-
 func init() {
 	message_creators[MSG_SUBSCRIBE] = func()IMessage{return new(SubscribeMessage)}
 	message_creators[MSG_UNSUBSCRIBE] = func()IMessage{return new(RouteUserID)}

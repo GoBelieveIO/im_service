@@ -171,6 +171,8 @@ func (client *Client) HandlePush(pmsg *BatchPushMessage) {
 			if config.is_push_system {
 				client.PublishSystemMessage(pmsg.appid, receiver, sys.notification)
 			}
+		} else if cmd == MSG_CUSTOMER_V2 {
+			client.PublishCustomerMessageV2(pmsg.appid, pmsg.msg.body.(*CustomerMessageV2))
 		}
 	}
 }

@@ -22,71 +22,10 @@ package main
 import "bytes"
 import "encoding/binary"
 
-
-const MSG_AUTH_STATUS = 3
-
-const MSG_ACK = 5
-
-//deprecated
-const MSG_RST = 6
-
-
-const MSG_PING = 13
-const MSG_PONG = 14
-const MSG_AUTH_TOKEN = 15
-
-const MSG_RT = 17
-const MSG_ENTER_ROOM = 18
-const MSG_LEAVE_ROOM = 19
-const MSG_ROOM_IM = 20
-
-const MSG_UNREAD_COUNT = 22
-
-//persistent, deprecated
-const MSG_CUSTOMER_SERVICE_ = 23
-
-
-//客户端->服务端
-const MSG_SYNC = 26 //同步消息
-//服务端->客服端
-const MSG_SYNC_BEGIN = 27
-const MSG_SYNC_END = 28
-//通知客户端有新消息
-const MSG_SYNC_NOTIFY = 29
-
-
-//客户端->服务端
-const MSG_SYNC_GROUP = 30//同步超级群消息
-//服务端->客服端
-const MSG_SYNC_GROUP_BEGIN = 31
-const MSG_SYNC_GROUP_END = 32
-//通知客户端有新消息
-const MSG_SYNC_GROUP_NOTIFY = 33
-
-
-//客服端->服务端,更新服务器的synckey
-const MSG_SYNC_KEY = 34
-const MSG_GROUP_SYNC_KEY = 35
-
-//系统通知消息, unpersistent
-const MSG_NOTIFICATION = 36
-
-//消息的meta信息
-const MSG_METADATA = 37
-
-
-
-
-//im实例使用
-const MSG_PENDING_GROUP_MESSAGE = 251
-
-
-
 //平台号
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
-
 
 
 const ACK_SUCCESS = 0
@@ -176,8 +115,6 @@ func init() {
 	external_messages[MSG_GROUP_SYNC_KEY] = true;
 	external_messages[MSG_METADATA] = true;
 }
-
-
 
 
 
