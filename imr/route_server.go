@@ -252,6 +252,8 @@ func main() {
 	log.Infof("redis address:%s password:%s db:%d\n", 
 		config.redis_address, config.redis_password, config.redis_db)
 
+	log.Infof("push disabled:%d", config.push_disabled)
+	
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 	

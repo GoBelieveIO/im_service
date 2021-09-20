@@ -141,8 +141,12 @@ func (client *Client) HandlePublishGroup(amsg *RouteMessage) {
 }
 
 func (client *Client) HandlePush(pmsg *BatchPushMessage) {
+	if config.push_disabled {
+		return
+	}
+	
 	log.Infof("push message appid:%d cmd:%s", pmsg.appid, Command(pmsg.msg.cmd))
-
+	
 	off_members := make([]int64, 0)	
 	
 	for _, uid := range(pmsg.receivers) {
@@ -168,9 +172,7 @@ func (client *Client) HandlePush(pmsg *BatchPushMessage) {
 			//assert len(off_members) == 1
 			receiver := off_members[0]
 			sys := pmsg.msg.body.(*SystemMessage)
-			if config.is_push_system {
-				client.PublishSystemMessage(pmsg.appid, receiver, sys.notification)
-			}
+			client.PublishSystemMessage(pmsg.appid, receiver, sys.notification)
 		} else if cmd == MSG_CUSTOMER_V2 {
 			client.PublishCustomerMessageV2(pmsg.appid, pmsg.msg.body.(*CustomerMessageV2))
 		}
