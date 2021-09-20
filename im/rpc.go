@@ -135,7 +135,6 @@ func (rpc_s *RPCStorage) SaveGroupMessage(appid int64, gid int64, device_id int6
 		log.Warning("save group message err:", err)
 		return 0, 0, err
 	}
-
 	defer dc.Release()
 	
 	gm := &storage.GroupMessage{
@@ -169,6 +168,7 @@ func (rpc_s *RPCStorage) SavePeerGroupMessage(appid int64, members []int64, devi
 	if err != nil {
 		return nil, nil
 	}
+	defer dc.Release()
 	
 	pm := &storage.PeerGroupMessage{
 		AppID:appid,
@@ -196,6 +196,7 @@ func (rpc_s *RPCStorage) SaveMessage(appid int64, uid int64, device_id int64, m 
 	if err != nil {
 		return 0, 0, err
 	}
+	defer dc.Release()
 	
 	pm := &storage.PeerMessage{
 		AppID:appid,
@@ -224,7 +225,8 @@ func (rpc_s *RPCStorage) GetLatestMessage(appid int64, uid int64, limit int32) (
 	if err != nil {
 		return nil, err
 	}
-
+	defer dc.Release()
+	
 	s := &storage.HistoryRequest{
 		AppID:appid, 
 		Uid:uid, 
@@ -246,6 +248,7 @@ func (rpc_s *RPCStorage) GetNewCount(appid int64, uid int64, last_msgid int64) (
 	if err != nil {
 		return 0, err
 	}
+	defer dc.Release()
 	
 	var count int64
 	sync_key := storage.SyncHistory{AppID:appid, Uid:uid, LastMsgID:last_msgid}	
@@ -265,35 +268,7 @@ func (rpc_s *RPCStorage) GetStorageRPCClient(uid int64) (*puddle.Resource, error
 	}
 	index := uid%int64(len(rpc_s.rpc_pools))
 	pool := rpc_s.rpc_pools[index]
-
-
-	var result *puddle.Resource
-	var e error
-	for {
-		res, err := pool.Acquire(context.Background())
-
-		if err == nil {
-			idle_duration := res.IdleDuration()
-
-			//check rpc.client expired or alive
-			if idle_duration >= time.Minute*30 {
-				res.Destroy()
-				continue
-			} else if idle_duration > time.Minute*12 {
-				var p int
-				err = res.Value().(*rpc.Client).Call("RPCStorage.Ping", 1, &p)
-				if err != nil {
-					res.Destroy()
-					continue
-				}
-			}
-		}
-		result = res
-		e = err
-		break
-	}
-
-	return result, e
+	return rpc_s.AcquireResource(pool)
 }
 
 
@@ -313,7 +288,39 @@ func (rpc_s *RPCStorage) GetGroupStorageRPCClient(group_id int64) (*puddle.Resou
 	}
 	index := group_id%int64(len(rpc_s.group_rpc_pools))
 	pool := rpc_s.group_rpc_pools[index]
-	res, err := pool.Acquire(context.Background())
-	return res, err
+
+	return rpc_s.AcquireResource(pool)
 }
 
+
+func (rpc_s *RPCStorage) AcquireResource(pool *puddle.Pool) (*puddle.Resource, error) {
+	var result *puddle.Resource
+	var e error
+	for {
+		res, err := pool.Acquire(context.Background())
+
+		if err == nil {
+			idle_duration := res.IdleDuration()
+
+			//check rpc.client expired or alive
+			if idle_duration >= time.Minute*30 {
+				log.Info("rpc client expired, destroy rpc client")
+				res.Destroy()
+				continue
+			} else if idle_duration > time.Minute*12 {
+				var p int
+				err = res.Value().(*rpc.Client).Call("RPCStorage.Ping", 1, &p)
+				if err != nil {
+					log.Info("rpc client ping error, destroy rpc client")
+					res.Destroy()
+					continue
+				}
+			}
+		}
+		result = res
+		e = err
+		break
+	}
+
+	return result, e
+}
