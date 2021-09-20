@@ -84,6 +84,7 @@ func handle_sync_client(conn *net.TCPConn) {
 	client.Run()
 }
 
+
 func ListenSyncClient() {
 	Listen(handle_sync_client, config.sync_listen)
 }
@@ -91,11 +92,7 @@ func ListenSyncClient() {
 // Signal handler
 func waitSignal() error {
     ch := make(chan os.Signal, 1)
-    signal.Notify(
-    ch,
-    syscall.SIGINT,
-    syscall.SIGTERM,
-    )
+    signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
     for {
         sig := <-ch
         fmt.Println("singal:", sig.String())
@@ -178,9 +175,9 @@ func StartHttpServer(addr string) {
 
 
 func ListenRPCClient() {
-	var rpc_storage rpc_storage.RPCStorage
-	rpc_storage = new(RPCStorage)
-	rpc.Register(rpc_storage)
+	var rpc_s rpc_storage.RPCStorage
+	rpc_s = new(RPCStorage)
+	rpc.Register(rpc_s)
 	rpc.HandleHTTP()
 
 	l, err := net.Listen("tcp", config.rpc_listen)
