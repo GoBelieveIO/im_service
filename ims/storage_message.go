@@ -36,39 +36,39 @@ const MSG_GROUP_OFFLINE = 247
 const MSG_OFFLINE_V4 = 248
 
 //个人消息队列 代替MSG_OFFLINE_V2
-const MSG_OFFLINE_V3 = 249
+const MSG_OFFLINE_V3_ = 249
 
 //个人消息队列 代替MSG_OFFLINE
 //deprecated  兼容性
-const MSG_OFFLINE_V2 = 250  
+const MSG_OFFLINE_V2_ = 250  
 
 //im实例使用
 const ___MSG_PENDING_GROUP_MESSAGE___ = 251
 
 //超级群消息队列
 //deprecated 兼容性
-const MSG_GROUP_IM_LIST = 252
+const MSG_GROUP_IM_LIST_ = 252
 
 //deprecated
-const MSG_GROUP_ACK_IN = 253
+const MSG_GROUP_ACK_IN_ = 253
 
 //deprecated 兼容性
-const MSG_OFFLINE = 254
+const MSG_OFFLINE_ = 254
 
 //deprecated
-const MSG_ACK_IN = 255
+const MSG_ACK_IN_ = 255
 
 
 func init() {
-	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new (OfflineMessage4)}
-	message_creators[MSG_OFFLINE_V4] = func()IMessage{return new (OfflineMessage4)}	
-	message_creators[MSG_OFFLINE_V3] = func()IMessage{return new (OfflineMessage3)}
-	message_creators[MSG_OFFLINE_V2] = func()IMessage{return new (OfflineMessage2)}
-	message_creators[MSG_GROUP_IM_LIST] = func()IMessage{return new(GroupOfflineMessage)}
-	message_creators[MSG_GROUP_ACK_IN] = func()IMessage{return new(IgnoreMessage)}
+	message_creators[MSG_GROUP_OFFLINE] = func()IMessage{return new (OfflineMessage)}
+	message_creators[MSG_OFFLINE_V4] = func()IMessage{return new (OfflineMessage)}	
+	message_creators[MSG_OFFLINE_V3_] = func()IMessage{return new (IgnoreMessage)}
+	message_creators[MSG_OFFLINE_V2_] = func()IMessage{return new (IgnoreMessage)}
+	message_creators[MSG_GROUP_IM_LIST_] = func()IMessage{return new(IgnoreMessage)}
+	message_creators[MSG_GROUP_ACK_IN_] = func()IMessage{return new(IgnoreMessage)}
 
-	message_creators[MSG_OFFLINE] = func()IMessage{return new(OfflineMessage1)}
-	message_creators[MSG_ACK_IN] = func()IMessage{return new(IgnoreMessage)}
+	message_creators[MSG_OFFLINE_] = func()IMessage{return new(IgnoreMessage)}
+	message_creators[MSG_ACK_IN_] = func()IMessage{return new(IgnoreMessage)}
 
 	message_creators[MSG_STORAGE_SYNC_BEGIN] = func()IMessage{return new(SyncCursor)}
 	message_creators[MSG_STORAGE_SYNC_MESSAGE] = func()IMessage{return new(EMessage)}
@@ -81,9 +81,9 @@ func init() {
 
 	message_descriptions[MSG_GROUP_OFFLINE] = "MSG_GROUP_OFFLINE"
 	message_descriptions[MSG_OFFLINE_V4] = "MSG_OFFLINE_V4"		
-	message_descriptions[MSG_OFFLINE_V3] = "MSG_OFFLINE_V3"	
-	message_descriptions[MSG_OFFLINE_V2] = "MSG_OFFLINE_V2"	
-	message_descriptions[MSG_GROUP_IM_LIST] = "MSG_GROUP_IM_LIST"
+	message_descriptions[MSG_OFFLINE_V3_] = "MSG_OFFLINE_V3"	
+	message_descriptions[MSG_OFFLINE_V2_] = "MSG_OFFLINE_V2"	
+	message_descriptions[MSG_GROUP_IM_LIST_] = "MSG_GROUP_IM_LIST"
 }
 
 type SyncCursor struct {
@@ -202,10 +202,6 @@ func (batch *MessageBatch) FromData(buff []byte) bool {
 }
 
 
-type IOfflineMessage interface {
-	body() *OfflineMessage
-}
-
 type OfflineMessage struct {
 	appid    int64
 	receiver int64 //用户id or 群组id
@@ -214,117 +210,10 @@ type OfflineMessage struct {
 	seq_id   int64      //v4 消息序号, 1,2,3...
 	prev_msgid  int64 //个人消息队列(点对点消息，群组消息)
 	prev_peer_msgid int64 //v2 点对点消息队列 
-	prev_batch_msgid int64 //v3 0<-1000<-2000<-3000...构成一个消息队列	
+	prev_batch_msgid int64 //v3 0<-1000<-2000<-3000...构成一个消息队列		
 }
 
-func (off *OfflineMessage) body() *OfflineMessage {
-	return off
-}
-
-
-type OfflineMessage1 struct {
-	OfflineMessage
-}
-
-
-func (off *OfflineMessage1) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, off.appid)
-	binary.Write(buffer, binary.BigEndian, off.receiver)
-	binary.Write(buffer, binary.BigEndian, off.msgid)
-	binary.Write(buffer, binary.BigEndian, off.device_id)
-	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (off *OfflineMessage1) FromData(buff []byte) bool {
-	if len(buff) < 32 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &off.appid)
-	binary.Read(buffer, binary.BigEndian, &off.receiver)
-	binary.Read(buffer, binary.BigEndian, &off.msgid)
-	if len(buff) == 40 {
-		binary.Read(buffer, binary.BigEndian, &off.device_id)
-	}
-	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
-
-	off.prev_peer_msgid = off.prev_msgid
-	return true
-}
-
-
-type OfflineMessage2 struct {
-	OfflineMessage
-}
-
-
-func (off *OfflineMessage2) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, off.appid)
-	binary.Write(buffer, binary.BigEndian, off.receiver)
-	binary.Write(buffer, binary.BigEndian, off.msgid)
-	binary.Write(buffer, binary.BigEndian, off.device_id)
-	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
-	binary.Write(buffer, binary.BigEndian, off.prev_peer_msgid)	
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (off *OfflineMessage2) FromData(buff []byte) bool {
-	if len(buff) < 48 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &off.appid)
-	binary.Read(buffer, binary.BigEndian, &off.receiver)
-	binary.Read(buffer, binary.BigEndian, &off.msgid)
-	binary.Read(buffer, binary.BigEndian, &off.device_id)
-	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
-	binary.Read(buffer, binary.BigEndian, &off.prev_peer_msgid)	
-	return true
-}
-
-
-type OfflineMessage3 struct {
-	OfflineMessage
-}
-
-func (off *OfflineMessage3) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, off.appid)
-	binary.Write(buffer, binary.BigEndian, off.receiver)
-	binary.Write(buffer, binary.BigEndian, off.msgid)
-	binary.Write(buffer, binary.BigEndian, off.device_id)
-	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
-	binary.Write(buffer, binary.BigEndian, off.prev_peer_msgid)
-	binary.Write(buffer, binary.BigEndian, off.prev_batch_msgid)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (off *OfflineMessage3) FromData(buff []byte) bool {
-	if len(buff) < 56 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &off.appid)
-	binary.Read(buffer, binary.BigEndian, &off.receiver)
-	binary.Read(buffer, binary.BigEndian, &off.msgid)
-	binary.Read(buffer, binary.BigEndian, &off.device_id)
-	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
-	binary.Read(buffer, binary.BigEndian, &off.prev_peer_msgid)
-	binary.Read(buffer, binary.BigEndian, &off.prev_batch_msgid)
-	return true
-}
-
-type OfflineMessage4 struct {
-	OfflineMessage
-}
-
-func (off *OfflineMessage4) ToData() []byte {
+func (off *OfflineMessage) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, off.appid)
 	binary.Write(buffer, binary.BigEndian, off.receiver)
@@ -338,7 +227,7 @@ func (off *OfflineMessage4) ToData() []byte {
 	return buf
 }
 
-func (off *OfflineMessage4) FromData(buff []byte) bool {
+func (off *OfflineMessage) FromData(buff []byte) bool {
 	if len(buff) < 64 {
 		return false
 	}
@@ -351,40 +240,6 @@ func (off *OfflineMessage4) FromData(buff []byte) bool {
 	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
 	binary.Read(buffer, binary.BigEndian, &off.prev_peer_msgid)
 	binary.Read(buffer, binary.BigEndian, &off.prev_batch_msgid)
-	return true
-}
-
-
-
-type GroupOfflineMessage struct {
-	OfflineMessage
-}
-
-func (off *GroupOfflineMessage) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, off.appid)
-	binary.Write(buffer, binary.BigEndian, off.receiver)
-	binary.Write(buffer, binary.BigEndian, off.msgid)
-	binary.Write(buffer, binary.BigEndian, off.receiver)
-	binary.Write(buffer, binary.BigEndian, off.device_id)
-	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (off *GroupOfflineMessage) FromData(buff []byte) bool {
-	if len(buff) < 40 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &off.appid)
-	binary.Read(buffer, binary.BigEndian, &off.receiver)
-	binary.Read(buffer, binary.BigEndian, &off.msgid)
-	binary.Read(buffer, binary.BigEndian, &off.receiver)
-	if len(buff) == 48 {
-		binary.Read(buffer, binary.BigEndian, &off.device_id)
-	}
-	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
 	return true
 }
 

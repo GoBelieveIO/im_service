@@ -72,7 +72,7 @@ func (storage *PeerStorage) SavePeerMessage(appid int64, uid int64, device_id in
 	last_batch_id := user_index.last_batch_id
 	last_seq_id := user_index.last_seq_id
 	
-	off := &OfflineMessage4{}
+	off := &OfflineMessage{}
 	off.appid = appid
 	off.receiver = uid
 	off.msgid = msgid
@@ -173,10 +173,8 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 			break
 		}
 
-		var off *OfflineMessage
-		if ioff, ok := msg.body.(IOfflineMessage); ok {
-			off = ioff.body()
-		} else {
+		off, ok := msg.body.(*OfflineMessage)
+		if !ok {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}
@@ -264,11 +262,9 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		if msg == nil {
 			break
 		}
-	
-		var off *OfflineMessage
-		if ioff, ok := msg.body.(IOfflineMessage); ok {
-			off = ioff.body()
-		} else {
+
+		off, ok := msg.body.(*OfflineMessage)
+		if !ok {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}
@@ -307,11 +303,9 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		if msg == nil {
 			break
 		}
-	
-		var off *OfflineMessage
-		if ioff, ok := msg.body.(IOfflineMessage); ok {
-			off = ioff.body()
-		} else {
+
+		off, ok := msg.body.(*OfflineMessage)
+		if !ok {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}
@@ -388,11 +382,9 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 		if msg == nil {
 			break
 		}
-		
-		var off *OfflineMessage
-		if ioff, ok := msg.body.(IOfflineMessage); ok {
-			off = ioff.body()
-		} else {
+
+		off, ok := msg.body.(*OfflineMessage)
+		if !ok {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}
@@ -504,10 +496,8 @@ func (storage *PeerStorage) GetNewCount(appid int64, uid int64, last_received_id
 		}
 	}
 
-	var off *OfflineMessage
-	if ioff, ok := off_m.body.(IOfflineMessage); ok {
-		off = ioff.body()
-	} else {
+	off, ok := off_m.body.(*OfflineMessage)
+	if !ok {
 		log.Warning("invalid message cmd:", off_m.cmd)
 		return 0
 	}
@@ -745,20 +735,8 @@ func (storage *PeerStorage) savePeerIndex(message_index  map[UserID]*UserIndex )
 
 
 func (storage *PeerStorage) execMessage(msg *Message, msgid int64) {
-	if msg.cmd == MSG_OFFLINE {
-		off := msg.body.(IOfflineMessage).body()
-		ui := &UserIndex{off.msgid, msgid, msgid, 0, 0}
-		storage.setPeerIndex(off.appid, off.receiver, ui)
-	} else if msg.cmd == MSG_OFFLINE_V2 {
-		off := msg.body.(IOfflineMessage).body()
-		last_peer_id := msgid		
-		if ((msg.flag & MESSAGE_FLAG_GROUP) != 0) {
-			_, last_peer_id = storage.getLastMessageID(off.appid, off.receiver)			
-		}
-		ui := &UserIndex{off.msgid, msgid, last_peer_id, 0, 0}
-		storage.setPeerIndex(off.appid, off.receiver, ui)
-	} else if msg.cmd == MSG_OFFLINE_V3 || msg.cmd == MSG_OFFLINE_V4 {
-		off := msg.body.(IOfflineMessage).body()
+	if msg.cmd == MSG_OFFLINE_V4 {
+		off := msg.body.(*OfflineMessage)
 		last_peer_id := msgid
 
 		index := storage.getPeerIndex(off.appid, off.receiver)
