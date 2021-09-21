@@ -24,10 +24,11 @@ import (
 	"github.com/gorilla/websocket"
 	"net/http"
 	"bytes"
+	"errors"
 )
 
 
-func ReadBinaryMesage(b []byte) *Message {
+func ReadBinaryMesage(b []byte) (*Message, error) {
 	reader := bytes.NewReader(b)
 	return ReceiveClientMessage(reader)
 }
@@ -55,7 +56,7 @@ func ServeWebsocket(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	log.Info("new websocket connection, remote address:", conn.RemoteAddr());
-	handle_client(conn)
+	handle_ws_client(conn)
 }
 
 
@@ -82,17 +83,17 @@ func StartWSServer(address string) {
 }
 
 
-func ReadWebsocketMessage(conn *websocket.Conn) *Message {
+func ReadWebsocketMessage(conn *websocket.Conn) (*Message, error) {
 	messageType, p, err := conn.ReadMessage()
 	if err != nil {
 		log.Info("read websocket err:", err)
-		return nil
+		return nil, err
 	}
 	if messageType == websocket.BinaryMessage {
 		return ReadBinaryMesage(p)
 	} else {
 		log.Error("invalid websocket message type:", messageType)
-		return nil
+		return nil, errors.New("invalid message type")
 	}
 }
 
