@@ -76,8 +76,8 @@ const MSG_GROUP_IM = 8
 const MSG_SYSTEM = 21
 
 //persistent, deprecated
-const MSG_CUSTOMER = 24 //顾客->客服
-const MSG_CUSTOMER_SUPPORT = 25 //客服->顾客
+const MSG_CUSTOMER_ = 24 //顾客->客服
+const MSG_CUSTOMER_SUPPORT_ = 25 //客服->顾客
 
 //persistent 不同app间的点对点消息
 const MSG_CUSTOMER_V2 = 64
@@ -99,8 +99,8 @@ const MSG_PUBLISH_ROOM = 138
 func init() {
 	message_creators[MSG_GROUP_NOTIFICATION] = func()IMessage{return new(GroupNotification)}
 	message_creators[MSG_SYSTEM] = func()IMessage{return new(SystemMessage)}
-	message_creators[MSG_CUSTOMER] = func()IMessage{return new(CustomerMessage)}
-	message_creators[MSG_CUSTOMER_SUPPORT] = func()IMessage{return new(CustomerMessage)}
+	message_creators[MSG_CUSTOMER_] = func()IMessage{return new(IgnoreMessage)}
+	message_creators[MSG_CUSTOMER_SUPPORT_] = func()IMessage{return new(IgnoreMessage)}
 	message_creators[MSG_CUSTOMER_V2] = func()IMessage{return new(CustomerMessageV2)}
 	
 	vmessage_creators[MSG_GROUP_IM] = func()IVersionMessage{return new(IMMessage)}
@@ -111,14 +111,14 @@ func init() {
 	message_descriptions[MSG_GROUP_NOTIFICATION] = "MSG_GROUP_NOTIFICATION"
 	message_descriptions[MSG_GROUP_IM] = "MSG_GROUP_IM"
 	message_descriptions[MSG_SYSTEM] = "MSG_SYSTEM"
-	message_descriptions[MSG_CUSTOMER] = "MSG_CUSTOMER"
-	message_descriptions[MSG_CUSTOMER_SUPPORT] = "MSG_CUSTOMER_SUPPORT"
+	message_descriptions[MSG_CUSTOMER_] = "MSG_CUSTOMER"
+	message_descriptions[MSG_CUSTOMER_SUPPORT_] = "MSG_CUSTOMER_SUPPORT"
 	message_descriptions[MSG_CUSTOMER_V2] = "MSG_CUSTOMER_V2"	
 
 	external_messages[MSG_IM] = true;
 	external_messages[MSG_GROUP_IM] = true;
-	external_messages[MSG_CUSTOMER] = true;
-	external_messages[MSG_CUSTOMER_SUPPORT] = true;
+	external_messages[MSG_CUSTOMER_] = true;
+	external_messages[MSG_CUSTOMER_SUPPORT_] = true;
 	external_messages[MSG_CUSTOMER_V2] = true;	
 }
 
@@ -225,43 +225,6 @@ func (sys *SystemMessage) FromData(buff []byte) bool {
 	return true
 }
 
-
-type CustomerMessage struct {
-	customer_appid int64//顾客id所在appid
-	customer_id    int64//顾客id
-	store_id	   int64
-	seller_id	   int64
-	timestamp	   int32
-	content		   string
-}
-
-func (cs *CustomerMessage) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, cs.customer_appid)
-	binary.Write(buffer, binary.BigEndian, cs.customer_id)
-	binary.Write(buffer, binary.BigEndian, cs.store_id)
-	binary.Write(buffer, binary.BigEndian, cs.seller_id)
-	binary.Write(buffer, binary.BigEndian, cs.timestamp)
-	buffer.Write([]byte(cs.content))
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (cs *CustomerMessage) FromData(buff []byte) bool {
-	if len(buff) < 36 {
-		return false
-	}
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &cs.customer_appid)
-	binary.Read(buffer, binary.BigEndian, &cs.customer_id)
-	binary.Read(buffer, binary.BigEndian, &cs.store_id)
-	binary.Read(buffer, binary.BigEndian, &cs.seller_id)
-	binary.Read(buffer, binary.BigEndian, &cs.timestamp)
-
-	cs.content = string(buff[36:])
-
-	return true
-}
 
 
 type CustomerMessageV2 struct {

@@ -175,7 +175,6 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_notification", SendNotification)
 	http.HandleFunc("/post_room_message", SendRoomMessage)
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
-	http.HandleFunc("/post_customer_support_message", SendCustomerSupportMessage)
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
 

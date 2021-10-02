@@ -374,19 +374,18 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request) {
 			obj["id"] = emsg.MsgID
 			msg_list = append(msg_list, obj)
 			
-		} else if msg.cmd == MSG_CUSTOMER ||
-			msg.cmd == MSG_CUSTOMER_SUPPORT {
-			im := msg.body.(*CustomerMessage)
-			
-			obj := make(map[string]interface{})
+		} else if msg.cmd == MSG_CUSTOMER_V2 {
+			im := msg.body.(*CustomerMessageV2)
+		    obj := make(map[string]interface{})
 			obj["content"] = im.content
 			obj["timestamp"] = im.timestamp
-			obj["customer_appid"] = im.customer_appid
-			obj["customer_id"] = im.customer_id
-			obj["store_id"] = im.store_id
-			obj["seller_id"] = im.seller_id
+			obj["sender"] = im.sender
+			obj["receiver"] = im.receiver
+			obj["sender_appid"] = im.sender_appid
+			obj["receiver_appid"] = im.receiver_appid
 			obj["command"] = msg.cmd
 			obj["id"] = emsg.MsgID
+		
 			msg_list = append(msg_list, obj)
 		}
 	}
@@ -452,21 +451,20 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request) {
 			obj["receiver"] = im.receiver
 			obj["command"] = emsg.Cmd
 			obj["id"] = emsg.MsgID
-			msg_list = append(msg_list, obj)
-
-		} else if msg.cmd == MSG_CUSTOMER || 
-			msg.cmd == MSG_CUSTOMER_SUPPORT {
-			im := msg.body.(*CustomerMessage)
 			
-			obj := make(map[string]interface{})
+			msg_list = append(msg_list, obj)
+		} else if msg.cmd == MSG_CUSTOMER_V2 {
+			im := msg.body.(*CustomerMessageV2)
+		    obj := make(map[string]interface{})
 			obj["content"] = im.content
 			obj["timestamp"] = im.timestamp
-			obj["customer_appid"] = im.customer_appid
-			obj["customer_id"] = im.customer_id
-			obj["store_id"] = im.store_id
-			obj["seller_id"] = im.seller_id
-			obj["command"] = emsg.Cmd
+			obj["sender"] = im.sender
+			obj["receiver"] = im.receiver
+			obj["sender_appid"] = im.sender_appid
+			obj["receiver_appid"] = im.receiver_appid
+			obj["command"] = msg.cmd
 			obj["id"] = emsg.MsgID
+		
 			msg_list = append(msg_list, obj)
 		}
 	}
@@ -633,94 +631,6 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request) {
 }
 
 
-func SendCustomerSupportMessage(w http.ResponseWriter, req *http.Request) {
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		WriteHttpError(400, err.Error(), w)
-		return
-	}
-
-	obj, err := simplejson.NewJson(body)
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	customer_appid, err := obj.Get("customer_appid").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return		
-	}
-
-	customer_id, err := obj.Get("customer_id").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	store_id, err := obj.Get("store_id").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-	seller_id, err := obj.Get("seller_id").Int64()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-	
-	content, err := obj.Get("content").String()
-	if err != nil {
-		log.Info("error:", err)
-		WriteHttpError(400, "invalid json format", w)
-		return
-	}
-
-
-	cm := &CustomerMessage{}
-	cm.customer_appid = customer_appid
-	cm.customer_id = customer_id
-	cm.store_id = store_id
-	cm.seller_id = seller_id
-	cm.content = content
-	cm.timestamp = int32(time.Now().Unix())
-
-	m := &Message{cmd:MSG_CUSTOMER_SUPPORT, body:cm}
-
-
-	msgid, _, err := rpc_storage.SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
- 	if err != nil {
-		log.Warning("save message error:", err)
-		WriteHttpError(500, "internal server error", w)
-		return
-	}
-	
-	msgid2, _, err := rpc_storage.SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
- 	if err != nil {
-		log.Warning("save message error:", err)
-		WriteHttpError(500, "internal server error", w)
-		return
-	}
-	
-	PushMessage(cm.customer_appid, cm.customer_id, m)
-	
-	//发送给自己的其它登录点	
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid2}}
-	SendAppMessage(config.kefu_appid, cm.seller_id, notify)
-
-	//发送同步的通知消息
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
-	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
-
-	w.WriteHeader(200)	
-}
-
 func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -735,28 +645,28 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	customer_appid, err := obj.Get("customer_appid").Int64()
+	sender_appid, err := obj.Get("sender_appid").Int64()
 	if err != nil {
 		log.Info("error:", err)
 		WriteHttpError(400, "invalid json format", w)
 		return		
 	}
 
-	customer_id, err := obj.Get("customer_id").Int64()
+	sender, err := obj.Get("sender").Int64()
 	if err != nil {
 		log.Info("error:", err)
 		WriteHttpError(400, "invalid json format", w)
 		return
 	}
 
-	store_id, err := obj.Get("store_id").Int64()
+	receiver_appid, err := obj.Get("receiver_appid").Int64()
 	if err != nil {
 		log.Info("error:", err)
 		WriteHttpError(400, "invalid json format", w)
 		return
 	}
 
-	seller_id, err := obj.Get("seller_id").Int64()
+	receiver, err := obj.Get("receiver").Int64()
 	if err != nil {
 		log.Info("error:", err)
 		WriteHttpError(400, "invalid json format", w)
@@ -771,44 +681,43 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request) {
 	}
 
 
-	cm := &CustomerMessage{}
-	cm.customer_appid = customer_appid
-	cm.customer_id = customer_id
-	cm.store_id = store_id
-	cm.seller_id = seller_id
+	cm := &CustomerMessageV2{}
+	cm.sender_appid = sender_appid
+	cm.sender = sender
+	cm.receiver_appid = receiver_appid
+	cm.receiver = receiver
 	cm.content = content
 	cm.timestamp = int32(time.Now().Unix())
 
-	m := &Message{cmd:MSG_CUSTOMER, body:cm}
+	m := &Message{cmd:MSG_CUSTOMER_V2, body:cm}
 
 
-	msgid, _, err := rpc_storage.SaveMessage(config.kefu_appid, cm.seller_id, 0, m)
+	msgid, _, err := rpc_storage.SaveMessage(receiver_appid, receiver, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
 		return
 	}
-	msgid2, _, err := rpc_storage.SaveMessage(cm.customer_appid, cm.customer_id, 0, m)
+	msgid2, _, err := rpc_storage.SaveMessage(sender_appid, sender, 0, m)
  	if err != nil {
 		log.Warning("save message error:", err)
 		WriteHttpError(500, "internal server error", w)
 		return
 	}
 	
-	PushMessage(config.kefu_appid, cm.seller_id, m)
+	PushMessage(receiver_appid, receiver, m)
 	
 	
 	//发送同步的通知消息
 	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
-	SendAppMessage(config.kefu_appid, cm.seller_id, notify)
+	SendAppMessage(receiver_appid, receiver, notify)
 
 
 	//发送给自己的其它登录点
 	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid2}}
-	SendAppMessage(cm.customer_appid, cm.customer_id, notify)
+	SendAppMessage(sender_appid, sender, notify)
 
 	resp := make(map[string]interface{})
-	resp["seller_id"] = seller_id
 	WriteHttpObj(resp, w)
 }
 

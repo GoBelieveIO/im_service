@@ -122,19 +122,10 @@ func (client *Connection) isSender(msg *Message, device_id int64) bool {
 		}
 	}
 
-	if msg.cmd == MSG_CUSTOMER {
-		m := msg.body.(*CustomerMessage)
-		if m.customer_appid == client.appid && 
-			m.customer_id == client.uid && 
-			device_id == client.device_ID {
-			return true
-		}
-	}
-
-	if msg.cmd == MSG_CUSTOMER_SUPPORT {
-		m := msg.body.(*CustomerMessage)
-		if config.kefu_appid == client.appid && 
-			m.seller_id == client.uid && 
+	if msg.cmd == MSG_CUSTOMER_V2 {
+		m := msg.body.(*CustomerMessageV2)
+		if m.sender_appid == client.appid &&
+			m.sender == client.uid &&
 			device_id == client.device_ID {
 			return true
 		}

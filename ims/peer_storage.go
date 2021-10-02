@@ -194,8 +194,6 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 		if msg.cmd == MSG_GROUP_IM || 
 			msg.cmd == MSG_GROUP_NOTIFICATION ||
 			msg.cmd == MSG_IM ||
-			msg.cmd == MSG_CUSTOMER ||
-			msg.cmd == MSG_CUSTOMER_SUPPORT ||
 			msg.cmd == MSG_CUSTOMER_V2 ||
 			msg.cmd == MSG_SYSTEM {
 			emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
@@ -318,8 +316,6 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		if msg.cmd == MSG_GROUP_IM ||
 			msg.cmd == MSG_GROUP_NOTIFICATION ||
 			msg.cmd == MSG_IM ||
-			msg.cmd == MSG_CUSTOMER ||
-			msg.cmd == MSG_CUSTOMER_SUPPORT ||
 			msg.cmd == MSG_CUSTOMER_V2 ||
 			msg.cmd == MSG_SYSTEM {
 
@@ -385,8 +381,6 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 		if msg.cmd == MSG_GROUP_IM ||
 			msg.cmd == MSG_GROUP_NOTIFICATION ||
 			msg.cmd == MSG_IM ||
-			msg.cmd == MSG_CUSTOMER ||
-			msg.cmd == MSG_CUSTOMER_SUPPORT ||
 			msg.cmd == MSG_CUSTOMER_V2 {
 			emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
 			messages = append(messages, emsg)
@@ -407,22 +401,6 @@ func (client *PeerStorage) isSender(msg *Message, appid int64, uid int64) bool {
 	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
 		m := msg.body.(*IMMessage)
 		if m.sender == uid {
-			return true
-		}
-	}
-
-	if msg.cmd == MSG_CUSTOMER {
-		m := msg.body.(*CustomerMessage)
-		if m.customer_appid == appid && 
-			m.customer_id == uid {
-			return true
-		}
-	}
-
-	if msg.cmd == MSG_CUSTOMER_SUPPORT {
-		m := msg.body.(*CustomerMessage)
-		if config.kefu_appid == appid && 
-			m.seller_id == uid {
 			return true
 		}
 	}

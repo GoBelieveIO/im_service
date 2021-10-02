@@ -162,12 +162,6 @@ func (client *Client) HandlePush(pmsg *BatchPushMessage) {
 		} else if cmd == MSG_IM {
 			//assert len(off_members) == 1
 			client.PublishPeerMessage(pmsg.appid, pmsg.msg.body.(*IMMessage))
-		} else if cmd == MSG_CUSTOMER || 
-			cmd == MSG_CUSTOMER_SUPPORT {
-			//assert len(off_members) == 1
-			receiver := off_members[0]
-			client.PublishCustomerMessage(pmsg.appid, receiver, 
-				pmsg.msg.body.(*CustomerMessage), pmsg.msg.cmd)
 		} else if cmd == MSG_SYSTEM {
 			//assert len(off_members) == 1
 			receiver := off_members[0]
