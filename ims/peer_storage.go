@@ -155,6 +155,7 @@ func (storage *PeerStorage) GetLastMessageID(appid int64, receiver int64) (int64
 }
 
 
+//废弃
 //获取所有消息id大于sync_msgid的消息,
 //group_limit&limit:0 表示无限制
 //消息超过group_limit后，只获取点对点消息
@@ -190,27 +191,19 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 		if msg == nil {
 			break
 		}
-		if msg.cmd != MSG_GROUP_IM && 
-			msg.cmd != MSG_GROUP_NOTIFICATION &&
-			msg.cmd != MSG_IM && 
-			msg.cmd != MSG_CUSTOMER && 
-			msg.cmd != MSG_CUSTOMER_SUPPORT &&
-			msg.cmd != MSG_SYSTEM {
-			if group_limit > 0 && len(messages) >= group_limit {
-				last_id = off.prev_peer_msgid
-			} else {
-				last_id = off.prev_msgid
-			}			
-			continue
+		if msg.cmd == MSG_GROUP_IM || 
+			msg.cmd == MSG_GROUP_NOTIFICATION ||
+			msg.cmd == MSG_IM ||
+			msg.cmd == MSG_CUSTOMER ||
+			msg.cmd == MSG_CUSTOMER_SUPPORT ||
+			msg.cmd == MSG_CUSTOMER_V2 ||
+			msg.cmd == MSG_SYSTEM {
+			emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
+			messages = append(messages, emsg)
+			if limit > 0 && len(messages) >= limit {
+				break
+			}
 		}
-
-		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
-		messages = append(messages, emsg)
-		
-		if limit > 0 && len(messages) >= limit {
-			break
-		}
-
 		if group_limit > 0 && len(messages) >= group_limit {
 			last_id = off.prev_peer_msgid
 		} else {
@@ -322,26 +315,22 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		if msg == nil {
 			break
 		}
-		if msg.cmd != MSG_GROUP_IM && 
-			msg.cmd != MSG_GROUP_NOTIFICATION &&
-			msg.cmd != MSG_IM && 
-			msg.cmd != MSG_CUSTOMER && 
-			msg.cmd != MSG_CUSTOMER_SUPPORT &&
-			msg.cmd != MSG_SYSTEM {
-			if is_peer {
-				last_id = off.prev_peer_msgid
-			} else {
-				last_id = off.prev_msgid
-			}
-			continue
-		}
+		if msg.cmd == MSG_GROUP_IM ||
+			msg.cmd == MSG_GROUP_NOTIFICATION ||
+			msg.cmd == MSG_IM ||
+			msg.cmd == MSG_CUSTOMER ||
+			msg.cmd == MSG_CUSTOMER_SUPPORT ||
+			msg.cmd == MSG_CUSTOMER_V2 ||
+			msg.cmd == MSG_SYSTEM {
 
-		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
-		messages = append(messages, emsg)
+			emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
+			messages = append(messages, emsg)
 		
-		if limit > 0 && len(messages) >= limit {
-			break
+			if limit > 0 && len(messages) >= limit {
+				break
+			}
 		}
+	
 
 		if is_peer {
 			last_id = off.prev_peer_msgid
@@ -393,19 +382,17 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 		if msg == nil {
 			break
 		}
-		if msg.cmd != MSG_GROUP_IM && 
-			msg.cmd != MSG_GROUP_NOTIFICATION &&
-			msg.cmd != MSG_IM && 
-			msg.cmd != MSG_CUSTOMER && 
-			msg.cmd != MSG_CUSTOMER_SUPPORT {
-			last_id = off.prev_msgid
-			continue
-		}
-
-		emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
-		messages = append(messages, emsg)
-		if len(messages) >= limit {
-			break
+		if msg.cmd == MSG_GROUP_IM ||
+			msg.cmd == MSG_GROUP_NOTIFICATION ||
+			msg.cmd == MSG_IM ||
+			msg.cmd == MSG_CUSTOMER ||
+			msg.cmd == MSG_CUSTOMER_SUPPORT ||
+			msg.cmd == MSG_CUSTOMER_V2 {
+			emsg := &EMessage{msgid:off.msgid, device_id:off.device_id, msg:msg}
+			messages = append(messages, emsg)
+			if len(messages) >= limit {
+				break
+			}
 		}
 		last_id = off.prev_msgid
 	}
@@ -439,6 +426,14 @@ func (client *PeerStorage) isSender(msg *Message, appid int64, uid int64) bool {
 			return true
 		}
 	}
+
+	if msg.cmd == MSG_CUSTOMER_V2 {
+		m := msg.body.(*CustomerMessageV2)
+		if m.sender_appid == appid && m.sender == uid {
+			return true
+		}
+	}
+	
 	return false
 }
 
