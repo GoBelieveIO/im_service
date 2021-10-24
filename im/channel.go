@@ -43,14 +43,14 @@ type Channel struct {
 	mutex           sync.Mutex
 	subscribers     map[int64]*Subscriber
 
-	dispatch        func(*AppMessage)
-	dispatch_group  func(*AppMessage)
-	dispatch_room   func(*AppMessage)
+	dispatch        func(*RouteMessage)
+	dispatch_group  func(*RouteMessage)
+	dispatch_room   func(*RouteMessage)
 
 }
 
-func NewChannel(addr string, f func(*AppMessage), 
-	f2 func(*AppMessage), f3 func(*AppMessage)) *Channel {
+func NewChannel(addr string, f func(*RouteMessage), 
+	f2 func(*RouteMessage), f3 func(*RouteMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
@@ -158,7 +158,7 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
 	log.Info("unsub count:", count, online_count)
 	if count == 1 {
 		//用户断开全部连接
-		id := &AppUserID{appid: appid, uid: uid}
+		id := &RouteUserID{appid: appid, uid: uid}
 		msg := &Message{cmd: MSG_UNSUBSCRIBE, body: id}
 		channel.wt <- msg
 	} else if count > 1 && online_count == 1 && online {
@@ -169,12 +169,12 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
 	}
 }
 
-func (channel *Channel) Publish(amsg *AppMessage) {
+func (channel *Channel) Publish(amsg *RouteMessage) {
 	msg := &Message{cmd: MSG_PUBLISH, body: amsg}
 	channel.wt <- msg
 }
 
-func (channel *Channel) PublishGroup(amsg *AppMessage) {
+func (channel *Channel) PublishGroup(amsg *RouteMessage) {
 	msg := &Message{cmd: MSG_PUBLISH_GROUP, body: amsg}
 	channel.wt <- msg
 }
@@ -220,14 +220,14 @@ func (channel *Channel) RemoveSubscribeRoom(appid, room_id int64) int {
 	return count
 }
 
-func (channel *Channel) GetAllRoomSubscriber() []*AppRoomID {
+func (channel *Channel) GetAllRoomSubscriber() []*RouteRoomID {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 
-	subs := make([]*AppRoomID, 0, 100)
+	subs := make([]*RouteRoomID, 0, 100)
 	for appid, s := range channel.subscribers {
 		for room_id, _ := range s.room_ids {
-			id := &AppRoomID{appid: appid, room_id: room_id}
+			id := &RouteRoomID{appid: appid, room_id: room_id}
 			subs = append(subs, id)
 		}
 	}
@@ -238,7 +238,7 @@ func (channel *Channel) SubscribeRoom(appid int64, room_id int64) {
 	count := channel.AddSubscribeRoom(appid, room_id)
 	log.Info("sub room count:", count)
 	if count == 0 {
-		id := &AppRoomID{appid: appid, room_id: room_id}
+		id := &RouteRoomID{appid: appid, room_id: room_id}
 		msg := &Message{cmd: MSG_SUBSCRIBE_ROOM, body: id}
 		channel.wt <- msg
 	}
@@ -248,13 +248,13 @@ func (channel *Channel) UnsubscribeRoom(appid int64, room_id int64) {
 	count := channel.RemoveSubscribeRoom(appid, room_id)
 	log.Info("unsub room count:", count)
 	if count == 1 {
-		id := &AppRoomID{appid: appid, room_id: room_id}
+		id := &RouteRoomID{appid: appid, room_id: room_id}
 		msg := &Message{cmd: MSG_UNSUBSCRIBE_ROOM, body: id}
 		channel.wt <- msg
 	}
 }
 
-func (channel *Channel) PublishRoom(amsg *AppMessage) {
+func (channel *Channel) PublishRoom(amsg *RouteMessage) {
 	msg := &Message{cmd: MSG_PUBLISH_ROOM, body: amsg}
 	channel.wt <- msg
 }
@@ -309,17 +309,17 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 			}
 			log.Info("channel recv message:", Command(msg.cmd))
 			if msg.cmd == MSG_PUBLISH {
-				amsg := msg.body.(*AppMessage)
+				amsg := msg.body.(*RouteMessage)
 				if channel.dispatch != nil {
 					channel.dispatch(amsg)
 				}
 			} else if msg.cmd == MSG_PUBLISH_ROOM {
-				amsg := msg.body.(*AppMessage)
+				amsg := msg.body.(*RouteMessage)
 				if channel.dispatch_room != nil {
 					channel.dispatch_room(amsg)
 				}
 			} else if msg.cmd == MSG_PUBLISH_GROUP {
-				amsg := msg.body.(*AppMessage)
+				amsg := msg.body.(*RouteMessage)
 				if channel.dispatch_group != nil {
 					channel.dispatch_group(amsg)
 				}

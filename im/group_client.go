@@ -22,6 +22,7 @@ import "time"
 import "sync/atomic"
 import "errors"
 import log "github.com/sirupsen/logrus"
+import "github.com/GoBelieveIO/im_service/storage"
 
 type GroupClient struct {
 	*Connection
@@ -29,7 +30,7 @@ type GroupClient struct {
 
 func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group) (int64, int64, error) {
 	m := &Message{cmd: MSG_GROUP_IM, version:DEFAULT_VERSION, body: msg}
-	msgid, prev_msgid, err := SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := rpc_storage.SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save group message:%d %d err:%s", msg.sender, msg.receiver, err)
 		return 0, 0, err
@@ -101,6 +102,8 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	deliver := GetGroupMessageDeliver(msg.receiver)
 	group := deliver.LoadGroup(msg.receiver)
 	if group == nil {
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq), status:ACK_GROUP_NONEXIST}}
+		client.EnqueueMessage(ack)
 		log.Warning("can't find group:", msg.receiver)
 		return
 	}
@@ -166,31 +169,18 @@ func (client *GroupClient) HandleGroupSync(group_sync_key *GroupSyncKey) {
 	}
 
 	ts := group.GetMemberTimestamp(client.uid)
-	
-	rpc := GetGroupStorageRPCClient(group_id)
 
 	last_id := group_sync_key.sync_key
 	if last_id == 0 {
 		last_id = GetGroupSyncKey(client.appid, client.uid, group_id)
 	}
 
-	s := &SyncGroupHistory{
-		AppID:client.appid, 
-		Uid:client.uid, 
-		DeviceID:client.device_ID, 
-		GroupID:group_sync_key.group_id, 
-		LastMsgID:last_id,
-		Timestamp:int32(ts),
-	}
-
-	log.Info("sync group message...", group_sync_key.sync_key, last_id)
-	resp, err := rpc.Call("SyncGroupMessage", s)
+	log.Info("sync group message...", group_sync_key.sync_key, last_id)	
+	gh, err := rpc_storage.SyncGroupMessage(client.appid, client.uid, client.device_ID, group_sync_key.group_id, last_id, int32(ts))
 	if err != nil {
 		log.Warning("sync message err:", err)
-		return
+		return		
 	}
-
-	gh := resp.(*GroupHistoryMessage)
 	messages := gh.Messages
 	
 	sk := &GroupSyncKey{sync_key:last_id, group_id:group_id}
@@ -225,7 +215,7 @@ func (client *GroupClient) HandleGroupSyncKey(group_sync_key *GroupSyncKey) {
 
 	log.Info("group sync key:", group_sync_key.sync_key, last_id)
 	if last_id > 0 {
-		s := &SyncGroupHistory{
+		s := &storage.SyncGroupHistory{
 			AppID:client.appid, 
 			Uid:client.uid, 
 			GroupID:group_id, 

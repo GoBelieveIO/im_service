@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
+
+import config
 import logging
 import json
 import requests
-from urllib.parse import urlencode
-import config
 
-im_url=config.RPC_URL
+im_url = "http://127.0.0.1:6666"
+
+
 
 def post_peer_message(appid, sender, receiver, content):
     params = {
@@ -14,10 +16,9 @@ def post_peer_message(appid, sender, receiver, content):
         "sender":sender
     }
 
-    url = im_url + "/post_peer_message?" + urlencode(params)
-    res = requests.post(url, data=content.encode("utf-8"))
+    url = im_url + "/post_peer_message"
+    res = requests.post(url, data=content.encode("utf-8"), params=params)
     return res
-    
 
 
 def post_group_message(appid, sender, receiver, content):
@@ -26,11 +27,10 @@ def post_group_message(appid, sender, receiver, content):
         "sender":sender,        
         "receiver":receiver,
     }
-    url = im_url + "/post_group_message?" + urlencode(params)
-    res = requests.post(url, data=content.encode("utf-8"))
+    url = im_url + "/post_group_message"
+    res = requests.post(url, data=content.encode("utf-8"), params=params)
     return res
     
-
 
 def post_group_notification_s(appid, gid, notification, members):
     url = im_url + "/post_group_notification"
@@ -61,27 +61,45 @@ def post_group_notification(appid, gid, op, members):
         return None
 
 
+
+def send_group_notification(appid, gid, op, members):
+    return post_group_notification(appid, gid, op, members)
+
+
+
 def post_peer_notification(appid, uid, content):
     params = {
         "appid":appid,
         "uid":uid
     }    
-    url = im_url + "/post_notification?" + urlencode(params)
+    url = im_url + "/post_notification"
 
     headers = {"Content-Type":"text/plain; charset=UTF-8"}
-    resp = requests.post(url, data=content.encode("utf8"), headers=headers)
+    resp = requests.post(url, data=content.encode("utf8"), headers=headers, params=params)
     return resp
+
+
 
 def post_system_message(appid, uid, content):
     params = {
         "appid":appid,
         "uid":uid
     }
-    url = im_url + "/post_system_message?" + urlencode(params)
+    url = im_url + "/post_system_message"
 
     headers = {"Content-Type":"text/plain; charset=UTF-8"}
-    resp = requests.post(url, data=content.encode("utf8"), headers=headers)    
+    resp = requests.post(url, data=content.encode("utf8"), headers=headers, params=params)    
     return resp
 
-    
+
+def post_room_message(appid, uid, room_id, content):
+    params = {
+        "appid":appid,
+        "uid":uid,
+        "room":room_id
+    }
+    url = im_url + "/post_room_message"
+    headers = {"Content-Type":"text/plain; charset=UTF-8"}
+    resp = requests.post(url, data=content.encode("utf8"), headers=headers, params=params)
+    return resp
 

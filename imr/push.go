@@ -52,6 +52,29 @@ func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
 	client.PushChan(queue_name, b)		
 }
 
+func (client *Client) PublishCustomerMessageV2(appid int64, im *CustomerMessageV2) {
+	conn := redis_pool.Get()
+	defer conn.Close()
+
+	v := make(map[string]interface{})
+	v["appid"] = appid
+	v["sender_appid"] = im.sender_appid
+	v["sender"] = im.sender
+	v["receiver_appid"] = im.receiver_appid
+	v["receiver"] = im.receiver
+	v["content"] = im.content
+
+	b, _ := json.Marshal(v)
+	var queue_name string
+	if client.IsROMApp(appid) {
+		queue_name = fmt.Sprintf("customer_push_queue_v2_%d", appid)
+	} else {
+		queue_name = "customer_push_queue_v2"
+	}
+	
+	client.PushChan(queue_name, b)		
+}
+
 func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IMMessage) {
 	conn := redis_pool.Get()
 	defer conn.Close()
@@ -73,28 +96,6 @@ func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IM
 	
 	client.PushChan(queue_name, b)	
 }
-
-func (client *Client) PublishCustomerMessage(appid, receiver int64, cs *CustomerMessage, cmd int) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	v := make(map[string]interface{})
-	v["appid"] = appid
-	v["receiver"] = receiver
-	v["command"] = cmd
-	v["customer_appid"] = cs.customer_appid
-	v["customer"] = cs.customer_id
-	v["seller"] = cs.seller_id
-	v["store"] = cs.store_id
-	v["content"] = cs.content
-
-	b, _ := json.Marshal(v)
-	var queue_name string
-	queue_name = "customer_push_queue"
-
-	client.PushChan(queue_name, b)	
-}
-
 
 func (client *Client) PublishSystemMessage(appid, receiver int64, content string) {
 	conn := redis_pool.Get()

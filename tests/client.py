@@ -105,11 +105,6 @@ def _login(appid, uid):
         User.save_user_access_token(rds, appid, uid, '', token)
     return token
 
-def login(uid):
-    return _login(APP_ID, uid)
-
-def kefu_login(uid):
-    return _login(KEFU_APP_ID, uid)
 
 def _connect_server(token, port):
     seq = 0
@@ -133,25 +128,8 @@ def _connect_server(token, port):
     return sock, seq
 
 
-def connect_server(uid, port):
-    token = login(uid)
-    if not token:
-        raise Exception("login failure")
-    return _connect_server(token, port)
 
-def kefu_connect_server(uid, port):
-    token = kefu_login(uid)
-    if not token:
-        raise Exception("login failure")        
-    return _connect_server(token, port)
-
-
-def recv_client_(uid, port, handler, group_id=None, is_kefu=False):
-    if is_kefu:
-        sock, seq = kefu_connect_server(uid, port)
-    else:
-        sock, seq = connect_server(uid, port)
-
+def recv_client_(uid, sock, seq, handler, group_id=None):
     group_sync_keys = {}
     sync_key = 0
 
@@ -211,12 +189,28 @@ def recv_client_(uid, port, handler, group_id=None, is_kefu=False):
     sock.close()
 
 
+
+def connect_server(uid, port, appid=None):
+    if appid is None:
+        token = _login(APP_ID, uid)
+    else:
+        token = _login(appid, uid)
+    if not token:
+        raise Exception("login failure")
+    return _connect_server(token, port)
+
+def kefu_connect_server(uid, port):
+    return connect_server(uid, port, KEFU_APP_ID)    
+
 def kefu_recv_client(uid, port, handler):
-    recv_client_(uid, port, handler, is_kefu=True)    
+    sock, seq = kefu_connect_server(uid, port)    
+    recv_client_(uid, sock, seq, handler)    
 
 def recv_group_client(uid, group_id, port, handler):
-    recv_client_(uid, port, handler, group_id=group_id)
+    sock, seq = connect_server(uid, port)
+    recv_client_(uid, sock, seq, handler, group_id=group_id)
 
-def recv_client(uid, port, handler):
-    recv_client_(uid, port, handler)
+def recv_client(uid, port, handler, appid=None):
+    sock, seq = connect_server(uid, port, appid)
+    recv_client_(uid, sock, seq, handler)
     

@@ -443,7 +443,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 
 	batch_members := make(map[int64][]int64)
 	for _, member := range gm.members {
-		index := GetStorageRPCIndex(member)
+		index := rpc_storage.GetStorageRPCIndex(member)
 		if _, ok := batch_members[index]; !ok {
 			batch_members[index] = []int64{member}
 		} else {
@@ -454,19 +454,19 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 	}
 	
 	for _, mb := range(batch_members) {
-		r, err := SavePeerGroupMessage(gm.appid, mb, gm.device_ID, m)
+		r, err := rpc_storage.SavePeerGroupMessage(gm.appid, mb, gm.device_ID, m)
 		if err != nil {
 			log.Errorf("save peer group message:%d %d err:%s", gm.sender, gm.gid, err)
 			return nil, false
 		}
-		if len(r) != len(mb)*2 {
+		if len(r) != len(mb) {
 			log.Errorf("save peer group message err:%d %d", len(r), len(mb))
 			return nil, false
 		}
 
-		for i := 0; i < len(r); i += 2 {
-			msgid, prev_msgid := r[i], r[i+1]
-			member := mb[i/2]
+		for i := 0; i < len(r); i++ {
+			msgid, prev_msgid := r[i].MsgID, r[i].PrevMsgID
+			member := mb[i]
 			meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
 			mm := &Message{cmd:MSG_GROUP_IM, version:DEFAULT_VERSION,
 				flag:MESSAGE_FLAG_PUSH, body:msg, meta:meta}

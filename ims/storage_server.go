@@ -26,14 +26,14 @@ import "runtime"
 import "flag"
 import "math/rand"
 import "os"
+import "net/rpc"
 import "net/http"
 import "os/signal"
 import "syscall"
 import "github.com/gomodule/redigo/redis"
-import "github.com/valyala/gorpc"
 import "gopkg.in/natefinch/lumberjack.v2"
 import log "github.com/sirupsen/logrus"
-
+import rpc_storage "github.com/GoBelieveIO/im_service/storage"
 
 var (
     VERSION    string
@@ -84,6 +84,7 @@ func handle_sync_client(conn *net.TCPConn) {
 	client.Run()
 }
 
+
 func ListenSyncClient() {
 	Listen(handle_sync_client, config.sync_listen)
 }
@@ -91,11 +92,7 @@ func ListenSyncClient() {
 // Signal handler
 func waitSignal() error {
     ch := make(chan os.Signal, 1)
-    signal.Notify(
-    ch,
-    syscall.SIGINT,
-    syscall.SIGTERM,
-    )
+    signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
     for {
         sig := <-ch
         fmt.Println("singal:", sig.String())
@@ -178,23 +175,18 @@ func StartHttpServer(addr string) {
 
 
 func ListenRPCClient() {
-	dispatcher := gorpc.NewDispatcher()
-	dispatcher.AddFunc("SyncMessage", SyncMessage)
-	dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessage)
-	dispatcher.AddFunc("SavePeerMessage", SavePeerMessage)
-	dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessage)
-	dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessage)
-	dispatcher.AddFunc("GetNewCount", GetNewCount)
-	dispatcher.AddFunc("GetLatestMessage", GetLatestMessage)
-	
-	s := &gorpc.Server{
-		Addr: config.rpc_listen,
-		Handler: dispatcher.NewHandlerFunc(),
+	var rpc_s rpc_storage.RPCStorage
+	rpc_s = new(RPCStorage)
+	rpc.Register(rpc_s)
+	rpc.HandleHTTP()
+
+	l, err := net.Listen("tcp", config.rpc_listen)
+	if err != nil {
+		log.Fatalf("can't start rpc server:%s", err)
 	}
 
-	if err := s.Serve(); err != nil {
-		log.Fatalf("Cannot start rpc server: %s", err)
-	}
+	http.Serve(l, nil)
+
 }
 
 

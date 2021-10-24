@@ -35,9 +35,10 @@ import "sync/atomic"
 import "github.com/gomodule/redigo/redis"
 import "gopkg.in/natefinch/lumberjack.v2"
 import log "github.com/sirupsen/logrus"
-import "github.com/valyala/gorpc"
 import "github.com/importcjj/sensitive"
 import "github.com/bitly/go-simplejson"
+import "github.com/GoBelieveIO/im_service/storage"
+
 
 var (
     VERSION    string
@@ -47,11 +48,9 @@ var (
 	GIT_BRANCH string
 )
 
-//storage server,  peer, group, customer message
-var rpc_clients []*gorpc.DispatcherClient
+var auth Auth;
 
-//super group storage server
-var group_rpc_clients []*gorpc.DispatcherClient
+var rpc_storage *RPCStorage
 
 //route server
 var route_channels []*Channel
@@ -67,8 +66,8 @@ var redis_pool *redis.Pool
 var config *Config
 var server_summary *ServerSummary
 
-var sync_c chan *SyncHistory
-var group_sync_c chan *SyncGroupHistory
+var sync_c chan *storage.SyncHistory
+var group_sync_c chan *storage.SyncGroupHistory
 
 var relationship_pool *RelationshipPool
 
@@ -83,8 +82,8 @@ var low_memory int32//低内存状态
 func init() {
 	app_route = NewAppRoute()
 	server_summary = NewServerSummary()
-	sync_c = make(chan *SyncHistory, 100)
-	group_sync_c = make(chan *SyncGroupHistory, 100)
+	sync_c = make(chan *storage.SyncHistory, 100)
+	group_sync_c = make(chan *storage.SyncGroupHistory, 100)
 }
 
 
@@ -116,6 +115,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		},
 	}
 }
+
 
 //过滤敏感词
 func FilterDirtyWord(msg *IMMessage) {
@@ -175,7 +175,6 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_notification", SendNotification)
 	http.HandleFunc("/post_room_message", SendRoomMessage)
 	http.HandleFunc("/post_customer_message", SendCustomerMessage)
-	http.HandleFunc("/post_customer_support_message", SendCustomerSupportMessage)
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
 
@@ -343,57 +342,19 @@ func main() {
 	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
 	log.Infof("memory limit:%d", config.memory_limit)
 
+	log.Infof("auth method:%s", config.auth_method)
+	log.Infof("jwt sign key:%s", string(config.jwt_signing_key))
+	
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 	
 	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
 		config.redis_db)
 
-	rpc_clients = make([]*gorpc.DispatcherClient, 0)
-	for _, addr := range(config.storage_rpc_addrs) {
-		c := &gorpc.Client{
-			Conns: 4,
-			Addr: addr,
-		}
-		c.Start()
+	auth = NewAuth(config.auth_method)
 
-		dispatcher := gorpc.NewDispatcher()
-		dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
-		dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
-		dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
-		dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
-		dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
-		dispatcher.AddFunc("GetLatestMessage", GetLatestMessageInterface)
-
-		dc := dispatcher.NewFuncClient(c)
-
-		rpc_clients = append(rpc_clients, dc)
-	}
-
-	if len(config.group_storage_rpc_addrs) > 0 {
-		group_rpc_clients = make([]*gorpc.DispatcherClient, 0)
-		for _, addr := range(config.group_storage_rpc_addrs) {
-			c := &gorpc.Client{
-				Conns: 4,
-				Addr: addr,
-			}
-			c.Start()
-
-			dispatcher := gorpc.NewDispatcher()
-			dispatcher.AddFunc("SyncMessage", SyncMessageInterface)
-			dispatcher.AddFunc("SyncGroupMessage", SyncGroupMessageInterface)
-			dispatcher.AddFunc("SavePeerMessage", SavePeerMessageInterface)
-			dispatcher.AddFunc("SavePeerGroupMessage", SavePeerGroupMessageInterface)
-			dispatcher.AddFunc("SaveGroupMessage", SaveGroupMessageInterface)
-
-			dc := dispatcher.NewFuncClient(c)
-
-			group_rpc_clients = append(group_rpc_clients, dc)
-		}
-	} else {
-		group_rpc_clients = rpc_clients
-	}
-
+	rpc_storage = NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
+	
 	route_channels = make([]*Channel, 0)
 	for _, addr := range(config.route_addrs) {
 		channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)

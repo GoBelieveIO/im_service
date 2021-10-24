@@ -8,7 +8,7 @@ import "bytes"
 var route_addr string = "127.0.0.1:4444"
 var appid int64 = 8
 
-func Dispatch(amsg *AppMessage) {
+func Dispatch(amsg *RouteMessage) {
 	log.Printf("amsg appid:%d receiver:%d", amsg.appid, amsg.receiver)
 }
 func main() {
@@ -35,7 +35,7 @@ func main() {
 	WriteMessage(mbuffer, msg)
 	msg_buf := mbuffer.Bytes()
 
-	amsg := &AppMessage{}
+	amsg := &RouteMessage{}
 	amsg.appid = appid
 	amsg.receiver = 1000
 	amsg.msg = msg_buf

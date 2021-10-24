@@ -22,72 +22,10 @@ package main
 import "bytes"
 import "encoding/binary"
 
-
-const MSG_AUTH_STATUS = 3
-
-const MSG_ACK = 5
-
-//deprecated
-const MSG_RST = 6
-
-
-const MSG_PING = 13
-const MSG_PONG = 14
-const MSG_AUTH_TOKEN = 15
-
-const MSG_RT = 17
-const MSG_ENTER_ROOM = 18
-const MSG_LEAVE_ROOM = 19
-const MSG_ROOM_IM = 20
-
-const MSG_UNREAD_COUNT = 22
-
-//persistent, deprecated
-const MSG_CUSTOMER_SERVICE_ = 23
-
-
-//客户端->服务端
-const MSG_SYNC = 26 //同步消息
-//服务端->客服端
-const MSG_SYNC_BEGIN = 27
-const MSG_SYNC_END = 28
-//通知客户端有新消息
-const MSG_SYNC_NOTIFY = 29
-
-
-//客户端->服务端
-const MSG_SYNC_GROUP = 30//同步超级群消息
-//服务端->客服端
-const MSG_SYNC_GROUP_BEGIN = 31
-const MSG_SYNC_GROUP_END = 32
-//通知客户端有新消息
-const MSG_SYNC_GROUP_NOTIFY = 33
-
-
-//客服端->服务端,更新服务器的synckey
-const MSG_SYNC_KEY = 34
-const MSG_GROUP_SYNC_KEY = 35
-
-//系统通知消息, unpersistent
-const MSG_NOTIFICATION = 36
-
-//消息的meta信息
-const MSG_METADATA = 37
-
-
-const MSG_VOIP_CONTROL = 64
-
-
-//im实例使用
-const MSG_PENDING_GROUP_MESSAGE = 251
-
-
-
 //平台号
 const PLATFORM_IOS = 1
 const PLATFORM_ANDROID = 2
 const PLATFORM_WEB = 3
-
 
 
 const ACK_SUCCESS = 0
@@ -95,6 +33,7 @@ const ACK_NOT_MY_FRIEND = 1
 const ACK_NOT_YOUR_FRIEND = 2
 const ACK_IN_YOUR_BLACKLIST = 3
 const ACK_NOT_GROUP_MEMBER = 64
+const ACK_GROUP_NONEXIST = 65
 
 //version1:IMMessage添加时间戳字段
 //version2:MessageACK添加status字段
@@ -125,8 +64,6 @@ func init() {
 	
 	message_creators[MSG_NOTIFICATION] = func()IMessage{return new(SystemMessage)}
 	message_creators[MSG_METADATA] = func()IMessage{return new(Metadata)}
-	
-	message_creators[MSG_VOIP_CONTROL] = func()IMessage{return new(VOIPControl)}
 
 	message_creators[MSG_AUTH_STATUS] = func()IMessage{return new(AuthenticationStatus)}
 
@@ -160,7 +97,6 @@ func init() {
 
 	message_descriptions[MSG_NOTIFICATION] = "MSG_NOTIFICATION"
 	message_descriptions[MSG_METADATA] = "MSG_METADATA"	
-	message_descriptions[MSG_VOIP_CONTROL] = "MSG_VOIP_CONTROL"
 
 	message_descriptions[MSG_PENDING_GROUP_MESSAGE] = "MSG_PENDING_GROUP_MESSAGE"	
 	
@@ -179,8 +115,6 @@ func init() {
 	external_messages[MSG_GROUP_SYNC_KEY] = true;
 	external_messages[MSG_METADATA] = true;
 }
-
-
 
 
 
@@ -324,34 +258,6 @@ func (room *Room) RoomID() int64 {
 	return int64(*room)
 }
 
-
-
-type VOIPControl struct {
-	sender   int64
-	receiver int64
-	content  []byte
-}
-
-func (ctl *VOIPControl) ToData() []byte {
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, ctl.sender)
-	binary.Write(buffer, binary.BigEndian, ctl.receiver)
-	buffer.Write([]byte(ctl.content))
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (ctl *VOIPControl) FromData(buff []byte) bool {
-	if len(buff) <= 16 {
-		return false
-	}
-
-	buffer := bytes.NewBuffer(buff[:16])
-	binary.Read(buffer, binary.BigEndian, &ctl.sender)
-	binary.Read(buffer, binary.BigEndian, &ctl.receiver)
-	ctl.content = buff[16:]
-	return true
-}
 
 
 type SyncKey struct {

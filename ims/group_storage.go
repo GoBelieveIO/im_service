@@ -65,7 +65,7 @@ func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id 
 	last_batch_id := index.last_batch_id
 	last_seq_id := index.last_seq_id
 	
-	off := &OfflineMessage4{}
+	off := &OfflineMessage{}
 	off.appid = appid
 	off.receiver = gid
 	off.msgid = msgid
@@ -128,10 +128,9 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 			log.Warningf("load message:%d error\n", msgid)
 			break
 		}
-		var off *OfflineMessage
-		if ioff, ok := msg.body.(IOfflineMessage); ok {
-			off = ioff.body()
-		} else {
+
+		off, ok := msg.body.(*OfflineMessage)
+		if !ok {
 			log.Warning("invalid message cmd:", msg.cmd)
 			break
 		}		
@@ -374,12 +373,8 @@ func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]*GroupInde
 }
 
 func (storage *GroupStorage) execMessage(msg *Message, msgid int64) {
-	if msg.cmd == MSG_GROUP_IM_LIST {
-		off := msg.body.(*GroupOfflineMessage)
-		gi := &GroupIndex{off.msgid, msgid, 0, 0}
-		storage.setGroupIndex(off.appid, off.receiver, gi)
-	} else if msg.cmd == MSG_GROUP_OFFLINE {
-		off := msg.body.(IOfflineMessage).body()
+	if msg.cmd == MSG_GROUP_OFFLINE {
+		off := msg.body.(*OfflineMessage)
 		index := storage.getGroupIndex(off.appid, off.receiver)
 		last_id := msgid
 		last_batch_id := index.last_batch_id

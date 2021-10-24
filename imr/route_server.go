@@ -76,7 +76,7 @@ func GetClientSet() ClientSet {
 	return s
 }
 
-func FindClientSet(id *AppUserID) ClientSet {
+func FindClientSet(id *RouteUserID) ClientSet {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -91,7 +91,7 @@ func FindClientSet(id *AppUserID) ClientSet {
 }
 
 
-func FindRoomClientSet(id *AppRoomID) ClientSet {
+func FindRoomClientSet(id *RouteRoomID) ClientSet {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -109,7 +109,7 @@ func IsUserOnline(appid, uid int64) bool {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	id := &AppUserID{appid:appid, uid:uid}
+	id := &RouteUserID{appid:appid, uid:uid}
 
 	for c := range(clients) {
 		if c.IsAppUserOnline(id) {
@@ -252,6 +252,8 @@ func main() {
 	log.Infof("redis address:%s password:%s db:%d\n", 
 		config.redis_address, config.redis_password, config.redis_db)
 
+	log.Infof("push disabled:%d", config.push_disabled)
+	
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 	

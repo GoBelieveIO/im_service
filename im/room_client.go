@@ -120,7 +120,7 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 	mbuffer := new(bytes.Buffer)
 	WriteMessage(mbuffer, m)
 	msg_buf := mbuffer.Bytes()
-	amsg := &AppMessage{appid:client.appid, receiver:room_id, msg:msg_buf}
+	amsg := &RouteMessage{appid:client.appid, receiver:room_id, msg:msg_buf}
 	channel := GetRoomChannel(client.room_id)
 	channel.PublishRoom(amsg)
 

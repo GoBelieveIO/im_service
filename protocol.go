@@ -240,9 +240,8 @@ func ReceiveServerMessage(conn io.Reader) (*Message, error) {
 
 
 //接受客户端消息(external messages)
-func ReceiveClientMessage(conn io.Reader) *Message {
-	m, _ :=  ReceiveLimitMessage(conn, 32*1024, true)
-	return m
+func ReceiveClientMessage(conn io.Reader) (*Message, error) {
+	return ReceiveLimitMessage(conn, 32*1024, true)
 }
 
 //消息大小限制在32M

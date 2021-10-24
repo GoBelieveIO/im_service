@@ -36,8 +36,47 @@ const MESSAGE_QUEUE_LIMIT = 300
 //socket阻塞状态下消息的数量限制,此时socket可能已经被对端异常关闭
 const MESSAGE_QUEUE_BLOCK_LIMIT = 30
 
+type Conn interface {
+	Close() error
+	
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+	
+	ReadMessage()(*Message, error)
+	WriteMessage(msg *Message) error
+}
+
+
+type NetConn struct {
+	net.Conn
+}
+
+
+func (conn *NetConn) ReadMessage()(*Message, error) {
+	return ReceiveClientMessage(conn.Conn)
+}
+
+func (conn *NetConn) WriteMessage(msg *Message) error {
+	return SendMessage(conn.Conn, msg)	
+}
+
+type WSConn struct {
+	*websocket.Conn
+}
+
+
+func (ws *WSConn) ReadMessage()(*Message, error) {
+	return ReadWebsocketMessage(ws.Conn)
+}
+
+func (ws *WSConn) WriteMessage(msg *Message) error {
+	return SendWebsocketBinaryMessage(ws.Conn, msg)	
+}
+
+
+
 type Connection struct {
-	conn   interface{}
+	conn   Conn
 	closed int32
 	
 	forbidden int32 //是否被禁言
@@ -83,19 +122,10 @@ func (client *Connection) isSender(msg *Message, device_id int64) bool {
 		}
 	}
 
-	if msg.cmd == MSG_CUSTOMER {
-		m := msg.body.(*CustomerMessage)
-		if m.customer_appid == client.appid && 
-			m.customer_id == client.uid && 
-			device_id == client.device_ID {
-			return true
-		}
-	}
-
-	if msg.cmd == MSG_CUSTOMER_SUPPORT {
-		m := msg.body.(*CustomerMessage)
-		if config.kefu_appid == client.appid && 
-			m.seller_id == client.uid && 
+	if msg.cmd == MSG_CUSTOMER_V2 {
+		m := msg.body.(*CustomerMessageV2)
+		if m.sender_appid == client.appid &&
+			m.sender == client.uid &&
 			device_id == client.device_ID {
 			return true
 		}
@@ -206,7 +236,6 @@ func (client *Connection) EnqueueMessage(msg *Message) bool {
 }
 
 
-
 func (client *Connection) EnqueueMessages(msgs []*Message) bool {
 	closed := atomic.LoadInt32(&client.closed)
 	if closed > 0 {
@@ -230,21 +259,12 @@ func (client *Connection) EnqueueMessages(msgs []*Message) bool {
 	}
 }
 
-
-
-// 根据连接类型获取消息
 func (client *Connection) read() *Message {
-	if conn, ok := client.conn.(net.Conn); ok {
-		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
-		return ReceiveClientMessage(conn)
-	} else if conn, ok := client.conn.(*websocket.Conn); ok {
-		conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
-		return ReadWebsocketMessage(conn)
-	}
-	return nil
+	client.conn.SetReadDeadline(time.Now().Add(CLIENT_TIMEOUT * time.Second))
+	msg, _ := client.conn.ReadMessage()
+	return msg
 }
 
-// 根据连接类型发送消息
 func (client *Connection) send(m *Message) {
 	client.sequence += 1
 	msg := m
@@ -266,31 +286,18 @@ func (client *Connection) send(m *Message) {
 		complete_c <- 1
 	}
 
-	timer := time.AfterFunc(10*time.Millisecond, block)	
-	if conn, ok := client.conn.(net.Conn); ok {
-		tc := atomic.LoadInt32(&client.tc)
-		if tc > 0 {
-			log.Info("can't write data to blocked socket")
-			return
-		}
-		conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
-		err := SendMessage(conn, msg)
-		if err != nil {
-			atomic.AddInt32(&client.tc, 1)
-			log.Info("send msg:", Command(msg.cmd),  " tcp err:", err)
-		}
-	} else if conn, ok := client.conn.(*websocket.Conn); ok {
-		tc := atomic.LoadInt32(&client.tc)
-		if tc > 0 {
-			log.Info("can't write data to blocked websocket")
-			return
-		}
-		conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
-		err := SendWebsocketBinaryMessage(conn, msg)
-		if err != nil {
-			atomic.AddInt32(&client.tc, 1)
-			log.Info("send msg:", Command(msg.cmd),  " websocket err:", err)
-		}
+	timer := time.AfterFunc(10*time.Millisecond, block)
+
+	tc := atomic.LoadInt32(&client.tc)
+	if tc > 0 {
+		log.Info("can't write data to blocked socket")
+		return
+	}	
+	client.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))	
+	err := client.conn.WriteMessage(msg)
+	if err != nil {
+		atomic.AddInt32(&client.tc, 1)
+		log.Info("send msg:", Command(msg.cmd),  " tcp err:", err)
 	}
 
 	r := timer.Stop()
@@ -302,11 +309,7 @@ func (client *Connection) send(m *Message) {
 	}
 }
 
-// 根据连接类型关闭
+
 func (client *Connection) close() {
-	if conn, ok := client.conn.(net.Conn); ok {
-		conn.Close()
-	} else if conn, ok := client.conn.(*websocket.Conn); ok {
-		conn.Close()
-	}
+	client.conn.Close()
 }

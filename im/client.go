@@ -23,6 +23,7 @@ import "net"
 import "time"
 import "sync/atomic"
 import log "github.com/sirupsen/logrus"
+import "github.com/gorilla/websocket"
 import "container/list"
 import "crypto/tls"
 import "fmt"
@@ -35,7 +36,7 @@ type Client struct {
 	*CustomerClient
 }
 
-func NewClient(conn interface{}) *Client {
+func NewClient(conn Conn) *Client {
 	client := new(Client)
 
 	//初始化Connection
@@ -56,14 +57,22 @@ func NewClient(conn interface{}) *Client {
 	return client
 }
 
-func handle_client(conn interface{}) {
+func handle_client(conn Conn) {
 	low := atomic.LoadInt32(&low_memory)
 	if low != 0 {
 		log.Warning("low memory, drop new connection")
 		return
 	}
 	client := NewClient(conn)
-	client.Run()
+	client.Run()	
+}
+
+func handle_ws_client(conn *websocket.Conn) {
+	handle_client(&WSConn{Conn:conn})
+}
+
+func handle_tcp_client(conn net.Conn) {
+	handle_client(&NetConn{Conn:conn})	
 }
 
 func ListenClient(port int) {
@@ -86,7 +95,7 @@ func ListenClient(port int) {
 			return
 		}
 		log.Infoln("handle new connection, remote address:", conn.RemoteAddr())
-		handle_client(conn)
+		handle_tcp_client(conn)
 	}
 }
 
@@ -110,7 +119,7 @@ func ListenSSL(port int, cert_file, key_file string) {
 			log.Fatal("ssl accept err:", err)
 		}
 		log.Infoln("handle new ssl connection,  remote address:", conn.RemoteAddr())
-		handle_client(conn)
+		handle_tcp_client(conn)
 	}
 }
 
@@ -197,7 +206,7 @@ func (client *Client) HandleMessage(msg *Message) {
 
 
 func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
-	appid, uid, err := LoadUserAccessToken(token)
+	appid, uid, err := auth.LoadUserAccessToken(token)
 
 	if err != nil {
 		return 0, 0, 0, false, err
@@ -268,8 +277,6 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.AddClient()
 
 	client.PeerClient.Login()
-
-	CountDAU(client.appid, client.uid)
 }
 
 func (client *Client) AddClient() {

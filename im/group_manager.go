@@ -38,6 +38,7 @@ const GROUP_MANAGER_XREAD_TIMEOUT = 60
 const GROUP_EVENT_CREATE = "group_create"
 const GROUP_EVENT_DISBAND = "group_disband"
 const GROUP_EVENT_UPGRADE = "group_upgrade"
+const GROUP_EVENT_CHANGED = "group_changed"
 const GROUP_EVENT_MEMBER_ADD = "group_member_add"
 const GROUP_EVENT_MEMBER_REMOVE = "group_member_remove"
 const GROUP_EVENT_MEMBER_MUTE = "group_member_mute"
@@ -185,6 +186,22 @@ func (group_manager *GroupManager) HandleUpgrade(event *GroupEvent) {
 	}
 }
 
+func (group_manager *GroupManager) HandleChanged(event *GroupEvent) {
+	gid := event.GroupId
+	if gid == 0 {
+		log.Infof("invalid group event:%s, group id:%d",
+			event.Name, gid)
+		return
+	}
+	group_manager.mutex.Lock()
+	defer group_manager.mutex.Unlock()
+	if _, ok := group_manager.groups[gid]; ok {
+		log.Info("group changed, delete group:", gid)
+		delete(group_manager.groups, gid)
+	} else {
+		log.Infof("group:%d nonexists\n", gid)
+	}	
+}
 
 func (group_manager *GroupManager) HandleMemberAdd(event *GroupEvent) {
 	gid := event.GroupId
@@ -261,7 +278,9 @@ func (group_manager *GroupManager) handleEvent(event *GroupEvent) {
 	} else if event.Name == GROUP_EVENT_DISBAND {
 		group_manager.HandleDisband(event)
 	} else if event.Name == GROUP_EVENT_UPGRADE {
-		group_manager.HandleUpgrade(event)		
+		group_manager.HandleUpgrade(event)
+	} else if event.Name == GROUP_EVENT_CHANGED {
+		group_manager.HandleChanged(event)
 	} else if event.Name == GROUP_EVENT_MEMBER_ADD {
 		group_manager.HandleMemberAdd(event)
 	} else if event.Name == GROUP_EVENT_MEMBER_REMOVE {
