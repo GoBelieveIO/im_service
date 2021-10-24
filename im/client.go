@@ -277,8 +277,6 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.AddClient()
 
 	client.PeerClient.Login()
-
-	CountDAU(client.appid, client.uid)
 }
 
 func (client *Client) AddClient() {

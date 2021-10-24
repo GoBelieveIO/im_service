@@ -20,7 +20,6 @@
 package main
 
 import "fmt"
-import "time"
 import log "github.com/sirupsen/logrus"
 import "github.com/gomodule/redigo/redis"
 
@@ -102,30 +101,6 @@ func GetUserPreferences(appid int64, uid int64) (int, bool, error) {
 	}	
 
 	return forbidden, notification_on != 0, nil
-}
-
-func CountUser(appid int64, uid int64) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	key := fmt.Sprintf("statistics_users_%d", appid)
-	_, err := conn.Do("PFADD", key, uid)
-	if err != nil {
-		log.Info("pfadd err:", err)
-	}
-}
-
-func CountDAU(appid int64, uid int64) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-	
-	now := time.Now()
-	date := fmt.Sprintf("%d_%d_%d", now.Year(), int(now.Month()), now.Day())
-	key := fmt.Sprintf("statistics_dau_%s_%d", date, appid)
-	_, err := conn.Do("PFADD", key, uid)
-	if err != nil {
-		log.Info("pfadd err:", err)
-	}
 }
 
 func SetUserUnreadCount(appid int64, uid int64, count int32) {
