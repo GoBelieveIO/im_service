@@ -27,8 +27,10 @@ import "errors"
 import "strconv"
 import "strings"
 import "database/sql"
+import "context"
 import _ "github.com/go-sql-driver/mysql"
-import "github.com/gomodule/redigo/redis"
+import "github.com/go-redis/redis/v8"
+import "github.com/GoBelieveIO/im_service/hscan"
 import log "github.com/sirupsen/logrus"
 
 const EXPIRE_DURATION = 60*60 //60min
@@ -321,46 +323,32 @@ func (rp *RelationshipPool) ReloadRelation() {
 
 
 func (rp *RelationshipPool) getLastEntryID() (string, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	r, err := redis.Values(conn.Do("XREVRANGE", RELATIONSHIP_POOL_STREAM_NAME, "+", "-", "COUNT", "1"))
-
+	var ctx = context.Background()	
+	r, err := redis_client.XRevRangeN(ctx, RELATIONSHIP_POOL_STREAM_NAME, "+", "-", 1).Result()
 	if err != nil {
 		log.Error("redis err:", err)
 		return "", err
 	}
 
-	if len(r) == 0 {
-		return "0-0", nil
-	}
-	
-	var entries []interface{}
-	r, err = redis.Scan(r, &entries)
-	if err != nil {
-		log.Error("redis scan err:", err)
-		return "", err
+	var id string = "0-0"
+	for _, m := range(r) {
+		id = m.ID
 	}
 
-	var id string		
-	_, err = redis.Scan(entries, &id, nil)
-	if err != nil {
-		log.Error("redis scan err:", err)
-		return "", err		
-	}
 	return id, nil
 }
 
 
 func (rp *RelationshipPool) getActionID() (int64, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	actions, err := redis.String(conn.Do("GET", "friends_actions"))
-	if err != nil && err != redis.ErrNil {
+	var ctx = context.Background()	
+	actions, err := redis_client.Get(ctx, "friends_actions").Result()
+	if err == redis.Nil {
+		return 0, nil
+	} else if err != nil {
 		log.Info("hget error:", err)
 		return 0, err
 	}
+	
 	if actions == "" {
 		return 0, nil
 	} else {
@@ -403,7 +391,7 @@ func (rp *RelationshipPool) handleEvent(event *RelationshipEvent) {
 	}
 	
 	rp.action_id = action_id
-	rp.last_entry_id = event.Id
+
 }
 
 
@@ -430,95 +418,59 @@ func (rp *RelationshipPool) load() {
 }
 
 
-func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, error) {
-	//block timeout 60s
-	reply, err := redis.Values(c.Do("XREAD", "COUNT", "1000", "BLOCK",
-		RELATIONSHIP_POOL_XREAD_TIMEOUT*1000, "STREAMS",
-		RELATIONSHIP_POOL_STREAM_NAME, rp.last_entry_id))
-	if err != nil && err != redis.ErrNil {
+func (rp *RelationshipPool) readEvents(c *redis.Conn) ([]*RelationshipEvent, error) {
+	var ctx = context.Background()
+
+	args := &redis.XReadArgs{
+		Streams:[]string{RELATIONSHIP_POOL_STREAM_NAME, rp.last_entry_id},
+		Count:100,
+		Block:time.Duration(time.Second*RELATIONSHIP_POOL_XREAD_TIMEOUT),
+	}
+	
+	reply, err := c.XRead(ctx, args).Result()
+	if err == redis.Nil {
+		log.Info("redis xread timeout")		
+		return nil, nil
+	} else if err != nil {
 		log.Info("redis xread err:", err)
 		return nil, err
 	}
+	
 	if len(reply) == 0 {
-		log.Info("redis xread timeout")
+		//impossible
 		return nil, nil
 	}
 
-	var stream_res []interface{}
-	_, err = redis.Scan(reply, &stream_res)
-	if err != nil {
-		log.Info("redis scan err:", err)
-		return nil, err
-	}
-
-	var r []interface{}
-	_, err = redis.Scan(stream_res, nil, &r)
-	if err != nil {
-		log.Info("redis scan err:", err)
-		return nil, err
-	}
-	
 	events := make([]*RelationshipEvent, 0, 1000)
-	for len(r) > 0 {
-		var entries []interface{}
-		r, err = redis.Scan(r, &entries)
-		if err != nil {
-			log.Error("redis scan err:", err)
-			return nil, err
-		}
-
-		var id string
-		var fields []interface{}
-		_, err = redis.Scan(entries, &id, &fields)
-		if err != nil {
-			log.Error("redis scan err:", err)
-			return nil, err		
-		}
-
+	r := reply[0]
+	for _, m := range(r.Messages) {
+		rp.last_entry_id = m.ID
 		event := &RelationshipEvent{}
-		event.Id = id
-		err = redis.ScanStruct(fields, event)
+		event.Id = m.ID
+		err = hscan.ScanMap(event, m.Values)
 		if err != nil {
-			//ignore the error, will skip the event
+			//ignore the error, skip the event
 			log.Error("redis scan err:", err)
+			continue
 		}
 		events = append(events, event)
 	}
-	
+
+
 	return events, nil
 }
 
 
 func (rp *RelationshipPool) RunOnce() bool {
-	c, err := redis.Dial("tcp", config.redis_address)
-	if err != nil {
-		log.Info("dial redis error:", err)
-		return false
-	}
-
+	var ctx = context.Background()	
+	c := redis_client.Conn(ctx)
 	defer c.Close()
-	
-	password := config.redis_password
-	if len(password) > 0 {
-		if _, err := c.Do("AUTH", password); err != nil {
-			log.Info("redis auth err:", err)
-			return false
-		}
-	}
-
-	db := config.redis_db
-	if db > 0 && db < 16 {
-		if _, err := c.Do("SELECT", db); err != nil {
-			log.Info("redis select err:", err)
-			return false
-		}
-	}
 
 	var last_clear_ts int64	
 	for {
 		events, err := rp.readEvents(c)
 		if err != nil {
-			log.Warning("group manager read event err:", err)
+			log.Warning("relationship read event err:", err)
 			break
 		}
 

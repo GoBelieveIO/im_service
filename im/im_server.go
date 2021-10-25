@@ -32,7 +32,7 @@ import "os"
 import "os/exec"
 import "sync/atomic"
 
-import "github.com/gomodule/redigo/redis"
+import "github.com/go-redis/redis/v8"
 import "gopkg.in/natefinch/lumberjack.v2"
 import log "github.com/sirupsen/logrus"
 import "github.com/importcjj/sensitive"
@@ -61,7 +61,7 @@ var group_route_channels []*Channel
 var app_route *AppRoute
 
 var group_manager *GroupManager
-var redis_pool *redis.Pool
+var redis_client *redis.Client
 
 var config *Config
 var server_summary *ServerSummary
@@ -88,32 +88,13 @@ func init() {
 
 
 
-func NewRedisPool(server, password string, db int) *redis.Pool {
-	return &redis.Pool{
-		MaxIdle:     100,
-		MaxActive:   500,
+func NewRedisClient(server, password string, db int) *redis.Client {
+	return redis.NewClient(&redis.Options{
+		Addr: server,
+		Password:password,
+		DB:db,
 		IdleTimeout: 480 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
-			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
-			if err != nil {
-				return nil, err
-			}
-			if len(password) > 0 {
-				if _, err := c.Do("AUTH", password); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			if db > 0 && db < 16 {
-				if _, err := c.Do("SELECT", db); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			return c, err
-		},
-	}
+	});
 }
 
 
@@ -348,7 +329,7 @@ func main() {
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 	
-	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
+	redis_client = NewRedisClient(config.redis_address, config.redis_password, 
 		config.redis_db)
 
 	auth = NewAuth(config.auth_method)

@@ -19,20 +19,21 @@
 
 package main
 import "fmt"
-import "github.com/gomodule/redigo/redis"
+import "context"
 
 func GetDeviceID(device_id string, platform_id int) (int64, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()
+
 	key := fmt.Sprintf("devices_%s_%d", device_id, platform_id)
-	device_ID, err := redis.Int64(conn.Do("GET", key))
+	device_ID, err := redis_client.Get(ctx, key).Int64()
 	if err != nil {
 		k := "devices_id"
-		device_ID, err = redis.Int64(conn.Do("INCR", k))
+		device_ID, err = redis_client.Incr(ctx, k).Result()
 		if err != nil {
 			return 0, err
 		}
-		_, err = conn.Do("SET", key, device_ID)
+
+		_, err = redis_client.Set(ctx, key, device_ID, 0).Result()
 		if err != nil {
 			return 0, err
 		}

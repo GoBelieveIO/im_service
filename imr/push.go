@@ -20,6 +20,7 @@
 package main
 import "fmt"
 import "time"
+import "context"
 import "encoding/json"
 import log "github.com/sirupsen/logrus"
 
@@ -32,9 +33,6 @@ func (client *Client) IsROMApp(appid int64) bool {
 
 //离线消息入apns队列
 func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["sender"] = im.sender
@@ -53,9 +51,6 @@ func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
 }
 
 func (client *Client) PublishCustomerMessageV2(appid int64, im *CustomerMessageV2) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["sender_appid"] = im.sender_appid
@@ -76,9 +71,6 @@ func (client *Client) PublishCustomerMessageV2(appid int64, im *CustomerMessageV
 }
 
 func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IMMessage) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["sender"] = im.sender
@@ -98,9 +90,6 @@ func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IM
 }
 
 func (client *Client) PublishSystemMessage(appid, receiver int64, content string) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["receiver"] = receiver
@@ -122,15 +111,15 @@ func (client *Client) PushChan(queue_name string, b []byte) {
 }
 
 func (client *Client) PushQueue(ps []*Push) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()
 
-	begin := time.Now()	
-	conn.Send("MULTI")
+	begin := time.Now()
+
+	pipe := redis_client.Pipeline()
 	for _, p := range(ps) {
-		conn.Send("RPUSH", p.queue_name, p.content)
+		pipe.RPush(ctx, p.queue_name, p.content)
 	}
-	_, err := conn.Do("EXEC")
+	_, err := pipe.Exec(ctx)
 	
 	end := time.Now()
 	duration := end.Sub(begin)

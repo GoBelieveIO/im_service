@@ -21,10 +21,10 @@ package main
 
 import "fmt"
 import "errors"
+import "context"
 import "encoding/json"
 import "github.com/dgrijalva/jwt-go"
-import "github.com/gomodule/redigo/redis"
-
+import "github.com/go-redis/redis/v8"
 
 type Auth interface {
 	LoadUserAccessToken(token string) (int64, int64, error)
@@ -35,44 +35,29 @@ type RedisAuth struct {
 }
 
 func (a *RedisAuth) LoadUserAccessToken(token string) (int64, int64, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()
 
 	key := fmt.Sprintf("access_token_%s", token)
-	var uid int64
-	var appid int64
+	r := redis_client.HMGet(ctx, key, "user_id", "app_id")
+	if r.Err() != nil {
+		return 0, 0, r.Err()
+	}
+	val := r.Val()
+	if len(val) == 2 && val[0] == redis.Nil && val[1] == redis.Nil {
+		return 0, 0,  errors.New("token non exists")
+	}
+	
+	u := struct{
+		Id int64 `redis:"user_id"`
+		AppId int64 `redis:"app_id"`
+	}{}
 
-	err := conn.Send("EXISTS", key)
-	if err != nil {
-		return 0, 0, err
-	}
-	err = conn.Send("HMGET", key, "user_id", "app_id")
-	if err != nil {
-		return 0, 0, err
-	}
-	err = conn.Flush()
-	if err != nil {
-		return 0, 0, err
-	}
-
-	exists, err := redis.Bool(conn.Receive())
-	if err != nil {
-		return 0, 0, err
-	}
-	reply, err := redis.Values(conn.Receive())
+	err := r.Scan(&u)
 	if err != nil {
 		return 0, 0, err
 	}
 	
-	if !exists {
-		return 0, 0, errors.New("token non exists")
-	}
-	_, err = redis.Scan(reply, &uid, &appid)
-	if err != nil {
-		return 0, 0, err
-	}
-	
-	return appid, uid, nil		
+	return u.AppId, u.Id, nil		
 }
 
 

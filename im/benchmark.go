@@ -7,7 +7,7 @@ import "runtime"
 import "time"
 import "flag"
 import "math/rand"
-import "github.com/gomodule/redigo/redis"
+import "github.com/go-redis/redis/v8"
 
 
 const HOST = "127.0.0.1"
@@ -16,7 +16,7 @@ const redis_address = "127.0.0.1"
 const redis_password = ""
 const redis_db = 0
 
-var redis_pool *redis.Pool
+var redis_client *redis.Client
 var seededRand *rand.Rand
 var concurrent int
 var count int
@@ -215,7 +215,7 @@ func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 
 	seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
-	redis_pool = NewRedisPool(redis_address, redis_password, redis_db)
+	redis_client = NewRedisClient(redis_address, redis_password, redis_db)
 	
 	c = make(chan bool, 100)
 	u := int64(13635273140)

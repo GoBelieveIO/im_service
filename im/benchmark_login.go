@@ -1,7 +1,9 @@
 package main
-import "github.com/gomodule/redigo/redis"
+
 import "time"
 import "fmt"
+import "context"
+import "github.com/go-redis/redis/v8"
 
 const APP_ID = 7
 const CHARSET = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -14,46 +16,28 @@ func RandomStringWithCharset(length int, charset string) string {
 	return string(b)
 }
 
-func NewRedisPool(server, password string, db int) *redis.Pool {
-	return &redis.Pool{
-		MaxIdle:     100,
-		MaxActive:   500,
+
+func NewRedisClient(server, password string, db int) *redis.Client {
+	return redis.NewClient(&redis.Options{
+		Addr: server,
+		Password:password,
+		DB:db,
 		IdleTimeout: 480 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
-			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
-			if err != nil {
-				return nil, err
-			}
-			if len(password) > 0 {
-				if _, err := c.Do("AUTH", password); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			if db > 0 && db < 16 {
-				if _, err := c.Do("SELECT", db); err != nil {
-					c.Close()
-					return nil, err
-				}
-			}
-			return c, err
-		},
-	}
+	});
 }
 
 func login(uid int64) (string, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()
 	
 	token := RandomStringWithCharset(24, CHARSET)
 	
 	key := fmt.Sprintf("access_token_%s", token)
-	_, err := conn.Do("HMSET", key, "access_token", token, "user_id", uid, "app_id", APP_ID)
+
+	_, err := redis_client.Do(ctx, "HMSET", key, "access_token", token, "user_id", uid, "app_id", APP_ID).Result()
 	if err != nil {
 		return "", err
 	}
-	_, err = conn.Do("PEXPIRE", key, 1000*3600*4)
+	_, err = redis_client.Do(ctx, "PEXPIRE", key, 1000*3600*4).Result()
 	if err != nil {
 		return "", err
 	}

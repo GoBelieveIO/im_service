@@ -24,7 +24,9 @@ import "strconv"
 import "strings"
 import "time"
 import "errors"
-import "github.com/gomodule/redigo/redis"
+import "context"
+import "github.com/go-redis/redis/v8"
+import "github.com/GoBelieveIO/im_service/hscan"
 import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/sirupsen/logrus"
@@ -291,20 +293,20 @@ func (group_manager *GroupManager) handleEvent(event *GroupEvent) {
 		log.Warning("unknow event:", event.Name)
 	}
 	group_manager.action_id = action_id
-	group_manager.last_entry_id = event.Id
 }
 
 
 
 func (group_manager *GroupManager) getActionID() (int64, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
-	actions, err := redis.String(conn.Do("GET", "groups_actions"))
-	if err != nil && err != redis.ErrNil {
+	var ctx = context.Background()
+	actions, err := redis_client.Get(ctx, "groups_actions").Result()
+	if err == redis.Nil {
+		return 0, nil
+	} else if err != nil {
 		log.Info("hget error:", err)
 		return 0, err
 	}
+	
 	if actions == "" {
 		return 0, nil
 	} else {
@@ -331,32 +333,21 @@ func (group_manager *GroupManager) getActionID() (int64, error) {
 
 
 func (group_manager *GroupManager) getLastEntryID() (string, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()
 
-	r, err := redis.Values(conn.Do("XREVRANGE", GROUP_MANAGER_STREAM_NAME, "+", "-", "COUNT", "1"))
+	r, err := redis_client.XRevRangeN(ctx, GROUP_MANAGER_STREAM_NAME, "+", "-", 1).Result()
+
+	//r, err := redis.Values(conn.Do("XREVRANGE", GROUP_MANAGER_STREAM_NAME, "+", "-", "COUNT", "1"))
 
 	if err != nil {
 		log.Error("redis err:", err)
 		return "", err
 	}
 
-	if len(r) == 0 {
-		return "0-0", nil
-	}
-	
-	var entries []interface{}
-	r, err = redis.Scan(r, &entries)
-	if err != nil {
-		log.Error("redis scan err:", err)
-		return "", err
-	}
+	var id string = "0-0"
 
-	var id string		
-	_, err = redis.Scan(entries, &id, nil)
-	if err != nil {
-		log.Error("redis scan err:", err)
-		return "", err		
+	for _, m := range(r) {
+		id = m.ID
 	}
 	return id, nil
 }
@@ -384,88 +375,49 @@ func (group_manager *GroupManager) load() {
 }
 
 
-func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, error) {
-	//block timeout 60s
-	reply, err := redis.Values(c.Do("XREAD", "COUNT", "1000", "BLOCK",
-		GROUP_MANAGER_XREAD_TIMEOUT*1000, "STREAMS", GROUP_MANAGER_STREAM_NAME,
-		group_manager.last_entry_id))
-	if err != nil && err != redis.ErrNil {
+func (group_manager *GroupManager) readEvents(c *redis.Conn) ([]*GroupEvent, error) {
+	var ctx = context.Background()	
+	args := &redis.XReadArgs{
+		Streams:[]string{GROUP_MANAGER_STREAM_NAME, group_manager.last_entry_id},
+		Count:1000,
+		Block:time.Duration(GROUP_MANAGER_XREAD_TIMEOUT*time.Second),
+	}
+	reply, err := c.XRead(ctx, args).Result()
+	if err == redis.Nil {
+		log.Info("redis xread timeout")		
+		return nil, nil
+	} else if err != nil {
 		log.Info("redis xread err:", err)
 		return nil, err
 	}
+	
 	if len(reply) == 0 {
-		log.Info("redis xread timeout")
+		//impossible
 		return nil, nil
 	}
 
-	var stream_res []interface{}
-	_, err = redis.Scan(reply, &stream_res)
-	if err != nil {
-		log.Info("redis scan err:", err)
-		return nil, err
-	}
-
-	var r []interface{}
-	_, err = redis.Scan(stream_res, nil, &r)
-	if err != nil {
-		log.Info("redis scan err:", err)
-		return nil, err
-	}
-	
-	events := make([]*GroupEvent, 0, 1000)
-	for len(r) > 0 {
-		var entries []interface{}
-		r, err = redis.Scan(r, &entries)
-		if err != nil {
-			log.Error("redis scan err:", err)
-			return nil, err
-		}
-
-		var id string
-		var fields []interface{}
-		_, err = redis.Scan(entries, &id, &fields)
-		if err != nil {
-			log.Error("redis scan err:", err)
-			return nil, err		
-		}
-
+	events := make([]*GroupEvent, 0, 10)
+	r := reply[0]
+	for _, m := range(r.Messages) {
+		group_manager.last_entry_id = m.ID;
 		event := &GroupEvent{}
-		event.Id = id
-		err = redis.ScanStruct(fields, event)
+		event.Id = m.ID
+		err = hscan.ScanMap(event, m.Values)
 		if err != nil {
-			//ignore the error, will skip the event
+			//ignore the error, skip the event
 			log.Error("redis scan err:", err)
+			continue
 		}
-		events = append(events, event)
+		events = append(events, event)		
 	}
-	
+
 	return events, nil
 }
 
 func (group_manager *GroupManager) RunOnce() bool {
-	c, err := redis.Dial("tcp", config.redis_address)
-	if err != nil {
-		log.Info("dial redis error:", err)
-		return false
-	}
-
+	var ctx = context.Background()
+	c := redis_client.Conn(ctx)
 	defer c.Close()
-	
-	password := config.redis_password
-	if len(password) > 0 {
-		if _, err := c.Do("AUTH", password); err != nil {
-			log.Info("redis auth err:", err)
-			return false
-		}
-	}
-
-	db := config.redis_db
-	if db > 0 && db < 16 {
-		if _, err := c.Do("SELECT", db); err != nil {
-			log.Info("redis select err:", err)
-			return false
-		}
-	}
 
 	var last_clear_ts int64
 	for {

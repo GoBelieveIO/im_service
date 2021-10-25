@@ -22,7 +22,7 @@ import "time"
 import "strings"
 import "strconv"
 import "sync/atomic"
-import "github.com/gomodule/redigo/redis"
+import "context"
 import log "github.com/sirupsen/logrus"
 
 
@@ -66,37 +66,23 @@ func HandleForbidden(data string) {
 }
 
 func SubscribeRedis() bool {
-	c, err := redis.Dial("tcp", config.redis_address)
-	if err != nil {
-		log.Info("dial redis error:", err)
-		return false
-	}
-
-	password := config.redis_password
-	if len(password) > 0 {
-		if _, err := c.Do("AUTH", password); err != nil {
-			c.Close()
-			return false
-		}
-	}
-
-	psc := redis.PubSubConn{c}
-	psc.Subscribe("speak_forbidden")
+	var ctx = context.Background()
+	pubsub := redis_client.Subscribe(ctx, "speak_forbidden")
+	defer pubsub.Close()
 
 	for {
-		switch v := psc.Receive().(type) {
-		case redis.Message:
-			log.Infof("%s: message: %s\n", v.Channel, v.Data)
-			if v.Channel == "speak_forbidden" {
-				HandleForbidden(string(v.Data))
-			}
-		case redis.Subscription:
-			log.Infof("%s: %s %d\n", v.Channel, v.Kind, v.Count)
-		case error:
-			log.Info("error:", v)
-			return true
+		msg, err := pubsub.ReceiveMessage(ctx)
+		if err != nil {
+			log.Info("error:", err)
+			break
+		}
+		log.Infof("%s: message: %s\n", msg.Channel, msg.Payload)
+		if msg.Channel == "speak_forbidden" {
+			HandleForbidden(string(msg.Payload))
 		}
 	}
+
+	return true
 }
 
 func ListenRedis() {

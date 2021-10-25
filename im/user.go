@@ -20,95 +20,94 @@
 package main
 
 import "fmt"
+import "context"
 import log "github.com/sirupsen/logrus"
-import "github.com/gomodule/redigo/redis"
-
+import "github.com/go-redis/redis/v8"
 
 func GetSyncKey(appid int64, uid int64) int64 {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()
 
 	key := fmt.Sprintf("users_%d_%d", appid, uid)
 
-	origin, err := redis.Int64(conn.Do("HGET", key, "sync_key"))
-	if err != nil && err != redis.ErrNil {
-		log.Info("hget error:", err)
+	r, err := redis_client.HGet(ctx, key, "sync_key").Int64()
+	if err != nil {
+		if err != redis.Nil {
+			log.Info("hget error:", err)
+		}
 		return 0
 	}
-	return origin
+	return r
 }
 
 func GetGroupSyncKey(appid int64, uid int64, group_id int64) int64 {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()	
 
 	key := fmt.Sprintf("users_%d_%d", appid, uid)
 	field := fmt.Sprintf("group_sync_key_%d", group_id)
 
-	origin, err := redis.Int64(conn.Do("HGET", key, field))
-	if err != nil && err != redis.ErrNil {
-		log.Info("hget error:", err)
+	r, err := redis_client.HGet(ctx, key, field).Int64()
+	if err != nil {
+		if err != redis.Nil {
+			log.Info("hget error:", err)
+		}
 		return 0
 	}
-	return origin
+	return r	
 }
 
 func SaveSyncKey(appid int64, uid int64, sync_key int64) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()		
 
 	key := fmt.Sprintf("users_%d_%d", appid, uid)
 
-	_, err := conn.Do("HSET", key, "sync_key", sync_key)
+	_, err := redis_client.HSet(ctx, key, "sync_key", sync_key).Result()
 	if err != nil {
 		log.Warning("hset error:", err)
 	}
 }
 
 func SaveGroupSyncKey(appid int64, uid int64, group_id int64, sync_key int64) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()			
 
 	key := fmt.Sprintf("users_%d_%d", appid, uid)
 	field := fmt.Sprintf("group_sync_key_%d", group_id)
 
-	_, err := conn.Do("HSET", key, field, sync_key)
+	_, err := redis_client.HSet(ctx, key, field, sync_key).Result()
 	if err != nil {
 		log.Warning("hset error:", err)
 	}	
 }
 
 func GetUserPreferences(appid int64, uid int64) (int, bool, error) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()				
 
 	key := fmt.Sprintf("users_%d_%d", appid, uid)
-
-	reply, err := redis.Values(conn.Do("HMGET", key, "forbidden", "notification_on"))
-	if err != nil {
-		log.Info("hget error:", err)
-		return 0, false, err
+	reply := redis_client.HMGet(ctx, key,  "forbidden", "notification_on")
+	if reply.Err() != nil {
+		return 0, false, reply.Err();
 	}
-	
-	//电脑在线，手机新消息通知
-	var notification_on int
-	//用户禁言
-	var forbidden int	
-	_, err = redis.Scan(reply, &forbidden, &notification_on)
+
+	c := struct{
+		//用户禁言		
+		Forbidden int `redis:"forbidden"`
+		//电脑在线，手机新消息通知				
+		NotificationOn int `redis:"notification_on"`
+	}{0, 0}
+
+	err := reply.Scan(&c)
 	if err != nil {
 		log.Warning("scan error:", err)
-		return 0, false, err
-	}	
-
-	return forbidden, notification_on != 0, nil
+		return 0, false, err		
+	}
+	return c.Forbidden, c.NotificationOn != 0, nil
 }
 
 func SetUserUnreadCount(appid int64, uid int64, count int32) {
-	conn := redis_pool.Get()
-	defer conn.Close()
+	var ctx = context.Background()					
 
 	key := fmt.Sprintf("users_%d_%d", appid, uid)
-	_, err := conn.Do("HSET", key, "unread", count)
+	
+	_, err := redis_client.HSet(ctx, key, "unread", count).Result()
 	if err != nil {
 		log.Info("hset err:", err)
 	}

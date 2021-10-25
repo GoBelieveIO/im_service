@@ -236,7 +236,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		return
 	}
 	if  uid == 0 {
-		log.Info("auth token uid==0")
+		log.Infof("auth token:%s uid==0", login.token)
 		msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1}}
 		client.EnqueueMessage(msg)
 		return
