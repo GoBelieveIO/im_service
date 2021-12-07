@@ -54,6 +54,7 @@ type GroupEvent struct {
 	AppId int64 `redis:"app_id"`
 	GroupId int64 `redis:"group_id"`
 	MemberId int64 `redis:"member_id"`
+	MasterId int64 `redis:"master_id"`  
 	IsSuper bool `redis:"super"`
 	IsMute bool `redis:"mute"`
 }
@@ -126,7 +127,8 @@ func (group_manager *GroupManager) HandleCreate(event *GroupEvent) {
 	gid := event.GroupId
 	appid := event.AppId
 	super := event.IsSuper
-
+	master := event.MasterId
+	
 	if gid == 0 || appid == 0 {
 		log.Infof("invalid group event:%s, group id:%d appid:%d",
 			event.Name, gid, appid)
@@ -139,12 +141,8 @@ func (group_manager *GroupManager) HandleCreate(event *GroupEvent) {
 	if _, ok := group_manager.groups[gid]; ok {
 		log.Infof("group:%d exists\n", gid)
 	}
-	log.Infof("create group:%d appid:%d", gid, appid)
-	if super {
-		group_manager.groups[gid] = NewSuperGroup(gid, appid, nil)
-	} else {
-		group_manager.groups[gid] = NewGroup(gid, appid, nil)
-	}
+	log.Infof("create group:%d appid:%d master:%d", gid, appid, master)
+	group_manager.groups[gid] = NewGroup(gid, appid, master, nil, super, false)
 }
 
 func (group_manager *GroupManager) HandleDisband(event *GroupEvent) {
@@ -256,7 +254,7 @@ func (group_manager *GroupManager) HandleMute(event *GroupEvent) {
 
 	group := group_manager.FindGroup(gid)
 	if group != nil {
-		group.SetMemberMute(uid, is_mute)
+		group.SetMemberMuted(uid, is_mute)
 		log.Infof("set group member gid:%d uid:%d mute:%t", gid, uid, is_mute)
 	} else {
 		log.Infof("can't find group:%d\n", gid)

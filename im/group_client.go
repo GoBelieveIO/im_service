@@ -37,7 +37,7 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group)
 	}
 	
 	//推送外部通知
-	PushGroupMessage(client.appid, group, m)
+	PushGroupMessage(client.appid, group.Members(), m)
 
 	m.meta = &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
 	m.flag = MESSAGE_FLAG_PUSH|MESSAGE_FLAG_SUPER_GROUP
@@ -104,7 +104,7 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 	if group == nil {
 		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq), status:ACK_GROUP_NONEXIST}}
 		client.EnqueueMessage(ack)
-		log.Warning("can't find group:", msg.receiver)
+		log.Warningf("can't find group:%d", msg.receiver)
 		return
 	}
 
@@ -115,8 +115,18 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 		return
 	}
 
-	if group.GetMemberMute(msg.sender) {
-		log.Warningf("sender:%d is mute in group", msg.sender)
+	
+	if group.GetMemberMuted(msg.sender) {
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq), status:ACK_GROUP_MEMBER_MUTED}}
+		client.EnqueueMessage(ack)		
+		log.Warningf("sender:%d is muted in group", msg.sender)
+		return
+	}
+
+	if group.muted && group.master != msg.sender {
+		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq), status:ACK_GROUP_MUTED}}
+		client.EnqueueMessage(ack)		
+		log.Info("group muted, every member except master can't send message")
 		return
 	}
 

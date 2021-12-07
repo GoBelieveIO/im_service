@@ -34,6 +34,8 @@ const ACK_NOT_YOUR_FRIEND = 2
 const ACK_IN_YOUR_BLACKLIST = 3
 const ACK_NOT_GROUP_MEMBER = 64
 const ACK_GROUP_NONEXIST = 65
+const ACK_GROUP_MUTED = 66
+const ACK_GROUP_MEMBER_MUTED = 67
 
 //version1:IMMessage添加时间戳字段
 //version2:MessageACK添加status字段

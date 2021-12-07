@@ -58,9 +58,8 @@ func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
 }
 
 //群消息通知(apns, gcm...)
-func PushGroupMessage(appid int64, group *Group, m *Message) {
+func PushGroupMessage(appid int64, members map[int64]int64, m *Message) {
 	channels := make(map[*Channel][]int64)
-	members := group.Members()
 	for member := range members {
 		//不对自身推送
 		if im, ok := m.body.(*IMMessage); ok {

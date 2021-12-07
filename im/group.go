@@ -33,24 +33,18 @@ type Group struct {
 	//key:成员id value:入群时间|(mute<<31)
 	members map[int64]int64
 
+	master  int64
+	muted   bool //除群主外,禁止发言	
 	ts      int//访问时间
 }
 
-func NewGroup(gid int64, appid int64, members map[int64]int64) *Group {
+func NewGroup(gid int64, appid int64, master int64, members map[int64]int64, super bool, muted bool) *Group {
 	group := new(Group)
 	group.appid = appid
 	group.gid = gid
-	group.super = false
-	group.members = members
-	group.ts = int(time.Now().Unix())	
-	return group
-}
-
-func NewSuperGroup(gid int64, appid int64, members map[int64]int64) *Group {
-	group := new(Group)
-	group.appid = appid
-	group.gid = gid
-	group.super = true
+	group.super = super
+	group.master = master	
+	group.muted = muted
 	group.members = members
 	group.ts = int(time.Now().Unix())
 	return group
@@ -94,7 +88,7 @@ func (group *Group) RemoveMember(uid int64) {
 	group.members = members
 }
 
-func (group *Group) SetMemberMute(uid int64, mute bool) {
+func (group *Group) SetMemberMuted(uid int64, mute bool) {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
 
@@ -120,7 +114,7 @@ func (group *Group) GetMemberTimestamp(uid int64) int {
 	return int(ts & 0x7FFFFFFF)
 }
 
-func (group *Group) GetMemberMute(uid int64) bool {
+func (group *Group) GetMemberMuted(uid int64) bool {
 	t, _ := group.members[uid]
 	return int((t >> 31)&0x01) != 0
 }
@@ -132,10 +126,10 @@ func (group *Group) IsEmpty() bool {
 
 
 func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
-	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group` WHERE id=? AND deleted=0")
+	stmtIns, err := db.Prepare("SELECT id, appid, master, super, muted FROM `group` WHERE id=? AND deleted=0")
 	if err == mysql.ErrInvalidConn {
 		log.Info("db prepare error:", err)
-		stmtIns, err = db.Prepare("SELECT id, appid, super FROM `group` WHERE id=? AND deleted=0")
+		stmtIns, err = db.Prepare("SELECT id, appid, master, super, muted FROM `group` WHERE id=? AND deleted=0")
 	}
 	if err != nil {
 		log.Info("db prepare error:", err)
@@ -147,10 +141,12 @@ func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 	var group *Group
 	var id int64
 	var appid int64
+	var master int64	
 	var super int8
+	var muted int8
 	
 	row := stmtIns.QueryRow(group_id)
-	err = row.Scan(&id, &appid, &super)
+	err = row.Scan(&id, &appid, &master, &super, &muted)
 	if err != nil {
 		return nil, err
 	}
@@ -161,11 +157,7 @@ func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 		return nil, err
 	}
 
-	if super != 0 {
-		group = NewSuperGroup(id, appid, members)
-	} else {
-		group = NewGroup(id, appid, members)
-	}
+	group = NewGroup(id, appid, master, members, super != 0, muted != 0)
 
 	log.Info("load group success:", group_id)
 	return group, nil	

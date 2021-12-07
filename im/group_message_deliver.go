@@ -486,8 +486,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 	for _, member := range gm.members {
 		group_members[member] = 0
 	}
-	group := NewGroup(gm.gid, gm.appid, group_members)
-	PushGroupMessage(gm.appid, group, m)
+	PushGroupMessage(gm.appid, group_members, m)
 	return metadata, true
 }
 
