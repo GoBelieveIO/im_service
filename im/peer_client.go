@@ -225,6 +225,28 @@ func (client *PeerClient) HandleRTMessage(msg *Message) {
 		return
 	}
 	
+	var rs Relationship = NoneRelationship
+	if config.friend_permission || config.enable_blacklist {
+		rs = relationship_pool.GetRelationship(client.appid, client.uid, rt.receiver)
+	}
+	if config.friend_permission {
+		if !rs.IsMyFriend() {
+			log.Infof("relationship%d-%d:%d invalid, can't send message", rt.sender, rt.receiver, rs)
+			return
+		}
+
+		if !rs.IsYourFriend() {
+			log.Infof("relationship%d-%d:%d invalid, can't send message", rt.sender, rt.receiver, rs)
+			return
+		}
+	}
+	if config.enable_blacklist {
+		if rs.IsInYourBlacklist() {
+			log.Infof("relationship%d-%d:%d invalid, can't send message", rt.sender, rt.receiver, rs)
+			return
+		}
+	}
+	
 	m := &Message{cmd:MSG_RT, body:rt}
 	client.SendMessage(rt.receiver, m)
 
