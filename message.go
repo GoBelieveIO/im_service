@@ -24,6 +24,7 @@ import "encoding/binary"
 
 
 //接入服务器消息
+const MSG_AUTH = 2
 const MSG_AUTH_STATUS = 3
 const MSG_ACK = 5
 const MSG_PING = 13

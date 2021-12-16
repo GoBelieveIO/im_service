@@ -40,6 +40,7 @@ const ACK_GROUP_MEMBER_MUTED = 67
 //version1:IMMessage添加时间戳字段
 //version2:MessageACK添加status字段
 func init() {
+	message_creators[MSG_AUTH] = func()IMessage{return new(AuthToken)}
 	message_creators[MSG_AUTH_TOKEN] = func()IMessage{return new(AuthenticationToken)}
 
 	message_creators[MSG_RT] = func()IMessage{return new(RTMessage)}
@@ -101,7 +102,8 @@ func init() {
 	message_descriptions[MSG_METADATA] = "MSG_METADATA"	
 
 	message_descriptions[MSG_PENDING_GROUP_MESSAGE] = "MSG_PENDING_GROUP_MESSAGE"	
-	
+
+	external_messages[MSG_AUTH] = true;	
 	external_messages[MSG_AUTH_TOKEN] = true;
 	external_messages[MSG_ACK] = true;
 	external_messages[MSG_PING] = true;	
@@ -118,6 +120,47 @@ func init() {
 	external_messages[MSG_METADATA] = true;
 }
 
+type AuthToken struct {
+	token		string
+	platform_id int8
+	device_id	int64		
+}
+
+
+func (auth *AuthToken) ToData() []byte {
+	var l int8
+
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, auth.platform_id)
+	binary.Write(buffer, binary.BigEndian, auth.device_id)
+
+	l = int8(len(auth.token))
+	binary.Write(buffer, binary.BigEndian, l)
+	buffer.Write([]byte(auth.token))
+
+
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (auth *AuthToken) FromData(buff []byte) bool {
+	var l uint8
+	if (len(buff) <= 10) {
+		return false
+	}
+	auth.platform_id = int8(buff[0])
+
+	buffer := bytes.NewBuffer(buff[1:])	
+	binary.Read(buffer, binary.BigEndian, &auth.device_id)
+	binary.Read(buffer, binary.BigEndian, &l)
+	if int(l) > buffer.Len() || int(l) < 0 {
+		return false
+	}
+	token := make([]byte, l)
+	buffer.Read(token)
+	auth.token = string(token)
+	return true
+}
 
 
 type AuthenticationToken struct {

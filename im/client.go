@@ -190,6 +190,8 @@ func (client *Client) HandleClientClosed() {
 func (client *Client) HandleMessage(msg *Message) {
 	log.Info("msg cmd:", Command(msg.cmd))
 	switch msg.cmd {
+	case MSG_AUTH:
+		client.HandleAuth(msg.body.(*AuthToken), msg.version)
 	case MSG_AUTH_TOKEN:
 		client.HandleAuthToken(msg.body.(*AuthenticationToken), msg.version)
 	case MSG_ACK:
@@ -220,8 +222,7 @@ func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
 	return appid, uid, forbidden, notification_on, nil
 }
 
-
-func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
+func (client *Client) HandleAuth(login *AuthToken, version int) {
 	if client.uid > 0 {
 		log.Info("repeat login")
 		return
@@ -241,17 +242,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 		client.EnqueueMessage(msg)
 		return
 	}
-
-	if login.platform_id != PLATFORM_WEB && len(login.device_id) > 0 {
-		client.device_ID, err = GetDeviceID(login.device_id, int(login.platform_id))
-		if err != nil {
-			log.Info("auth token uid==0")
-			msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1}}
-			client.EnqueueMessage(msg)
-			return
-		}
-	}
-
+	
 	is_mobile := login.platform_id == PLATFORM_IOS || login.platform_id == PLATFORM_ANDROID
 	online := true	
 	if on && !is_mobile {
@@ -264,7 +255,7 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 	client.notification_on = on
 	client.online = online
 	client.version = version
-	client.device_id = login.device_id
+	client.device_ID = login.device_id
 	client.platform_id = login.platform_id
 	client.tm = time.Now()
 	log.Infof("auth token:%s appid:%d uid:%d device id:%s:%d forbidden:%d notification on:%t online:%t", 
@@ -276,7 +267,22 @@ func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
 
 	client.AddClient()
 
-	client.PeerClient.Login()
+	client.PeerClient.Login()	
+}
+
+func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
+	var device_id int64
+	var err error
+	if login.platform_id != PLATFORM_WEB && len(login.device_id) > 0 {	
+		device_id, err = GetDeviceID(login.device_id, int(login.platform_id))
+		if err != nil {
+			msg := &Message{cmd: MSG_AUTH_STATUS, version:version, body: &AuthenticationStatus{1}}
+			client.EnqueueMessage(msg)
+			return
+		}
+	}
+	auth := &AuthToken{token:login.token, platform_id:login.platform_id, device_id:device_id}
+	client.HandleAuth(auth, version)
 }
 
 func (client *Client) AddClient() {

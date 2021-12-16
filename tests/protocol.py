@@ -10,6 +10,7 @@ import base64
 import sys
 
 MSG_HEARTBEAT = 1
+MSG_AUTH = 2
 MSG_AUTH_STATUS = 3
 MSG_IM = 4
 MSG_ACK = 5
@@ -79,6 +80,13 @@ class AuthenticationToken:
         self.platform_id = PLATFORM_ANDROID
         self.device_id = device_id
 
+
+class AuthToken:
+    def __init__(self):
+        self.token = ""
+        self.platform_id = PLATFORM_ANDROID
+        self.device_id = 0
+    
 class IMMessage:
     def __init__(self):
         self.sender = 0
@@ -132,6 +140,11 @@ class CustomerMessageV2:
 def send_message(cmd, seq, msg, sock):
     if cmd == MSG_AUTH_TOKEN:
         b = struct.pack("!BB", msg.platform_id, len(msg.token)) + bytes(msg.token, "utf-8") + struct.pack("!B", len(msg.device_id)) + bytes(msg.device_id, "utf-8")
+        length = len(b)
+        h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
+        sock.sendall(h+b)
+    elif cmd == MSG_AUTH:
+        b = struct.pack("!BqB", msg.platform_id, msg.device_id, len(msg.token)) + bytes(msg.token, "utf-8")
         length = len(b)
         h = struct.pack("!iibbbb", length, seq, cmd, PROTOCOL_VERSION, 0, 0)
         sock.sendall(h+b)

@@ -118,10 +118,10 @@ def _connect_server(token, port):
         
     print("connect address:", address)
     sock.connect(address)
-    auth = AuthenticationToken()
+    auth = AuthToken()
     auth.token = token
     seq = seq + 1
-    send_message(MSG_AUTH_TOKEN, seq, auth, sock)
+    send_message(MSG_AUTH, seq, auth, sock)
     cmd, _, _, msg = recv_message(sock)
     if cmd != MSG_AUTH_STATUS or msg != 0:
         raise Exception("auth failure:" + token)
