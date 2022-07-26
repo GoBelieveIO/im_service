@@ -81,14 +81,16 @@ def post_peer_notification(appid, uid, content):
 
 
 def post_system_message(appid, uid, content):
-    params = {
-        "appid":appid,
-        "uid":uid
-    }
     url = im_url + "/post_system_message"
-
+    
     headers = {"Content-Type":"text/plain; charset=UTF-8"}
-    resp = requests.post(url, data=content.encode("utf8"), headers=headers, params=params)    
+    data = {
+        "content": content,
+        "receivers":[uid],
+        "appid":appid,
+    }
+    print("data:", json.dumps(data))
+    resp = requests.post(url, data=json.dumps(data), headers=headers)    
     return resp
 
 

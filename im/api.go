@@ -548,36 +548,59 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	m, _ := url.ParseQuery(req.URL.RawQuery)
-
-	appid, err := strconv.ParseInt(m.Get("appid"), 10, 64)
+	obj, err := simplejson.NewJson(body)
 	if err != nil {
 		log.Info("error:", err)
-		WriteHttpError(400, "invalid query param", w)
+		WriteHttpError(400, "invalid json format", w)
 		return
 	}
 
-	uid, err := strconv.ParseInt(m.Get("uid"), 10, 64)
+	content, err := obj.Get("content").String()
 	if err != nil {
 		log.Info("error:", err)
-		WriteHttpError(400, "invalid query param", w)
-		return
+		WriteHttpError(400, "invalid json format", w)
+		return		
 	}
-	sys := &SystemMessage{string(body)}
-	msg := &Message{cmd:MSG_SYSTEM, body:sys}
-
-	msgid, _, err := rpc_storage.SaveMessage(appid, uid, 0, msg)
+	
+	appid, err := obj.Get("appid").Int64()
 	if err != nil {
-		WriteHttpError(500, "internal server error", w)
-		return
+		log.Info("error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return		
 	}
 
-	//推送通知
-	PushMessage(appid, uid, msg)
+	receivers, err := obj.Get("receivers").Array()
+	if err != nil {
+		log.Info("get receivers error:", err)
+		WriteHttpError(400, "invalid json format", w)
+		return				
+	}
+	for i, _ := range receivers {
+		_, err = obj.Get("receivers").GetIndex(i).Int64()
+		if err != nil {
+			log.Warning("receivers contains non int receiver:", err)
+			WriteHttpError(400, "invalid json format", w)
+			return
+		}
+	}
+	for i, _ := range receivers {
+		uid := obj.Get("receivers").GetIndex(i).MustInt64()
+		sys := &SystemMessage{content}
+		msg := &Message{cmd:MSG_SYSTEM, body:sys}
 
-	//发送同步的通知消息
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
-	SendAppMessage(appid, uid, notify)
+		msgid, _, err := rpc_storage.SaveMessage(appid, uid, 0, msg)
+		if err != nil {
+			WriteHttpError(500, "internal server error", w)
+			return
+		}
+
+		//推送通知
+		PushMessage(appid, uid, msg)
+
+		//发送同步的通知消息
+		notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncNotify{sync_key:msgid}}
+		SendAppMessage(appid, uid, notify)			
+	}
 	
 	w.WriteHeader(200)
 }
