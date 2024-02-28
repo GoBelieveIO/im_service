@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,20 +19,24 @@
 
 package main
 
-import "fmt"
-import "time"
-import "sync"
-import "sync/atomic"
-import "errors"
-import "strconv"
-import "strings"
-import "database/sql"
-import _ "github.com/go-sql-driver/mysql"
-import "github.com/gomodule/redigo/redis"
-import log "github.com/sirupsen/logrus"
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
-const EXPIRE_DURATION = 60*60 //60min
-const ACTIVE_DURATION = 10*60
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/gomodule/redigo/redis"
+
+	log "github.com/sirupsen/logrus"
+)
+
+const EXPIRE_DURATION = 60 * 60 //60min
+const ACTIVE_DURATION = 10 * 60
 const RELATIONSHIP_POOL_STREAM_NAME = "relationship_stream"
 const RELATIONSHIP_POOL_XREAD_TIMEOUT = 60
 
@@ -40,15 +44,15 @@ const RELATIONSHIP_EVENT_FRIEND = "friend"
 const RELATIONSHIP_EVENT_BLACKLIST = "blacklist"
 
 type RelationshipEvent struct {
-	Id string //stream entry id
-	ActionId int64 `redis:"action_id"`
-	PreviousActionId int64 `redis:"previous_action_id"`
-	Name string `redis:"name"`
-	AppId int64 `redis:"app_id"`
-	Uid int64 `redis:"uid"`
-	FriendUid int64 `redis:"friend_uid"`
-	IsFriend bool `redis:"friend"`
-	IsBlacklist bool `redis:"blacklist"`
+	Id               string //stream entry id
+	ActionId         int64  `redis:"action_id"`
+	PreviousActionId int64  `redis:"previous_action_id"`
+	Name             string `redis:"name"`
+	AppId            int64  `redis:"app_id"`
+	Uid              int64  `redis:"uid"`
+	FriendUid        int64  `redis:"friend_uid"`
+	IsFriend         bool   `redis:"friend"`
+	IsBlacklist      bool   `redis:"blacklist"`
 }
 
 type RelationshipItem struct {
@@ -62,22 +66,22 @@ type RelationshipItem struct {
 *key: appid:uid:friend_uid
 **/
 type RelationshipPool struct {
-	items  *sync.Map
+	items      *sync.Map
 	item_count int64
 
-	dirty     bool
+	dirty         bool
 	last_entry_id string
-	action_id int64
-	db        *sql.DB	
+	action_id     int64
+	db            *sql.DB
 }
 
-func NewRelationshipPool() *RelationshipPool {
+func NewRelationshipPool(config *Config) *RelationshipPool {
 	rp := &RelationshipPool{}
 	rp.items = &sync.Map{}
 
 	db, err := sql.Open("mysql", config.mysqldb_datasource)
 	if err != nil {
-		log.Fatal("open db:", err)		
+		log.Fatal("open db:", err)
 	}
 	rp.db = db
 	return rp
@@ -93,7 +97,7 @@ func (rp *RelationshipPool) GetRelationship(appid, uid, friend_uid int64) Relati
 	}
 
 	timestamp := int(time.Now().Unix())
-	
+
 	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)
 
 	val, ok := rp.items.Load(key)
@@ -107,7 +111,7 @@ func (rp *RelationshipPool) GetRelationship(appid, uid, friend_uid int64) Relati
 			return r.rs
 		}
 	}
-	
+
 	rs, err := GetRelationship(rp.db, appid, uid, friend_uid)
 	if err != nil {
 		return NoneRelationship
@@ -115,7 +119,7 @@ func (rp *RelationshipPool) GetRelationship(appid, uid, friend_uid int64) Relati
 
 	rp.items.Store(key, &RelationshipItem{rs, timestamp})
 	atomic.AddInt64(&rp.item_count, 1)
-	
+
 	if reverse {
 		return rs.reverse()
 	} else {
@@ -124,12 +128,12 @@ func (rp *RelationshipPool) GetRelationship(appid, uid, friend_uid int64) Relati
 }
 
 func (rp *RelationshipPool) SetMyFriend(appid, uid, friend_uid int64, is_my_friend bool) {
-	if (uid > friend_uid) {
+	if uid > friend_uid {
 		rp.SetYourFriend(appid, friend_uid, uid, is_my_friend)
 		return
 	}
 
-	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)	
+	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)
 	v, ok := rp.items.Load(key)
 	if !ok {
 		log.Info("can not load key:", key)
@@ -142,18 +146,18 @@ func (rp *RelationshipPool) SetMyFriend(appid, uid, friend_uid int64, is_my_frie
 }
 
 func (rp *RelationshipPool) SetYourFriend(appid, uid, friend_uid int64, is_your_friend bool) {
-	if (uid > friend_uid) {
+	if uid > friend_uid {
 		rp.SetMyFriend(appid, friend_uid, uid, is_your_friend)
 		return
 	}
 
-	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)		
+	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)
 	v, ok := rp.items.Load(key)
 	if !ok {
-		log.Info("can not load key:", key)		
+		log.Info("can not load key:", key)
 		return
 	}
-	
+
 	r := v.(*RelationshipItem)
 	r.rs = NewRelationship(r.rs.IsMyFriend(), is_your_friend, r.rs.IsInMyBlacklist(), r.rs.IsInYourBlacklist())
 
@@ -161,52 +165,50 @@ func (rp *RelationshipPool) SetYourFriend(appid, uid, friend_uid int64, is_your_
 }
 
 func (rp *RelationshipPool) SetInMyBlacklist(appid, uid, friend_uid int64, is_in_my_blacklist bool) {
-	if (uid > friend_uid) {
+	if uid > friend_uid {
 		rp.SetInYourBlacklist(appid, friend_uid, uid, is_in_my_blacklist)
 		return
 	}
-	
-	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)	
-	v, ok := rp.items.Load(key)
-	if !ok {
-		log.Info("can not load key:", key)		
-		return
-	}
-	
-	r := v.(*RelationshipItem)
-	r.rs = NewRelationship(r.rs.IsMyFriend(), r.rs.IsYourFriend(), is_in_my_blacklist, r.rs.IsInYourBlacklist())
-	log.Infof("new relationship:%d-%d %d", uid, friend_uid, r.rs)	
-}
 
-
-func (rp *RelationshipPool) SetInYourBlacklist(appid, uid, friend_uid int64, is_in_your_blacklist bool) {
-	if (uid > friend_uid) {
-		rp.SetInMyBlacklist(appid, friend_uid, uid, is_in_your_blacklist)
-		return
-	}
-
-	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)	
+	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)
 	v, ok := rp.items.Load(key)
 	if !ok {
 		log.Info("can not load key:", key)
 		return
 	}
-	
-	r := v.(*RelationshipItem)	
-	r.rs = NewRelationship(r.rs.IsMyFriend(), r.rs.IsYourFriend(), r.rs.IsInMyBlacklist(), is_in_your_blacklist)
-	log.Infof("new relationship:%d-%d %d", uid, friend_uid, r.rs)		
+
+	r := v.(*RelationshipItem)
+	r.rs = NewRelationship(r.rs.IsMyFriend(), r.rs.IsYourFriend(), is_in_my_blacklist, r.rs.IsInYourBlacklist())
+	log.Infof("new relationship:%d-%d %d", uid, friend_uid, r.rs)
 }
 
+func (rp *RelationshipPool) SetInYourBlacklist(appid, uid, friend_uid int64, is_in_your_blacklist bool) {
+	if uid > friend_uid {
+		rp.SetInMyBlacklist(appid, friend_uid, uid, is_in_your_blacklist)
+		return
+	}
+
+	key := fmt.Sprintf("%d:%d:%d", appid, uid, friend_uid)
+	v, ok := rp.items.Load(key)
+	if !ok {
+		log.Info("can not load key:", key)
+		return
+	}
+
+	r := v.(*RelationshipItem)
+	r.rs = NewRelationship(r.rs.IsMyFriend(), r.rs.IsYourFriend(), r.rs.IsInMyBlacklist(), is_in_your_blacklist)
+	log.Infof("new relationship:%d-%d %d", uid, friend_uid, r.rs)
+}
 
 func (rp *RelationshipPool) Recycle() {
 	exp_items := make([]string, 0, 100)
 	now := int(time.Now().Unix())
 
 	var count int64
-	f := func (key, value interface{}) bool {
+	f := func(key, value interface{}) bool {
 		k := key.(string)
 		r := value.(*RelationshipItem)
-		if now - r.ts > EXPIRE_DURATION {
+		if now-r.ts > EXPIRE_DURATION {
 			exp_items = append(exp_items, k)
 		}
 		count += 1
@@ -214,7 +216,7 @@ func (rp *RelationshipPool) Recycle() {
 	}
 
 	rp.items.Range(f)
-	for _, k := range(exp_items) {
+	for _, k := range exp_items {
 		rp.items.Delete(k)
 	}
 	count -= int64(len(exp_items))
@@ -226,7 +228,7 @@ func (rp *RelationshipPool) RecycleLoop() {
 	ticker := time.NewTicker(time.Second * 60 * 5)
 	for range ticker.C {
 		rp.Recycle()
-	}	
+	}
 }
 
 func (rp *RelationshipPool) HandleFriend(event *RelationshipEvent) {
@@ -238,9 +240,9 @@ func (rp *RelationshipPool) HandleFriend(event *RelationshipEvent) {
 		log.Infof("invalid relationship event:%+v", event)
 		return
 	}
-	
+
 	rp.SetMyFriend(appid, uid, friend_uid, is_friend)
-	
+
 }
 
 func (rp *RelationshipPool) HandleBlacklist(event *RelationshipEvent) {
@@ -280,15 +282,14 @@ func (rp *RelationshipPool) parseKey(k string) (int64, int64, int64, error) {
 	return appid, uid, friend_uid, nil
 }
 
-
 func (rp *RelationshipPool) ReloadRelation() {
 	active_items := make([]string, 0, 100)
 	now := int(time.Now().Unix())
-	
-	f := func (key, value interface{}) bool {
+
+	f := func(key, value interface{}) bool {
 		k := key.(string)
 		r := value.(*RelationshipItem)
-		if now - r.ts < ACTIVE_DURATION {
+		if now-r.ts < ACTIVE_DURATION {
 			active_items = append(active_items, k)
 		}
 		return true
@@ -298,12 +299,12 @@ func (rp *RelationshipPool) ReloadRelation() {
 
 	var count int64
 	m := &sync.Map{}
-	for _, k := range(active_items) {
+	for _, k := range active_items {
 		appid, uid, friend_uid, err := rp.parseKey(k)
 		if err != nil {
 			continue
 		}
-		
+
 		rs, err := GetRelationship(rp.db, appid, uid, friend_uid)
 		if err != nil {
 			log.Warning("get relationship err:", err)
@@ -311,14 +312,12 @@ func (rp *RelationshipPool) ReloadRelation() {
 		}
 
 		m.Store(k, &RelationshipItem{rs, now})
-		count++;
+		count++
 	}
-
 
 	atomic.StoreInt64(&rp.item_count, count)
 	rp.items = m
 }
-
 
 func (rp *RelationshipPool) getLastEntryID() (string, error) {
 	conn := redis_pool.Get()
@@ -334,7 +333,7 @@ func (rp *RelationshipPool) getLastEntryID() (string, error) {
 	if len(r) == 0 {
 		return "0-0", nil
 	}
-	
+
 	var entries []interface{}
 	r, err = redis.Scan(r, &entries)
 	if err != nil {
@@ -342,15 +341,14 @@ func (rp *RelationshipPool) getLastEntryID() (string, error) {
 		return "", err
 	}
 
-	var id string		
+	var id string
 	_, err = redis.Scan(entries, &id, nil)
 	if err != nil {
 		log.Error("redis scan err:", err)
-		return "", err		
+		return "", err
 	}
 	return id, nil
 }
-
 
 func (rp *RelationshipPool) getActionID() (int64, error) {
 	conn := redis_pool.Get()
@@ -378,12 +376,11 @@ func (rp *RelationshipPool) getActionID() (int64, error) {
 		action_id, err := strconv.ParseInt(arr[1], 10, 64)
 		if err != nil {
 			log.Info("error:", err, actions)
-			return 0, err			
+			return 0, err
 		}
 		return action_id, nil
 	}
 }
-
 
 func (rp *RelationshipPool) handleEvent(event *RelationshipEvent) {
 	prev_id := event.PreviousActionId
@@ -401,11 +398,10 @@ func (rp *RelationshipPool) handleEvent(event *RelationshipEvent) {
 	} else {
 		log.Warning("unknow event:", event.Name)
 	}
-	
+
 	rp.action_id = action_id
 	rp.last_entry_id = event.Id
 }
-
 
 func (rp *RelationshipPool) load() {
 	//循环直到成功
@@ -428,7 +424,6 @@ func (rp *RelationshipPool) load() {
 		break
 	}
 }
-
 
 func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, error) {
 	//block timeout 60s
@@ -457,7 +452,7 @@ func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, erro
 		log.Info("redis scan err:", err)
 		return nil, err
 	}
-	
+
 	events := make([]*RelationshipEvent, 0, 1000)
 	for len(r) > 0 {
 		var entries []interface{}
@@ -472,7 +467,7 @@ func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, erro
 		_, err = redis.Scan(entries, &id, &fields)
 		if err != nil {
 			log.Error("redis scan err:", err)
-			return nil, err		
+			return nil, err
 		}
 
 		event := &RelationshipEvent{}
@@ -484,10 +479,9 @@ func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, erro
 		}
 		events = append(events, event)
 	}
-	
+
 	return events, nil
 }
-
 
 func (rp *RelationshipPool) RunOnce() bool {
 	c, err := redis.Dial("tcp", config.redis_address)
@@ -497,7 +491,7 @@ func (rp *RelationshipPool) RunOnce() bool {
 	}
 
 	defer c.Close()
-	
+
 	password := config.redis_password
 	if len(password) > 0 {
 		if _, err := c.Do("AUTH", password); err != nil {
@@ -514,7 +508,7 @@ func (rp *RelationshipPool) RunOnce() bool {
 		}
 	}
 
-	var last_clear_ts int64	
+	var last_clear_ts int64
 	for {
 		events, err := rp.readEvents(c)
 		if err != nil {
@@ -526,12 +520,12 @@ func (rp *RelationshipPool) RunOnce() bool {
 			rp.handleEvent(event)
 		}
 
-		now := time.Now().Unix()		
+		now := time.Now().Unix()
 
 		//xread timeout, lazy policy
-		if rp.dirty && now - last_clear_ts >= RELATIONSHIP_POOL_XREAD_TIMEOUT {
+		if rp.dirty && now-last_clear_ts >= RELATIONSHIP_POOL_XREAD_TIMEOUT {
 			log.Info("reload relationship")
-			rp.ReloadRelation()				
+			rp.ReloadRelation()
 			rp.dirty = false
 			last_clear_ts = now
 		}
@@ -555,7 +549,6 @@ func (rp *RelationshipPool) Run() {
 		time.Sleep(time.Duration(nsleep) * time.Second)
 	}
 }
-
 
 func (rp *RelationshipPool) Start() {
 	rp.load()

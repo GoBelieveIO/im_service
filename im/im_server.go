@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,44 +18,47 @@
  */
 
 package main
-import "fmt"
-import "flag"
-import "time"
-import "runtime"
-import "math/rand"
-import "net/http"
-import "path"
-import "io/ioutil"
-import "strconv"
-import "strings"
-import "os"
-import "os/exec"
-import "sync/atomic"
 
-import "github.com/gomodule/redigo/redis"
-import "gopkg.in/natefinch/lumberjack.v2"
-import log "github.com/sirupsen/logrus"
-import "github.com/importcjj/sensitive"
-import "github.com/bitly/go-simplejson"
-import "github.com/GoBelieveIO/im_service/storage"
+import (
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"math/rand"
+	"net/http"
+	"os"
+	"os/exec"
+	"path"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
 
+	"github.com/gomodule/redigo/redis"
+	"gopkg.in/natefinch/lumberjack.v2"
 
-var (
-    VERSION    string
-    BUILD_TIME string
-    GO_VERSION string
-	GIT_COMMIT_ID string
-	GIT_BRANCH string
+	"github.com/GoBelieveIO/im_service/storage"
+	"github.com/bitly/go-simplejson"
+	"github.com/importcjj/sensitive"
+	log "github.com/sirupsen/logrus"
 )
 
-var auth Auth;
+var (
+	VERSION       string
+	BUILD_TIME    string
+	GO_VERSION    string
+	GIT_COMMIT_ID string
+	GIT_BRANCH    string
+)
+
+var auth Auth
 
 var rpc_storage *RPCStorage
 
-//route server
+// route server
 var route_channels []*Channel
 
-//super group route server
+// super group route server
 var group_route_channels []*Channel
 
 var app_route *AppRoute
@@ -71,13 +74,12 @@ var group_sync_c chan *storage.SyncGroupHistory
 
 var relationship_pool *RelationshipPool
 
-//round-robin
+// round-robin
 var current_deliver_index uint64
 var group_message_delivers []*GroupMessageDeliver
 var filter *sensitive.Filter
 
-var low_memory int32//低内存状态
-
+var low_memory int32 //低内存状态
 
 func init() {
 	app_route = NewAppRoute()
@@ -86,15 +88,13 @@ func init() {
 	group_sync_c = make(chan *storage.SyncGroupHistory, 100)
 }
 
-
-
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
 		MaxActive:   500,
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
+			timeout := time.Duration(2) * time.Second
 			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
 			if err != nil {
 				return nil, err
@@ -116,8 +116,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
-
-//过滤敏感词
+// 过滤敏感词
 func FilterDirtyWord(msg *IMMessage) {
 	if filter == nil {
 		log.Info("filter is null")
@@ -136,7 +135,7 @@ func FilterDirtyWord(msg *IMMessage) {
 		return
 	}
 
-	if exist,  _ := filter.FindIn(text); exist {
+	if exist, _ := filter.FindIn(text); exist {
 		t := filter.RemoveNoise(text)
 		replacedText := filter.Replace(t, '*')
 
@@ -150,7 +149,6 @@ func FilterDirtyWord(msg *IMMessage) {
 		log.Infof("filter dirty word, replace text %s with %s", text, replacedText)
 	}
 }
-
 
 type loggingHandler struct {
 	handler http.Handler
@@ -167,8 +165,8 @@ func StartHttpServer(addr string) {
 
 	//rpc function
 	http.HandleFunc("/post_group_notification", PostGroupNotification)
-	http.HandleFunc("/post_peer_message", PostPeerMessage)		
-	http.HandleFunc("/post_group_message", PostGroupMessage)	
+	http.HandleFunc("/post_peer_message", PostPeerMessage)
+	http.HandleFunc("/post_group_message", PostGroupMessage)
 	http.HandleFunc("/load_latest_message", LoadLatestMessage)
 	http.HandleFunc("/load_history_message", LoadHistoryMessage)
 	http.HandleFunc("/post_system_message", SendSystemMessage)
@@ -178,9 +176,8 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
 	http.HandleFunc("/get_offline_count", GetOfflineCount)
 
-
 	handler := loggingHandler{http.DefaultServeMux}
-	
+
 	err := http.ListenAndServe(addr, handler)
 	if err != nil {
 		log.Fatal("http server err:", err)
@@ -190,17 +187,17 @@ func StartHttpServer(addr string) {
 func SyncKeyService() {
 	for {
 		select {
-		case s := <- sync_c:
+		case s := <-sync_c:
 			origin := GetSyncKey(s.AppID, s.Uid)
 			if s.LastMsgID > origin {
 				log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
 				SaveSyncKey(s.AppID, s.Uid, s.LastMsgID)
 			}
 			break
-		case s := <- group_sync_c:
+		case s := <-group_sync_c:
 			origin := GetGroupSyncKey(s.AppID, s.Uid, s.GroupID)
 			if s.LastMsgID > origin {
-				log.Infof("save group sync key:%d %d %d %d", 
+				log.Infof("save group sync key:%d %d %d %d",
 					s.AppID, s.Uid, s.GroupID, s.LastMsgID)
 				SaveGroupSyncKey(s.AppID, s.Uid, s.GroupID, s.LastMsgID)
 			}
@@ -226,7 +223,7 @@ func ReadRSSDarwin(pid int) int64 {
 	}
 
 	rss, _ := strconv.ParseInt(ret[0], 10, 64)
-	return rss*1024
+	return rss * 1024
 }
 
 func ReadRSSLinux(pid int, pagesize int) int64 {
@@ -236,14 +233,14 @@ func ReadRSSLinux(pid int, pagesize int) int64 {
 		log.Warning("read file err:", err)
 		return 0
 	}
-	
+
 	splitAfter := strings.SplitAfter(string(procStatFileBytes), ")")
 
 	if len(splitAfter) == 0 || len(splitAfter) == 1 {
 		log.Warning("Can't find process ")
 		return 0
 	}
-	
+
 	infos := strings.Split(splitAfter[1], " ")
 	if len(infos) < 23 {
 		//impossible
@@ -251,7 +248,7 @@ func ReadRSSLinux(pid int, pagesize int) int64 {
 	}
 
 	rss, _ := strconv.ParseInt(infos[22], 10, 64)
-	return rss*int64(pagesize)
+	return rss * int64(pagesize)
 }
 
 func ReadRSS(platform string, pid int, pagesize int) int64 {
@@ -266,8 +263,8 @@ func ReadRSS(platform string, pid int, pagesize int) int64 {
 
 func MemStatService() {
 	platform := runtime.GOOS
-	pagesize := os.Getpagesize();
-	pid := os.Getpid()	
+	pagesize := os.Getpagesize()
+	pid := os.Getpid()
 	//3 min
 	ticker := time.NewTicker(time.Second * 60 * 3)
 	for range ticker.C {
@@ -308,7 +305,6 @@ func initLog() {
 	}
 }
 
-
 func main() {
 	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
 	rand.Seed(time.Now().UnixNano())
@@ -318,7 +314,7 @@ func main() {
 		fmt.Println("usage: im config")
 		return
 	}
-	
+
 	config = read_cfg(flag.Args()[0])
 
 	initLog()
@@ -326,37 +322,37 @@ func main() {
 	log.Info("startup...")
 	log.Infof("port:%d\n", config.port)
 
-	log.Infof("redis address:%s password:%s db:%d\n", 
+	log.Infof("redis address:%s password:%s db:%d\n",
 		config.redis_address, config.redis_password, config.redis_db)
 
 	log.Info("storage addresses:", config.storage_rpc_addrs)
 	log.Info("route addressed:", config.route_addrs)
-	log.Info("group route addressed:", config.group_route_addrs)	
+	log.Info("group route addressed:", config.group_route_addrs)
 	log.Info("kefu appid:", config.kefu_appid)
 	log.Info("pending root:", config.pending_root)
 
-	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)	
+	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
 	log.Infof("cert file:%s key file:%s", config.cert_file, config.key_file)
-	
+
 	log.Info("group deliver count:", config.group_deliver_count)
 	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
 	log.Infof("memory limit:%d", config.memory_limit)
 
 	log.Infof("auth method:%s", config.auth_method)
 	log.Infof("jwt sign key:%s", string(config.jwt_signing_key))
-	
+
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
-	
-	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
+
+	redis_pool = NewRedisPool(config.redis_address, config.redis_password,
 		config.redis_db)
 
 	auth = NewAuth(config.auth_method)
 
 	rpc_storage = NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
-	
+
 	route_channels = make([]*Channel, 0)
-	for _, addr := range(config.route_addrs) {
+	for _, addr := range config.route_addrs {
 		channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
 		channel.Start()
 		route_channels = append(route_channels, channel)
@@ -364,7 +360,7 @@ func main() {
 
 	if len(config.group_route_addrs) > 0 {
 		group_route_channels = make([]*Channel, 0)
-		for _, addr := range(config.group_route_addrs) {
+		for _, addr := range config.group_route_addrs {
 			channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
 			channel.Start()
 			group_route_channels = append(group_route_channels, channel)
@@ -391,7 +387,7 @@ func main() {
 		deliver.Start()
 		group_message_delivers[i] = deliver
 	}
-	
+
 	go ListenRedis()
 	go SyncKeyService()
 
@@ -400,10 +396,10 @@ func main() {
 	}
 
 	if config.friend_permission || config.enable_blacklist {
-		relationship_pool = NewRelationshipPool()
+		relationship_pool = NewRelationshipPool(config)
 		relationship_pool.Start()
 	}
-	
+
 	go StartHttpServer(config.http_listen_address)
 
 	if len(config.ws_address) > 0 {
@@ -412,7 +408,7 @@ func main() {
 	if len(config.wss_address) > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
 		go StartWSSServer(config.wss_address, config.cert_file, config.key_file)
 	}
-	
+
 	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
 		go ListenSSL(config.ssl_port, config.cert_file, config.key_file)
 	}
