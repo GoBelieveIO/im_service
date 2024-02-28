@@ -13,5 +13,6 @@ benchmark_sender
 main.test
 benchmark_storage
 benchmark_route
+benchmark_room
 *.log
 *.pyc
