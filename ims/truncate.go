@@ -1,5 +1,7 @@
+//go:build exclude
+
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,29 +21,30 @@
 
 package main
 
-import "os"
-import "fmt"
-import "bytes"
-import "flag"
-import "encoding/binary"
-import "path/filepath"
-import "strings"
-import "strconv"
-import log "github.com/sirupsen/logrus"
+import (
+	"bytes"
+	"encoding/binary"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
+	log "github.com/sirupsen/logrus"
+)
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const VERSION = 1 << 16 //1.0
 
-const BLOCK_SIZE = 128*1024*1024
-
+const BLOCK_SIZE = 128 * 1024 * 1024
 
 var root string
+
 func init() {
 	flag.StringVar(&root, "root", "", "root")
 }
-
 
 func checkRoot(root string) {
 	pattern := fmt.Sprintf("%s/message_*", root)
@@ -51,7 +54,7 @@ func checkRoot(root string) {
 		base := filepath.Base(f)
 		if strings.HasPrefix(base, "message_") {
 			if !checkFile(f) {
-				log.Warning("check file failure")				
+				log.Warning("check file failure")
 				r := truncateFile(f)
 				log.Info("truncate file:", r)
 			} else {
@@ -70,7 +73,7 @@ func checkRoot(root string) {
 
 }
 
-//校验文件结尾是否合法
+// 校验文件结尾是否合法
 func checkFile(file_path string) bool {
 	file, err := os.Open(file_path)
 	if err != nil {
@@ -89,8 +92,8 @@ func checkFile(file_path string) bool {
 	if file_size < HEADER_SIZE {
 		return false
 	}
-	
-	_, err = file.Seek(file_size - 4, os.SEEK_SET)
+
+	_, err = file.Seek(file_size-4, os.SEEK_SET)
 	if err != nil {
 		log.Fatal("seek file")
 	}
@@ -112,8 +115,6 @@ func checkFile(file_path string) bool {
 	return passed
 }
 
-
-
 func truncateFile(file_path string) bool {
 	file, err := os.Open(file_path)
 	if err != nil {
@@ -133,11 +134,10 @@ func truncateFile(file_path string) bool {
 		return false
 	}
 
-
 	offset := int64(4)
 
 	for {
-		_, err = file.Seek(file_size - offset, os.SEEK_SET)
+		_, err = file.Seek(file_size-offset, os.SEEK_SET)
 		if err != nil {
 			log.Fatal("seek file")
 		}
@@ -152,7 +152,7 @@ func truncateFile(file_path string) bool {
 		binary.Read(buffer, binary.BigEndian, &m)
 
 		if int(m) == MAGIC {
-			log.Infof("file name:%s size:%d truncated:%d passed", file_path, file_size, file_size - offset + 4)
+			log.Infof("file name:%s size:%d truncated:%d passed", file_path, file_size, file_size-offset+4)
 			return true
 		}
 
@@ -160,9 +160,8 @@ func truncateFile(file_path string) bool {
 	}
 
 	return false
-	
-}
 
+}
 
 // 判断所给路径是否为文件夹
 func IsDir(path string) bool {
@@ -172,7 +171,6 @@ func IsDir(path string) bool {
 	}
 	return s.IsDir()
 }
-	
 
 func main() {
 	flag.Parse()

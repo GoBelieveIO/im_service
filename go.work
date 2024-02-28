@@ -1,0 +1,10 @@
+go 1.21.5
+
+use (
+    .
+    ./lru
+    ./im
+    ./imr
+    ./ims
+    ./set
+)

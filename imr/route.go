@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,23 +18,27 @@
  */
 
 package main
-import "sync"
+
+import (
+	"sync"
+
+	"github.com/GoBelieveIO/im_service/set"
+)
 
 type Route struct {
-	appid     int64
-	mutex     sync.Mutex
-	uids      map[int64]bool
-	room_ids  IntSet
+	appid    int64
+	mutex    sync.Mutex
+	uids     map[int64]bool
+	room_ids set.IntSet
 }
 
 func NewRoute(appid int64) *Route {
 	r := new(Route)
 	r.appid = appid
 	r.uids = make(map[int64]bool)
-	r.room_ids = NewIntSet()
+	r.room_ids = set.NewIntSet()
 	return r
 }
-
 
 func (route *Route) ContainUserID(uid int64) bool {
 	route.mutex.Lock()
@@ -62,15 +66,15 @@ func (route *Route) RemoveUserID(uid int64) {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
 
-	delete(route.uids, uid)	
+	delete(route.uids, uid)
 }
 
-func (route *Route) GetUserIDs() IntSet {
+func (route *Route) GetUserIDs() set.IntSet {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
 
-	uids := NewIntSet()
-	for uid, _ := range(route.uids) {
+	uids := set.NewIntSet()
+	for uid := range route.uids {
 		uids.Add(uid)
 	}
 	return uids
@@ -79,7 +83,7 @@ func (route *Route) GetUserIDs() IntSet {
 func (route *Route) ContainRoomID(room_id int64) bool {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
-	
+
 	return route.room_ids.IsMember(room_id)
 }
 
