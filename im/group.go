@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,14 +26,14 @@ import mysql "github.com/go-sql-driver/mysql"
 import log "github.com/sirupsen/logrus"
 
 type Group struct {
-	gid     int64
-	appid   int64
-	super   bool //超大群
-	mutex   sync.Mutex
+	gid   int64
+	appid int64
+	super bool //超大群
+	mutex sync.Mutex
 	//key:成员id value:入群时间|(mute<<31)
 	members map[int64]int64
 
-	ts      int//访问时间
+	ts int //访问时间
 }
 
 func NewGroup(gid int64, appid int64, members map[int64]int64) *Group {
@@ -42,7 +42,7 @@ func NewGroup(gid int64, appid int64, members map[int64]int64) *Group {
 	group.gid = gid
 	group.super = false
 	group.members = members
-	group.ts = int(time.Now().Unix())	
+	group.ts = int(time.Now().Unix())
 	return group
 }
 
@@ -56,11 +56,9 @@ func NewSuperGroup(gid int64, appid int64, members map[int64]int64) *Group {
 	return group
 }
 
-
 func (group *Group) Members() map[int64]int64 {
 	return group.members
 }
-
 
 func (group *Group) cloneMembers() map[int64]int64 {
 	members := group.members
@@ -71,8 +69,7 @@ func (group *Group) cloneMembers() map[int64]int64 {
 	return n
 }
 
-
-//修改成员，在副本修改，避免读取时的lock
+// 修改成员，在副本修改，避免读取时的lock
 func (group *Group) AddMember(uid int64, timestamp int) {
 	group.mutex.Lock()
 	defer group.mutex.Unlock()
@@ -122,14 +119,12 @@ func (group *Group) GetMemberTimestamp(uid int64) int {
 
 func (group *Group) GetMemberMute(uid int64) bool {
 	t, _ := group.members[uid]
-	return int((t >> 31)&0x01) != 0
+	return int((t>>31)&0x01) != 0
 }
 
 func (group *Group) IsEmpty() bool {
 	return len(group.members) == 0
 }
-
-
 
 func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 	stmtIns, err := db.Prepare("SELECT id, appid, super FROM `group` WHERE id=? AND deleted=0")
@@ -148,13 +143,13 @@ func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 	var id int64
 	var appid int64
 	var super int8
-	
+
 	row := stmtIns.QueryRow(group_id)
 	err = row.Scan(&id, &appid, &super)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	members, err := LoadGroupMember(db, id)
 	if err != nil {
 		log.Info("error:", err)
@@ -168,17 +163,17 @@ func LoadGroup(db *sql.DB, group_id int64) (*Group, error) {
 	}
 
 	log.Info("load group success:", group_id)
-	return group, nil	
+	return group, nil
 }
 
 func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int64, error) {
 	stmtIns, err := db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=? AND deleted=0")
 	if err == mysql.ErrInvalidConn {
-		log.Info("db prepare error:", err)		
+		log.Info("db prepare error:", err)
 		stmtIns, err = db.Prepare("SELECT uid, timestamp, mute FROM group_member WHERE group_id=? AND deleted=0")
 	}
 	if err != nil {
-		log.Info("db prepare error:", err)		
+		log.Info("db prepare error:", err)
 		return nil, err
 	}
 
@@ -190,7 +185,7 @@ func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int64, error) {
 		var timestamp int64
 		var mute int64
 		rows.Scan(&uid, &timestamp, &mute)
-		members[uid] = timestamp|(mute<<31)
+		members[uid] = timestamp | (mute << 31)
 	}
 	return members, nil
 }

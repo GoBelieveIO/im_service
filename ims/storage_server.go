@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
  */
 
 package main
+
 import "net"
 import "fmt"
 import "time"
@@ -36,24 +37,22 @@ import log "github.com/sirupsen/logrus"
 import rpc_storage "github.com/GoBelieveIO/im_service/storage"
 
 var (
-    VERSION    string
-    BUILD_TIME string
-    GO_VERSION string
+	VERSION       string
+	BUILD_TIME    string
+	GO_VERSION    string
 	GIT_COMMIT_ID string
-	GIT_BRANCH string
+	GIT_BRANCH    string
 )
 
 var storage *Storage
 var config *StorageConfig
 var master *Master
-var mutex   sync.Mutex
+var mutex sync.Mutex
 var server_summary *ServerSummary
-
 
 func init() {
 	server_summary = NewServerSummary()
 }
-
 
 func Listen(f func(*net.TCPConn), listen_addr string) {
 	listen, err := net.Listen("tcp", listen_addr)
@@ -76,7 +75,6 @@ func Listen(f func(*net.TCPConn), listen_addr string) {
 	}
 }
 
-
 func handle_sync_client(conn *net.TCPConn) {
 	conn.SetKeepAlive(true)
 	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
@@ -84,28 +82,27 @@ func handle_sync_client(conn *net.TCPConn) {
 	client.Run()
 }
 
-
 func ListenSyncClient() {
 	Listen(handle_sync_client, config.sync_listen)
 }
 
 // Signal handler
 func waitSignal() error {
-    ch := make(chan os.Signal, 1)
-    signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-    for {
-        sig := <-ch
-        fmt.Println("singal:", sig.String())
-        switch sig {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	for {
+		sig := <-ch
+		fmt.Println("singal:", sig.String())
+		switch sig {
 		case syscall.SIGTERM, syscall.SIGINT:
 			storage.Flush()
 			storage.SaveIndexFileAndExit()
-        }
-    }
-    return nil // It'll never get here.
+		}
+	}
+	return nil // It'll never get here.
 }
 
-//flush storage file
+// flush storage file
 func FlushLoop() {
 	ticker := time.NewTicker(time.Millisecond * 1000)
 	for range ticker.C {
@@ -113,7 +110,7 @@ func FlushLoop() {
 	}
 }
 
-//flush message index
+// flush message index
 func FlushIndexLoop() {
 	//5 min
 	ticker := time.NewTicker(time.Second * 60 * 5)
@@ -122,14 +119,13 @@ func FlushIndexLoop() {
 	}
 }
 
-
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
 		MaxActive:   500,
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
+			timeout := time.Duration(2) * time.Second
 			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
 			if err != nil {
 				return nil, err
@@ -151,7 +147,6 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
-
 type loggingHandler struct {
 	handler http.Handler
 }
@@ -166,13 +161,12 @@ func StartHttpServer(addr string) {
 	http.HandleFunc("/stack", Stack)
 
 	handler := loggingHandler{http.DefaultServeMux}
-	
+
 	err := http.ListenAndServe(addr, handler)
 	if err != nil {
 		log.Fatal("http server err:", err)
 	}
 }
-
 
 func ListenRPCClient() {
 	var rpc_s rpc_storage.RPCStorage
@@ -188,7 +182,6 @@ func ListenRPCClient() {
 	http.Serve(l, nil)
 
 }
-
 
 func initLog() {
 	if config.log_filename != "" {
@@ -219,7 +212,7 @@ func initLog() {
 
 func main() {
 	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
-	
+
 	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
@@ -231,10 +224,10 @@ func main() {
 	config = read_storage_cfg(flag.Args()[0])
 
 	initLog()
-	
+
 	log.Info("startup...")
-	
-	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t group limit:%d offline message limit:%d hard limit:%d\n", 
+
+	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t group limit:%d offline message limit:%d hard limit:%d\n",
 		config.rpc_listen, config.storage_root, config.sync_listen,
 		config.master_address, config.is_push_system, config.group_limit,
 		config.limit, config.hard_limit)
@@ -251,9 +244,9 @@ func main() {
 
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
-	
+
 	storage = NewStorage(config.storage_root)
-	
+
 	master = NewMaster()
 	master.Start()
 	if len(config.master_address) > 0 {
@@ -265,11 +258,11 @@ func main() {
 	go FlushLoop()
 	go FlushIndexLoop()
 	go waitSignal()
-	
+
 	if len(config.http_listen_address) > 0 {
 		go StartHttpServer(config.http_listen_address)
 	}
-	
+
 	go ListenSyncClient()
 	ListenRPCClient()
 }

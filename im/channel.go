@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,7 +25,7 @@ import "sync"
 import log "github.com/sirupsen/logrus"
 
 type Subscriber struct {
-	uids map[int64]int
+	uids     map[int64]int
 	room_ids map[int64]int
 }
 
@@ -37,19 +37,18 @@ func NewSubscriber() *Subscriber {
 }
 
 type Channel struct {
-	addr            string
-	wt              chan *Message
+	addr string
+	wt   chan *Message
 
-	mutex           sync.Mutex
-	subscribers     map[int64]*Subscriber
+	mutex       sync.Mutex
+	subscribers map[int64]*Subscriber
 
-	dispatch        func(*RouteMessage)
-	dispatch_group  func(*RouteMessage)
-	dispatch_room   func(*RouteMessage)
-
+	dispatch       func(*RouteMessage)
+	dispatch_group func(*RouteMessage)
+	dispatch_room  func(*RouteMessage)
 }
 
-func NewChannel(addr string, f func(*RouteMessage), 
+func NewChannel(addr string, f func(*RouteMessage),
 	f2 func(*RouteMessage), f3 func(*RouteMessage)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
@@ -61,7 +60,7 @@ func NewChannel(addr string, f func(*RouteMessage),
 	return channel
 }
 
-//返回添加前的计数
+// 返回添加前的计数
 func (channel *Channel) AddSubscribe(appid, uid int64, online bool) (int, int) {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
@@ -74,18 +73,18 @@ func (channel *Channel) AddSubscribe(appid, uid int64, online bool) (int, int) {
 	count := subscriber.uids[uid]
 
 	//低16位表示总数量 高16位表示online的数量
-	c1 := count&0xffff
-	c2 := count>>16&0xffff
+	c1 := count & 0xffff
+	c2 := count >> 16 & 0xffff
 
 	if online {
 		c2 += 1
 	}
 	c1 += 1
-	subscriber.uids[uid] = c2 << 16 | c1
-	return count&0xffff, count>>16&0xffff
+	subscriber.uids[uid] = c2<<16 | c1
+	return count & 0xffff, count >> 16 & 0xffff
 }
 
-//返回删除前的计数
+// 返回删除前的计数
 func (channel *Channel) RemoveSubscribe(appid, uid int64, online bool) (int, int) {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
@@ -95,9 +94,9 @@ func (channel *Channel) RemoveSubscribe(appid, uid int64, online bool) (int, int
 	}
 
 	count, ok := subscriber.uids[uid]
-	//低16位表示总数量 高16位表示online的数量	
-	c1 := count&0xffff
-	c2 := count>>16&0xffff
+	//低16位表示总数量 高16位表示online的数量
+	c1 := count & 0xffff
+	c2 := count >> 16 & 0xffff
 	if ok {
 		if online {
 			c2 -= 1
@@ -106,14 +105,14 @@ func (channel *Channel) RemoveSubscribe(appid, uid int64, online bool) (int, int
 				log.Warning("online count < 0")
 			}
 		}
-		c1 -= 1		
+		c1 -= 1
 		if c1 > 0 {
-			subscriber.uids[uid] = c2 << 16 | c1
+			subscriber.uids[uid] = c2<<16 | c1
 		} else {
 			delete(subscriber.uids, uid)
 		}
 	}
-	return count&0xffff, count>>16&0xffff	
+	return count & 0xffff, count >> 16 & 0xffff
 }
 
 func (channel *Channel) GetAllSubscriber() map[int64]*Subscriber {
@@ -132,7 +131,7 @@ func (channel *Channel) GetAllSubscriber() map[int64]*Subscriber {
 	return subs
 }
 
-//online表示用户不再接受推送通知(apns, gcm)
+// online表示用户不再接受推送通知(apns, gcm)
 func (channel *Channel) Subscribe(appid int64, uid int64, online bool) {
 	count, online_count := channel.AddSubscribe(appid, uid, online)
 	log.Info("sub count:", count, online_count)
@@ -142,12 +141,12 @@ func (channel *Channel) Subscribe(appid int64, uid int64, online bool) {
 		if online {
 			on = 1
 		}
-		id := &SubscribeMessage{appid: appid, uid: uid, online:int8(on)}
+		id := &SubscribeMessage{appid: appid, uid: uid, online: int8(on)}
 		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
 		channel.wt <- msg
 	} else if online_count == 0 && online {
 		//手机端上线
-		id := &SubscribeMessage{appid: appid, uid: uid, online:1}
+		id := &SubscribeMessage{appid: appid, uid: uid, online: 1}
 		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
 		channel.wt <- msg
 	}
@@ -163,9 +162,9 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
 		channel.wt <- msg
 	} else if count > 1 && online_count == 1 && online {
 		//手机端断开连接,pc/web端还未断开连接
-		id := &SubscribeMessage{appid: appid, uid: uid, online:0}
+		id := &SubscribeMessage{appid: appid, uid: uid, online: 0}
 		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
-		channel.wt <- msg		
+		channel.wt <- msg
 	}
 }
 
@@ -180,12 +179,12 @@ func (channel *Channel) PublishGroup(amsg *RouteMessage) {
 }
 
 func (channel *Channel) Push(appid int64, receivers []int64, msg *Message) {
-	p := &BatchPushMessage{appid:appid, receivers:receivers, msg:msg}	
-	m := &Message{cmd: MSG_PUSH, body:p}
+	p := &BatchPushMessage{appid: appid, receivers: receivers, msg: msg}
+	m := &Message{cmd: MSG_PUSH, body: p}
 	channel.wt <- m
 }
 
-//返回添加前的计数
+// 返回添加前的计数
 func (channel *Channel) AddSubscribeRoom(appid, room_id int64) int {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
@@ -200,7 +199,7 @@ func (channel *Channel) AddSubscribeRoom(appid, room_id int64) int {
 	return count
 }
 
-//返回删除前的计数
+// 返回删除前的计数
 func (channel *Channel) RemoveSubscribeRoom(appid, room_id int64) int {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
@@ -261,18 +260,18 @@ func (channel *Channel) PublishRoom(amsg *RouteMessage) {
 
 func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 	subs := channel.GetAllSubscriber()
-	for appid, sub := range(subs) {
-		for uid, count := range(sub.uids) {
+	for appid, sub := range subs {
+		for uid, count := range sub.uids {
 			//低16位表示总数量 高16位表示online的数量
-			c2 := count>>16&0xffff
+			c2 := count >> 16 & 0xffff
 			on := 0
 			if c2 > 0 {
 				on = 1
 			}
-			
-			id := &SubscribeMessage{appid: appid, uid: uid, online:int8(on)}
+
+			id := &SubscribeMessage{appid: appid, uid: uid, online: int8(on)}
 			msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
-			
+
 			seq = seq + 1
 			msg.seq = seq
 			SendMessage(conn, msg)
@@ -283,7 +282,7 @@ func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 
 func (channel *Channel) ReSubscribeRoom(conn *net.TCPConn, seq int) int {
 	subs := channel.GetAllRoomSubscriber()
-	for _, id := range(subs) {
+	for _, id := range subs {
 		msg := &Message{cmd: MSG_SUBSCRIBE_ROOM, body: id}
 		seq = seq + 1
 		msg.seq = seq

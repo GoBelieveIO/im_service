@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,21 +18,21 @@
  */
 
 package main
+
 import "net"
 import log "github.com/sirupsen/logrus"
 
-
 type Push struct {
 	queue_name string
-	content []byte
+	content    []byte
 }
 
 type Client struct {
-	wt     chan *Message
-	
-	pwt     chan *Push
-	
-	conn   *net.TCPConn
+	wt chan *Message
+
+	pwt chan *Push
+
+	conn      *net.TCPConn
 	app_route *AppRoute
 }
 
@@ -123,15 +123,14 @@ func (client *Client) HandleUnsubscribe(id *RouteUserID) {
 	route.RemoveUserID(id.uid)
 }
 
-
 func (client *Client) HandlePublishGroup(amsg *RouteMessage) {
 	log.Infof("publish message appid:%d group id:%d msgid:%d", amsg.appid, amsg.receiver, amsg.msgid)
 
 	//群发给所有接入服务器
 	s := GetClientSet()
 
-	msg := &Message{cmd:MSG_PUBLISH_GROUP, body:amsg}
-	for c := range(s) {
+	msg := &Message{cmd: MSG_PUBLISH_GROUP, body: amsg}
+	for c := range s {
 		//不发送给自身
 		if client == c {
 			continue
@@ -144,12 +143,12 @@ func (client *Client) HandlePush(pmsg *BatchPushMessage) {
 	if config.push_disabled {
 		return
 	}
-	
+
 	log.Infof("push message appid:%d cmd:%s", pmsg.appid, Command(pmsg.msg.cmd))
-	
-	off_members := make([]int64, 0)	
-	
-	for _, uid := range(pmsg.receivers) {
+
+	off_members := make([]int64, 0)
+
+	for _, uid := range pmsg.receivers {
 		if !IsUserOnline(pmsg.appid, uid) {
 			off_members = append(off_members, uid)
 		}
@@ -176,10 +175,10 @@ func (client *Client) HandlePush(pmsg *BatchPushMessage) {
 func (client *Client) HandlePublish(amsg *RouteMessage) {
 	log.Infof("publish message appid:%d uid:%d msgid:%d", amsg.appid, amsg.receiver, amsg.msgid)
 
-	receiver := &RouteUserID{appid:amsg.appid, uid:amsg.receiver}
+	receiver := &RouteUserID{appid: amsg.appid, uid: amsg.receiver}
 	s := FindClientSet(receiver)
-	msg := &Message{cmd:MSG_PUBLISH, body:amsg}
-	for c := range(s) {
+	msg := &Message{cmd: MSG_PUBLISH, body: amsg}
+	for c := range s {
 		//不发送给自身
 		if client == c {
 			continue
@@ -202,11 +201,11 @@ func (client *Client) HandleUnsubscribeRoom(id *RouteRoomID) {
 
 func (client *Client) HandlePublishRoom(amsg *RouteMessage) {
 	log.Infof("publish room message appid:%d room id:%d", amsg.appid, amsg.receiver)
-	receiver := &RouteRoomID{appid:amsg.appid, room_id:amsg.receiver}
+	receiver := &RouteRoomID{appid: amsg.appid, room_id: amsg.receiver}
 	s := FindRoomClientSet(receiver)
 
-	msg := &Message{cmd:MSG_PUBLISH_ROOM, body:amsg}
-	for c := range(s) {
+	msg := &Message{cmd: MSG_PUBLISH_ROOM, body: amsg}
+	for c := range s {
 		//不发送给自身
 		if client == c {
 			continue
@@ -215,7 +214,6 @@ func (client *Client) HandlePublishRoom(amsg *RouteMessage) {
 		c.wt <- msg
 	}
 }
-
 
 func (client *Client) Write() {
 	seq := 0
@@ -237,7 +235,6 @@ func (client *Client) Run() {
 	go client.Read()
 	go client.Push()
 }
-
 
 func (client *Client) read() *Message {
 	return ReceiveMessage(client.conn)

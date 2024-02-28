@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,7 +22,6 @@ package main
 import "fmt"
 import log "github.com/sirupsen/logrus"
 import "github.com/gomodule/redigo/redis"
-
 
 func GetSyncKey(appid int64, uid int64) int64 {
 	conn := redis_pool.Get()
@@ -75,7 +74,7 @@ func SaveGroupSyncKey(appid int64, uid int64, group_id int64, sync_key int64) {
 	_, err := conn.Do("HSET", key, field, sync_key)
 	if err != nil {
 		log.Warning("hset error:", err)
-	}	
+	}
 }
 
 func GetUserPreferences(appid int64, uid int64) (int, bool, error) {
@@ -89,16 +88,16 @@ func GetUserPreferences(appid int64, uid int64) (int, bool, error) {
 		log.Info("hget error:", err)
 		return 0, false, err
 	}
-	
+
 	//电脑在线，手机新消息通知
 	var notification_on int
 	//用户禁言
-	var forbidden int	
+	var forbidden int
 	_, err = redis.Scan(reply, &forbidden, &notification_on)
 	if err != nil {
 		log.Warning("scan error:", err)
 		return 0, false, err
-	}	
+	}
 
 	return forbidden, notification_on != 0, nil
 }
@@ -113,4 +112,3 @@ func SetUserUnreadCount(appid int64, uid int64, count int32) {
 		log.Info("hset err:", err)
 	}
 }
-

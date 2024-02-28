@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@ func (client *RoomClient) Logout() {
 		channel := GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
 		route := app_route.FindOrAddRoute(client.appid)
-		route.RemoveRoomClient(client.room_id, client.Client())		
+		route.RemoveRoomClient(client.room_id, client.Client())
 	}
 }
 
@@ -48,7 +48,7 @@ func (client *RoomClient) HandleMessage(msg *Message) {
 	}
 }
 
-func (client *RoomClient) HandleEnterRoom(room *Room){
+func (client *RoomClient) HandleEnterRoom(room *Room) {
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -72,7 +72,6 @@ func (client *RoomClient) HandleEnterRoom(room *Room){
 	channel := GetRoomChannel(client.room_id)
 	channel.SubscribeRoom(client.appid, client.room_id)
 }
-
 
 func (client *RoomClient) HandleLeaveRoom(room *Room) {
 	if client.uid == 0 {
@@ -107,28 +106,27 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 		return
 	}
 
-	fb := atomic.LoadInt32(&client.forbidden) 
-	if (fb == 1) {
+	fb := atomic.LoadInt32(&client.forbidden)
+	if fb == 1 {
 		log.Infof("room id:%d client:%d, %d is forbidden", room_id, client.appid, client.uid)
 		return
 	}
 
-	
-	m := &Message{cmd:MSG_ROOM_IM, body:room_im, body_data:room_im.ToData()}
+	m := &Message{cmd: MSG_ROOM_IM, body: room_im, body_data: room_im.ToData()}
 	DispatchMessageToRoom(m, room_id, client.appid, client.Client())
 
 	mbuffer := new(bytes.Buffer)
 	WriteMessage(mbuffer, m)
 	msg_buf := mbuffer.Bytes()
-	amsg := &RouteMessage{appid:client.appid, receiver:room_id, msg:msg_buf}
+	amsg := &RouteMessage{appid: client.appid, receiver: room_id, msg: msg_buf}
 	channel := GetRoomChannel(client.room_id)
 	channel.PublishRoom(amsg)
 
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send room message ack error")
 	}
 
-	atomic.AddInt64(&server_summary.in_message_count, 1)	
+	atomic.AddInt64(&server_summary.in_message_count, 1)
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,12 +29,11 @@ import "database/sql"
 import _ "github.com/go-sql-driver/mysql"
 import log "github.com/sirupsen/logrus"
 
-
-const GROUP_EXPIRE_DURATION = 60*60 //60min
+const GROUP_EXPIRE_DURATION = 60 * 60 //60min
 const GROUP_MANAGER_STREAM_NAME = "group_manager_stream"
 const GROUP_MANAGER_XREAD_TIMEOUT = 60
 
-//group event
+// group event
 const GROUP_EVENT_CREATE = "group_create"
 const GROUP_EVENT_DISBAND = "group_disband"
 const GROUP_EVENT_UPGRADE = "group_upgrade"
@@ -43,27 +42,25 @@ const GROUP_EVENT_MEMBER_ADD = "group_member_add"
 const GROUP_EVENT_MEMBER_REMOVE = "group_member_remove"
 const GROUP_EVENT_MEMBER_MUTE = "group_member_mute"
 
-
 type GroupEvent struct {
-	Id string //stream entry id
-	ActionId int64 `redis:"action_id"`
-	PreviousActionId int64 `redis:"previous_action_id"`
-	Name string `redis:"name"`
-	AppId int64 `redis:"app_id"`
-	GroupId int64 `redis:"group_id"`
-	MemberId int64 `redis:"member_id"`
-	IsSuper bool `redis:"super"`
-	IsMute bool `redis:"mute"`
+	Id               string //stream entry id
+	ActionId         int64  `redis:"action_id"`
+	PreviousActionId int64  `redis:"previous_action_id"`
+	Name             string `redis:"name"`
+	AppId            int64  `redis:"app_id"`
+	GroupId          int64  `redis:"group_id"`
+	MemberId         int64  `redis:"member_id"`
+	IsSuper          bool   `redis:"super"`
+	IsMute           bool   `redis:"mute"`
 }
 
-
 type GroupManager struct {
-	mutex  sync.Mutex
-	groups map[int64]*Group
-	action_id int64
+	mutex         sync.Mutex
+	groups        map[int64]*Group
+	action_id     int64
 	last_entry_id string
-	dirty     bool
-	db        *sql.DB
+	dirty         bool
+	db            *sql.DB
 }
 
 func NewGroupManager() *GroupManager {
@@ -72,10 +69,10 @@ func NewGroupManager() *GroupManager {
 	m.action_id = 0
 	m.last_entry_id = ""
 	m.dirty = true
-	
+
 	db, err := sql.Open("mysql", config.mysqldb_datasource)
 	if err != nil {
-		log.Fatal("open db:", err)		
+		log.Fatal("open db:", err)
 	}
 	m.db = db
 	return m
@@ -84,9 +81,9 @@ func NewGroupManager() *GroupManager {
 func (group_manager *GroupManager) LoadGroup(gid int64) *Group {
 	group_manager.mutex.Lock()
 	if group, ok := group_manager.groups[gid]; ok {
-		now := int(time.Now().Unix())		
+		now := int(time.Now().Unix())
 		group.ts = now
-		group_manager.mutex.Unlock()		
+		group_manager.mutex.Unlock()
 		return group
 	}
 	group_manager.mutex.Unlock()
@@ -106,7 +103,7 @@ func (group_manager *GroupManager) FindGroup(gid int64) *Group {
 	group_manager.mutex.Lock()
 	defer group_manager.mutex.Unlock()
 	if group, ok := group_manager.groups[gid]; ok {
-		now := int(time.Now().Unix())		
+		now := int(time.Now().Unix())
 		group.ts = now
 		return group
 	}
@@ -130,7 +127,7 @@ func (group_manager *GroupManager) HandleCreate(event *GroupEvent) {
 			event.Name, gid, appid)
 		return
 	}
-	
+
 	group_manager.mutex.Lock()
 	defer group_manager.mutex.Unlock()
 
@@ -149,7 +146,7 @@ func (group_manager *GroupManager) HandleDisband(event *GroupEvent) {
 	gid := event.GroupId
 	if gid == 0 {
 		log.Infof("invalid group event:%s, group id:%d", event.Name, gid)
-		return		
+		return
 	}
 
 	group_manager.mutex.Lock()
@@ -200,7 +197,7 @@ func (group_manager *GroupManager) HandleChanged(event *GroupEvent) {
 		delete(group_manager.groups, gid)
 	} else {
 		log.Infof("group:%d nonexists\n", gid)
-	}	
+	}
 }
 
 func (group_manager *GroupManager) HandleMemberAdd(event *GroupEvent) {
@@ -212,7 +209,7 @@ func (group_manager *GroupManager) HandleMemberAdd(event *GroupEvent) {
 			event.Name, gid, uid)
 		return
 	}
-	
+
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		timestamp := int(time.Now().Unix())
@@ -227,11 +224,11 @@ func (group_manager *GroupManager) HandleMemberRemove(event *GroupEvent) {
 	gid := event.GroupId
 	uid := event.MemberId
 	if gid == 0 || uid == 0 {
-		log.Infof("invalid group event:%s, group id:%d member id:%d", 
+		log.Infof("invalid group event:%s, group id:%d member id:%d",
 			event.Name, gid, uid)
 		return
 	}
-	
+
 	group := group_manager.FindGroup(gid)
 	if group != nil {
 		group.RemoveMember(uid)
@@ -247,9 +244,9 @@ func (group_manager *GroupManager) HandleMute(event *GroupEvent) {
 	is_mute := event.IsMute
 
 	if gid == 0 || uid == 0 {
-		log.Infof("invalid group event:%s, group id:%d member id:%d", 
+		log.Infof("invalid group event:%s, group id:%d member id:%d",
 			event.Name, gid, uid)
-		return		
+		return
 	}
 
 	group := group_manager.FindGroup(gid)
@@ -260,7 +257,6 @@ func (group_manager *GroupManager) HandleMute(event *GroupEvent) {
 		log.Infof("can't find group:%d\n", gid)
 	}
 }
-
 
 func (group_manager *GroupManager) handleEvent(event *GroupEvent) {
 	prev_id := event.PreviousActionId
@@ -294,8 +290,6 @@ func (group_manager *GroupManager) handleEvent(event *GroupEvent) {
 	group_manager.last_entry_id = event.Id
 }
 
-
-
 func (group_manager *GroupManager) getActionID() (int64, error) {
 	conn := redis_pool.Get()
 	defer conn.Close()
@@ -322,13 +316,11 @@ func (group_manager *GroupManager) getActionID() (int64, error) {
 		action_id, err := strconv.ParseInt(arr[1], 10, 64)
 		if err != nil {
 			log.Info("error:", err, actions)
-			return 0, err			
+			return 0, err
 		}
 		return action_id, nil
 	}
 }
-
-
 
 func (group_manager *GroupManager) getLastEntryID() (string, error) {
 	conn := redis_pool.Get()
@@ -344,7 +336,7 @@ func (group_manager *GroupManager) getLastEntryID() (string, error) {
 	if len(r) == 0 {
 		return "0-0", nil
 	}
-	
+
 	var entries []interface{}
 	r, err = redis.Scan(r, &entries)
 	if err != nil {
@@ -352,15 +344,14 @@ func (group_manager *GroupManager) getLastEntryID() (string, error) {
 		return "", err
 	}
 
-	var id string		
+	var id string
 	_, err = redis.Scan(entries, &id, nil)
 	if err != nil {
 		log.Error("redis scan err:", err)
-		return "", err		
+		return "", err
 	}
 	return id, nil
 }
-
 
 func (group_manager *GroupManager) load() {
 	//循环直到成功
@@ -382,7 +373,6 @@ func (group_manager *GroupManager) load() {
 		break
 	}
 }
-
 
 func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, error) {
 	//block timeout 60s
@@ -411,7 +401,7 @@ func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, erro
 		log.Info("redis scan err:", err)
 		return nil, err
 	}
-	
+
 	events := make([]*GroupEvent, 0, 1000)
 	for len(r) > 0 {
 		var entries []interface{}
@@ -426,7 +416,7 @@ func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, erro
 		_, err = redis.Scan(entries, &id, &fields)
 		if err != nil {
 			log.Error("redis scan err:", err)
-			return nil, err		
+			return nil, err
 		}
 
 		event := &GroupEvent{}
@@ -438,7 +428,7 @@ func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, erro
 		}
 		events = append(events, event)
 	}
-	
+
 	return events, nil
 }
 
@@ -450,7 +440,7 @@ func (group_manager *GroupManager) RunOnce() bool {
 	}
 
 	defer c.Close()
-	
+
 	password := config.redis_password
 	if len(password) > 0 {
 		if _, err := c.Do("AUTH", password); err != nil {
@@ -474,14 +464,14 @@ func (group_manager *GroupManager) RunOnce() bool {
 			log.Warning("group manager read event err:", err)
 			break
 		}
-		
+
 		for _, event := range events {
 			group_manager.handleEvent(event)
 		}
 
 		now := time.Now().Unix()
 		//lazy clear policy
-		if group_manager.dirty && now - last_clear_ts >= GROUP_MANAGER_XREAD_TIMEOUT {
+		if group_manager.dirty && now-last_clear_ts >= GROUP_MANAGER_XREAD_TIMEOUT {
 			log.Info("clear group manager")
 			group_manager.clear()
 			group_manager.dirty = false
@@ -507,17 +497,16 @@ func (group_manager *GroupManager) Run() {
 	}
 }
 
-
 func (group_manager *GroupManager) Recycle() {
 	group_manager.mutex.Lock()
 	defer group_manager.mutex.Unlock()
 
 	begin := time.Now()
-	
+
 	now := int(time.Now().Unix())
 	for k := range group_manager.groups {
 		group := group_manager.groups[k]
-		if now - group.ts > GROUP_EXPIRE_DURATION {
+		if now-group.ts > GROUP_EXPIRE_DURATION {
 			//map can delete item when iterate
 			delete(group_manager.groups, k)
 		}
@@ -528,13 +517,12 @@ func (group_manager *GroupManager) Recycle() {
 	log.Info("group manager recyle, time:", end.Sub(begin))
 }
 
-
 func (group_manager *GroupManager) RecycleLoop() {
 	//5 min
 	ticker := time.NewTicker(time.Second * 60 * 5)
 	for range ticker.C {
 		group_manager.Recycle()
-	}	
+	}
 }
 
 func (group_manager *GroupManager) Start() {

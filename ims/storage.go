@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -40,9 +40,9 @@ func NewStorage(root string) *Storage {
 	r1 := storage.readPeerIndex()
 	r2 := storage.readGroupIndex()
 	storage.last_saved_id = storage.last_id
-	
+
 	if r1 {
-		storage.repairPeerIndex()		
+		storage.repairPeerIndex()
 	}
 	if r2 {
 		storage.repairGroupIndex()
@@ -54,7 +54,7 @@ func NewStorage(root string) *Storage {
 	if !r2 {
 		storage.createGroupIndex()
 	}
-	
+
 	log.Infof("last id:%d last saved id:%d", storage.last_id, storage.last_saved_id)
 	storage.FlushIndex()
 	return storage
@@ -103,7 +103,7 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 	n := storage.getBlockNO(emsg.msgid)
 	o := storage.getBlockOffset(emsg.msgid)
 
-	if n < storage.block_NO || (n - storage.block_NO) > 1 {
+	if n < storage.block_NO || (n-storage.block_NO) > 1 {
 		log.Warning("skip msg:", emsg.msgid)
 		return nil
 	}
@@ -122,8 +122,8 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 		log.Warning("skip msg:", emsg.msgid)
 		return nil
 	} else if o > int(offset) {
-		log.Warning("write padding:", o - int(offset))
-		padding := make([]byte, o - int(offset))
+		log.Warning("write padding:", o-int(offset))
+		padding := make([]byte, o-int(offset))
 		_, err = storage.file.Write(padding)
 		if err != nil {
 			log.Fatal("file write:", err)
@@ -186,7 +186,7 @@ func (storage *Storage) LoadSyncMessagesInBackground(cursor int64) chan *Message
 			}
 
 			const BATCH_COUNT = 5000
-			batch := &MessageBatch{msgs:make([]*Message, 0, BATCH_COUNT)}
+			batch := &MessageBatch{msgs: make([]*Message, 0, BATCH_COUNT)}
 			for {
 				position, err := file.Seek(0, os.SEEK_CUR)
 				if err != nil {
@@ -207,7 +207,7 @@ func (storage *Storage) LoadSyncMessagesInBackground(cursor int64) chan *Message
 
 				if len(batch.msgs) >= BATCH_COUNT {
 					c <- batch
-					batch = &MessageBatch{msgs:make([]*Message, 0, BATCH_COUNT)}
+					batch = &MessageBatch{msgs: make([]*Message, 0, BATCH_COUNT)}
 				}
 			}
 			if len(batch.msgs) > 0 {
@@ -216,8 +216,7 @@ func (storage *Storage) LoadSyncMessagesInBackground(cursor int64) chan *Message
 
 			n++
 		}
-		
-		
+
 	}()
 	return c
 }
@@ -236,12 +235,12 @@ func (storage *Storage) flushIndex() {
 
 	storage.savePeerIndex(peer_index)
 	storage.saveGroupIndex(group_index)
-	storage.last_saved_id = last_id	
+	storage.last_saved_id = last_id
 }
 
 func (storage *Storage) FlushIndex() {
 	do_flush := false
-	if storage.last_id - storage.last_saved_id > 2*BLOCK_SIZE {
+	if storage.last_id-storage.last_saved_id > 2*BLOCK_SIZE {
 		do_flush = true
 	}
 	if do_flush {

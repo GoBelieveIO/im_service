@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,13 +20,12 @@
 package main
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/gorilla/websocket"
-	"net/http"
 	"bytes"
 	"errors"
+	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
+	"net/http"
 )
-
 
 func ReadBinaryMesage(b []byte) (*Message, error) {
 	reader := bytes.NewReader(b)
@@ -41,7 +40,7 @@ func CheckOrigin(r *http.Request) bool {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:CheckOrigin,
+	CheckOrigin:     CheckOrigin,
 }
 
 func ServeWebsocket(w http.ResponseWriter, r *http.Request) {
@@ -50,15 +49,14 @@ func ServeWebsocket(w http.ResponseWriter, r *http.Request) {
 		log.Error("upgrade err:", err)
 		return
 	}
-	conn.SetReadLimit(64*1024)
+	conn.SetReadLimit(64 * 1024)
 	conn.SetPongHandler(func(string) error {
 		log.Info("brower websocket pong...")
 		return nil
 	})
-	log.Info("new websocket connection, remote address:", conn.RemoteAddr());
+	log.Info("new websocket connection, remote address:", conn.RemoteAddr())
 	handle_ws_client(conn)
 }
-
 
 func StartWSSServer(tls_address string, cert_file string, key_file string) {
 	mux := http.NewServeMux()
@@ -81,7 +79,6 @@ func StartWSServer(address string) {
 		log.Fatalf("listen err:%s", err)
 	}
 }
-
 
 func ReadWebsocketMessage(conn *websocket.Conn) (*Message, error) {
 	messageType, p, err := conn.ReadMessage()

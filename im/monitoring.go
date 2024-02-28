@@ -23,13 +23,11 @@ func NewServerSummary() *ServerSummary {
 	return s
 }
 
-
 func Summary(rw http.ResponseWriter, req *http.Request) {
 	m, _ := url.ParseQuery(req.URL.RawQuery)
 
 	appid, _ := strconv.ParseInt(m.Get("appid"), 10, 64)
 
-	
 	obj := make(map[string]interface{})
 	obj["goroutine_count"] = runtime.NumGoroutine()
 	obj["connection_count"] = server_summary.nconnections
@@ -43,7 +41,7 @@ func Summary(rw http.ResponseWriter, req *http.Request) {
 		clientset_count, client_count := route.GetClientCount()
 
 		room_count, room_client_count, room_stat := route.GetRoomCount(1000)
-		
+
 		app_obj := make(map[string]interface{})
 		app_obj["clientset_count"] = clientset_count
 		app_obj["client_count"] = client_count
@@ -53,7 +51,7 @@ func Summary(rw http.ResponseWriter, req *http.Request) {
 		k := fmt.Sprintf("app_%d", appid)
 		obj[k] = app_obj
 	}
-	
+
 	res, err := json.Marshal(obj)
 	if err != nil {
 		log.Info("json marshal:", err)

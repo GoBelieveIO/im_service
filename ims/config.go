@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,34 +23,34 @@ import "strconv"
 import "log"
 import "github.com/richmonkey/cfg"
 
-//超级群离线消息数量限制,超过的部分会被丢弃
+// 超级群离线消息数量限制,超过的部分会被丢弃
 const GROUP_OFFLINE_LIMIT = 100
 
-//离线消息返回的数量限制
+// 离线消息返回的数量限制
 const OFFLINE_DEFAULT_LIMIT = 3000
 
 const GROUP_OFFLINE_DEFAULT_LIMIT = 0
 
-//unlimit
+// unlimit
 const OFFLINE_DEFAULT_HARD_LIMIT = 0
 
 type StorageConfig struct {
 	rpc_listen          string
 	storage_root        string
 	http_listen_address string
-	
-	sync_listen         string
-	master_address      string
-	is_push_system      bool
-	group_limit         int  //普通群离线消息的数量限制
-	limit               int  //单次离线消息的数量限制
-	hard_limit          int  //离线消息总的数量限制
 
-	log_filename        string
-	log_level           string
-	log_backup          int  //log files
-	log_age             int  //days
-	log_caller          bool
+	sync_listen    string
+	master_address string
+	is_push_system bool
+	group_limit    int //普通群离线消息的数量限制
+	limit          int //单次离线消息的数量限制
+	hard_limit     int //离线消息总的数量限制
+
+	log_filename string
+	log_level    string
+	log_backup   int //log files
+	log_age      int //days
+	log_caller   bool
 }
 
 func get_int(app_cfg map[string]string, key string) int64 {
@@ -76,7 +76,6 @@ func get_opt_int(app_cfg map[string]string, key string, default_value int64) int
 	}
 	return n
 }
-
 
 func get_string(app_cfg map[string]string, key string) string {
 	concurrency, present := app_cfg[key]
@@ -117,7 +116,6 @@ func read_storage_cfg(cfg_path string) *StorageConfig {
 	config.log_backup = int(get_opt_int(app_cfg, "log_backup", 0))
 	config.log_age = int(get_opt_int(app_cfg, "log_age", 0))
 	config.log_caller = get_opt_int(app_cfg, "log_caller", 0) != 0
-	
+
 	return config
 }
-

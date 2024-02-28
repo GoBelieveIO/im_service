@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,13 +22,12 @@ package main
 import "time"
 import log "github.com/sirupsen/logrus"
 
-
 type CustomerClient struct {
 	*Connection
 }
 
 func NewCustomerClient(conn *Connection) *CustomerClient {
-	c := &CustomerClient{Connection:conn}
+	c := &CustomerClient{Connection: conn}
 	return c
 }
 
@@ -66,8 +65,8 @@ func (client *CustomerClient) HandleCustomerMessageV2(message *Message) {
 
 	msg.timestamp = int32(time.Now().Unix())
 
-	m := &Message{cmd:MSG_CUSTOMER_V2, version:DEFAULT_VERSION, body:msg}
-	
+	m := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, body: msg}
+
 	msgid, prev_msgid, err := rpc_storage.SaveMessage(msg.receiver_appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Warning("save customer message err:", err)
@@ -82,23 +81,22 @@ func (client *CustomerClient) HandleCustomerMessageV2(message *Message) {
 
 	PushMessage(msg.receiver_appid, msg.receiver, m)
 
-	meta := &Metadata{sync_key:msgid, prev_sync_key:prev_msgid}
-	m1 := &Message{cmd:MSG_CUSTOMER_V2, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg, meta:meta}
+	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
+	m1 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
 	SendAppMessage(msg.receiver_appid, msg.receiver, m1)
 
-	notify := &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid}}
-	SendAppMessage(msg.receiver_appid, msg.receiver, notify)	
+	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
+	SendAppMessage(msg.receiver_appid, msg.receiver, notify)
 
 	//发送给自己的其它登录点
-	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}
-	m2 := &Message{cmd:MSG_CUSTOMER_V2, version:DEFAULT_VERSION, flag:message.flag|MESSAGE_FLAG_PUSH, body:msg, meta:meta}
+	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
+	m2 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
 	client.SendMessage(client.uid, m2)
 
-	notify = &Message{cmd:MSG_SYNC_NOTIFY, body:&SyncKey{msgid2}}
+	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid2}}
 	client.SendMessage(client.uid, notify)
 
-	meta = &Metadata{sync_key:msgid2, prev_sync_key:prev_msgid2}	
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(seq)}, meta:meta}
+	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
+	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}, meta: meta}
 	client.EnqueueMessage(ack)
 }
-

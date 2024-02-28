@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,10 +24,9 @@ import "sync"
 import "time"
 import log "github.com/sirupsen/logrus"
 
-
 type SyncClient struct {
-	conn      *net.TCPConn
-	ewt       chan *Message
+	conn *net.TCPConn
+	ewt  chan *Message
 }
 
 func NewSyncClient(conn *net.TCPConn) *SyncClient {
@@ -50,9 +49,9 @@ func (client *SyncClient) RunLoop() {
 	cursor := msg.body.(*SyncCursor)
 	log.Info("cursor msgid:", cursor.msgid)
 	c := storage.LoadSyncMessagesInBackground(cursor.msgid)
-	
-	for batch := range(c) {
-		msg := &Message{cmd:MSG_STORAGE_SYNC_MESSAGE_BATCH, body:batch}
+
+	for batch := range c {
+		msg := &Message{cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, body: batch}
 		seq = seq + 1
 		msg.seq = seq
 		SendMessage(client.conn, msg)
@@ -62,7 +61,7 @@ func (client *SyncClient) RunLoop() {
 	defer master.RemoveClient(client)
 
 	for {
-		msg := <- client.ewt
+		msg := <-client.ewt
 		if msg == nil {
 			log.Warning("chan closed")
 			break
@@ -82,10 +81,10 @@ func (client *SyncClient) Run() {
 }
 
 type Master struct {
-	ewt       chan *EMessage
+	ewt chan *EMessage
 
-	mutex     sync.Mutex
-	clients   map[*SyncClient]struct{}
+	mutex   sync.Mutex
+	clients map[*SyncClient]struct{}
 }
 
 func NewMaster() *Master {
@@ -111,7 +110,7 @@ func (master *Master) CloneClientSet() map[*SyncClient]struct{} {
 	master.mutex.Lock()
 	defer master.mutex.Unlock()
 	clone := make(map[*SyncClient]struct{})
-	for k, v := range(master.clients) {
+	for k, v := range master.clients {
 		clone[k] = v
 	}
 	return clone
@@ -122,15 +121,15 @@ func (master *Master) SendBatch(cache []*EMessage) {
 		return
 	}
 
-	batch := &MessageBatch{msgs:make([]*Message, 0, 1000)}
+	batch := &MessageBatch{msgs: make([]*Message, 0, 1000)}
 	batch.first_id = cache[0].msgid
 	for _, em := range cache {
 		batch.last_id = em.msgid
 		batch.msgs = append(batch.msgs, em.msg)
 	}
-	m := &Message{cmd:MSG_STORAGE_SYNC_MESSAGE_BATCH, body:batch}
+	m := &Message{cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, body: batch}
 	clients := master.CloneClientSet()
-	for c := range(clients) {
+	for c := range clients {
 		c.ewt <- m
 	}
 }
@@ -139,9 +138,9 @@ func (master *Master) Run() {
 	cache := make([]*EMessage, 0, 1000)
 	var first_ts time.Time
 	for {
-		t := 60*time.Second
+		t := 60 * time.Second
 		if len(cache) > 0 {
-			ts := first_ts.Add(time.Second*1)
+			ts := first_ts.Add(time.Second * 1)
 			now := time.Now()
 
 			if ts.After(now) {
@@ -152,7 +151,7 @@ func (master *Master) Run() {
 			}
 		}
 		select {
-		case emsg := <- master.ewt:
+		case emsg := <-master.ewt:
 			cache = append(cache, emsg)
 			if len(cache) == 1 {
 				first_ts = time.Now()
@@ -193,7 +192,7 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 	cursor := &SyncCursor{msgid}
 	log.Info("cursor msgid:", msgid)
 
-	msg := &Message{cmd:MSG_STORAGE_SYNC_BEGIN, body:cursor}
+	msg := &Message{cmd: MSG_STORAGE_SYNC_BEGIN, body: cursor}
 	seq += 1
 	msg.seq = seq
 	SendMessage(conn, msg)

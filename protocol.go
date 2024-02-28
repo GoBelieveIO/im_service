@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -27,45 +27,44 @@ import "errors"
 import "encoding/hex"
 import "fmt"
 
-
-
 const DEFAULT_VERSION = 2
 
-
-//消息标志
-//文本消息 c <-> s
+// 消息标志
+// 文本消息 c <-> s
 const MESSAGE_FLAG_TEXT = 0x01
-//消息不持久化 c <-> s
+
+// 消息不持久化 c <-> s
 const MESSAGE_FLAG_UNPERSISTENT = 0x02
 
-//群组消息 c -> s
+// 群组消息 c -> s
 const MESSAGE_FLAG_GROUP = 0x04
 
-//离线消息由当前登录的用户在当前设备发出 c <- s
+// 离线消息由当前登录的用户在当前设备发出 c <- s
 const MESSAGE_FLAG_SELF = 0x08
 
-//消息由服务器主动推到客户端 c <- s
+// 消息由服务器主动推到客户端 c <- s
 const MESSAGE_FLAG_PUSH = 0x10
 
-//超级群消息 c <- s
+// 超级群消息 c <- s
 const MESSAGE_FLAG_SUPER_GROUP = 0x20
-
 
 const MSG_HEADER_SIZE = 12
 
 var message_descriptions map[int]string = make(map[int]string)
 
-type MessageCreator func()IMessage
+type MessageCreator func() IMessage
+
 var message_creators map[int]MessageCreator = make(map[int]MessageCreator)
 
-type VersionMessageCreator func()IVersionMessage
+type VersionMessageCreator func() IVersionMessage
+
 var vmessage_creators map[int]VersionMessageCreator = make(map[int]VersionMessageCreator)
 
-//true client->server
-var external_messages [256]bool;
-
+// true client->server
+var external_messages [256]bool
 
 type Command int
+
 func (cmd Command) String() string {
 	c := int(cmd)
 	if desc, ok := message_descriptions[c]; ok {
@@ -86,12 +85,12 @@ type IVersionMessage interface {
 }
 
 type Message struct {
-	cmd  int
-	seq  int
+	cmd     int
+	seq     int
 	version int
-	flag int
-	
-	body interface{}
+	flag    int
+
+	body      interface{}
 	body_data []byte
 
 	meta interface{} //non searialize
@@ -131,9 +130,8 @@ func (message *Message) FromData(buff []byte) bool {
 	return len(buff) == 0
 }
 
-//保存在磁盘中但不再需要处理的消息
+// 保存在磁盘中但不再需要处理的消息
 type IgnoreMessage struct {
-	
 }
 
 func (ignore *IgnoreMessage) ToData() []byte {
@@ -143,7 +141,6 @@ func (ignore *IgnoreMessage) ToData() []byte {
 func (ignore *IgnoreMessage) FromData(buff []byte) bool {
 	return true
 }
-
 
 func WriteHeader(len int32, seq int32, cmd byte, version byte, flag byte, buffer io.Writer) {
 	binary.Write(buffer, binary.BigEndian, len)
@@ -204,9 +201,9 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int, external bool) (*Messag
 	//收到客户端非法消息，断开链接
 	if external && !external_messages[cmd] {
 		log.Warning("invalid external message cmd:", Command(cmd))
-		return nil, errors.New("invalid cmd")		
+		return nil, errors.New("invalid cmd")
 	}
-	
+
 	buff = make([]byte, length)
 	_, err = io.ReadFull(conn, buff)
 	if err != nil {
@@ -222,38 +219,34 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int, external bool) (*Messag
 	if !message.FromData(buff) {
 		log.Warningf("parse error:%d, %d %d %d %s", cmd, seq, version,
 			flag, hex.EncodeToString(buff))
-		return nil, errors.New("parse error")		
+		return nil, errors.New("parse error")
 	}
 	return message, nil
 }
-
 
 func ReceiveMessage(conn io.Reader) *Message {
 	m, _ := ReceiveLimitMessage(conn, 32*1024, false)
 	return m
 }
 
-//used by benchmark
+// used by benchmark
 func ReceiveServerMessage(conn io.Reader) (*Message, error) {
 	return ReceiveLimitMessage(conn, 32*1024, false)
 }
 
-
-//接受客户端消息(external messages)
+// 接受客户端消息(external messages)
 func ReceiveClientMessage(conn io.Reader) (*Message, error) {
 	return ReceiveLimitMessage(conn, 32*1024, true)
 }
 
-//消息大小限制在32M
+// 消息大小限制在32M
 func ReceiveStorageSyncMessage(conn io.Reader) *Message {
-	m, _ :=  ReceiveLimitMessage(conn, 32*1024*1024, false)
+	m, _ := ReceiveLimitMessage(conn, 32*1024*1024, false)
 	return m
 }
 
-//消息大小限制在1M
+// 消息大小限制在1M
 func ReceiveStorageMessage(conn io.Reader) *Message {
 	m, _ := ReceiveLimitMessage(conn, 1024*1024, false)
 	return m
 }
-
-

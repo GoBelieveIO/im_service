@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,13 +18,13 @@
  */
 
 package main
+
 import "time"
 import "strings"
 import "strconv"
 import "sync/atomic"
 import "github.com/gomodule/redigo/redis"
 import log "github.com/sirupsen/logrus"
-
 
 func HandleForbidden(data string) {
 	arr := strings.Split(data, ",")
@@ -58,9 +58,9 @@ func HandleForbidden(data string) {
 		return
 	}
 
-	log.Infof("forbidden:%d %d %d client count:%d", 
+	log.Infof("forbidden:%d %d %d client count:%d",
 		appid, uid, fb, len(clients))
-	for c, _ := range(clients) {
+	for c, _ := range clients {
 		atomic.StoreInt32(&c.forbidden, int32(fb))
 	}
 }

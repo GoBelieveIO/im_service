@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -35,20 +35,20 @@ const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
 const F_VERSION = 1 << 16 //1.0
 
-const BLOCK_SIZE = 128*1024*1024
+const BLOCK_SIZE = 128 * 1024 * 1024
 const LRU_SIZE = 128
 
 type StorageFile struct {
-	root      string
-	mutex     sync.Mutex
+	root  string
+	mutex sync.Mutex
 
-	dirty     bool     //write file dirty
-	block_NO  int      //write file block NO
-	file      *os.File //write
-	files     *lru.Cache//read, block files
+	dirty    bool       //write file dirty
+	block_NO int        //write file block NO
+	file     *os.File   //write
+	files    *lru.Cache //read, block files
 
-	last_id        int64   //peer&group message_index记录的最大消息id
-	last_saved_id  int64   //索引文件中最大的消息id	
+	last_id       int64 //peer&group message_index记录的最大消息id
+	last_saved_id int64 //索引文件中最大的消息id
 }
 
 func onFileEvicted(key lru.Key, value interface{}) {
@@ -87,11 +87,11 @@ func NewStorageFile(root string) *StorageFile {
 	}
 
 	storage.openWriteFile(block_NO)
-	
+
 	return storage
 }
 
-//校验文件结尾是否合法
+// 校验文件结尾是否合法
 func checkFile(file_path string) bool {
 	file, err := os.Open(file_path)
 	if err != nil {
@@ -110,8 +110,8 @@ func checkFile(file_path string) bool {
 	if file_size < HEADER_SIZE {
 		return false
 	}
-	
-	_, err = file.Seek(file_size - 4, os.SEEK_SET)
+
+	_, err = file.Seek(file_size-4, os.SEEK_SET)
 	if err != nil {
 		log.Fatal("seek file")
 	}
@@ -127,8 +127,7 @@ func checkFile(file_path string) bool {
 	return int(m) == MAGIC
 }
 
-
-//open write file
+// open write file
 func (storage *StorageFile) openWriteFile(block_NO int) {
 	path := fmt.Sprintf("%s/message_%d", storage.root, block_NO)
 	log.Info("open/create message file path:", path)
@@ -186,11 +185,11 @@ func (storage *StorageFile) getMsgId(block_NO int, offset int) int64 {
 }
 
 func (storage *StorageFile) getBlockNO(msg_id int64) int {
-	return int(msg_id/BLOCK_SIZE)
+	return int(msg_id / BLOCK_SIZE)
 }
 
 func (storage *StorageFile) getBlockOffset(msg_id int64) int {
-	return int(msg_id%BLOCK_SIZE)
+	return int(msg_id % BLOCK_SIZE)
 }
 
 func (storage *StorageFile) getFile(block_NO int) *os.File {
@@ -206,9 +205,6 @@ func (storage *StorageFile) getFile(block_NO int) *os.File {
 	storage.files.Add(block_NO, file)
 	return file
 }
-
-
-
 
 func (storage *StorageFile) ReadMessage(file *os.File) *Message {
 	//校验消息起始位置的magic
@@ -227,13 +223,13 @@ func (storage *StorageFile) ReadMessage(file *os.File) *Message {
 	if msg == nil {
 		return msg
 	}
-	
+
 	err = binary.Read(file, binary.BigEndian, &magic)
 	if err != nil {
 		log.Info("read file err:", err)
 		return nil
 	}
-	
+
 	if magic != MAGIC {
 		log.Warning("magic err:", magic)
 		return nil
@@ -309,7 +305,7 @@ func (storage *StorageFile) WriteMessage(file io.Writer, msg *Message) {
 	}
 }
 
-//save without lock
+// save without lock
 func (storage *StorageFile) saveMessage(msg *Message) int64 {
 	msgid, err := storage.file.Seek(0, os.SEEK_END)
 	if err != nil {
@@ -322,7 +318,7 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 	binary.Write(buffer, binary.BigEndian, int32(MAGIC))
 	buf := buffer.Bytes()
 
-	if msgid + int64(len(buf)) > BLOCK_SIZE {
+	if msgid+int64(len(buf)) > BLOCK_SIZE {
 		err = storage.file.Sync()
 		if err != nil {
 			log.Fatalln("sync storage file:", err)
@@ -335,7 +331,7 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 		}
 	}
 
-	if msgid + int64(len(buf)) > BLOCK_SIZE {
+	if msgid+int64(len(buf)) > BLOCK_SIZE {
 		log.Fatalln("message size:", len(buf))
 	}
 	n, err := storage.file.Write(buf)
@@ -348,10 +344,10 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 	storage.dirty = true
 
 	msgid = int64(storage.block_NO)*BLOCK_SIZE + msgid
-	master.ewt <- &EMessage{msgid:msgid, msg:msg}
+	master.ewt <- &EMessage{msgid: msgid, msg: msg}
 	log.Info("save message:", Command(msg.cmd), " ", msgid)
 	return msgid
-	
+
 }
 
 func (storage *StorageFile) SaveMessage(msg *Message) int64 {

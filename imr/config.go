@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,18 +24,18 @@ import "log"
 import "github.com/richmonkey/cfg"
 
 type RouteConfig struct {
-	listen string
+	listen              string
 	redis_address       string
 	redis_password      string
 	redis_db            int
 	push_disabled       bool
 	http_listen_address string
 
-	log_filename        string
-	log_level           string
-	log_backup          int  //log files
-	log_age             int  //days
-	log_caller          bool
+	log_filename string
+	log_level    string
+	log_backup   int //log files
+	log_age      int //days
+	log_caller   bool
 }
 
 func get_int(app_cfg map[string]string, key string) int {
@@ -61,7 +61,6 @@ func get_opt_int(app_cfg map[string]string, key string) int64 {
 	}
 	return n
 }
-
 
 func get_string(app_cfg map[string]string, key string) string {
 	concurrency, present := app_cfg[key]
@@ -94,12 +93,12 @@ func read_route_cfg(cfg_path string) *RouteConfig {
 	config.redis_db = int(db)
 	config.push_disabled = get_opt_int(app_cfg, "push_disabled") == 1
 	config.http_listen_address = get_opt_string(app_cfg, "http_listen_address")
-	
+
 	config.log_filename = get_opt_string(app_cfg, "log_filename")
 	config.log_level = get_opt_string(app_cfg, "log_level")
 	config.log_backup = int(get_opt_int(app_cfg, "log_backup"))
 	config.log_age = int(get_opt_int(app_cfg, "log_age"))
 	config.log_caller = get_opt_int(app_cfg, "log_caller") != 0
-	
+
 	return config
 }
