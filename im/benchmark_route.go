@@ -1,9 +1,13 @@
+//go:build exclude
+
 package main
 
-import "time"
-import "flag"
-import "log"
-import "bytes"
+import (
+	"bytes"
+	"flag"
+	"log"
+	"time"
+)
 
 var route_addr string = "127.0.0.1:4444"
 var appid int64 = 8
@@ -19,7 +23,7 @@ func main() {
 
 	channel1.Subscribe(appid, 1000, true)
 
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 
 	channel2 := NewChannel(route_addr, Dispatch, nil, nil)
 	channel2.Start()
@@ -28,9 +32,8 @@ func main() {
 	im.sender = 1
 	im.receiver = 1000
 	im.content = "test"
-	msg := &Message{cmd:MSG_IM, body:im}
+	msg := &Message{cmd: MSG_IM, body: im}
 
-	
 	mbuffer := new(bytes.Buffer)
 	WriteMessage(mbuffer, msg)
 	msg_buf := mbuffer.Bytes()
@@ -41,9 +44,9 @@ func main() {
 	amsg.msg = msg_buf
 	channel2.Publish(amsg)
 
-	time.Sleep(3*time.Second)
+	time.Sleep(3 * time.Second)
 
 	channel1.Unsubscribe(appid, 1000, true)
 
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 }

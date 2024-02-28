@@ -1,14 +1,18 @@
+//go:build exclude
+
 package main
 
-import "fmt"
-import "net"
-import "log"
-import "runtime"
-import "time"
-import "flag"
-import "math/rand"
-import "github.com/gomodule/redigo/redis"
+import (
+	"flag"
+	"fmt"
+	"log"
+	"math/rand"
+	"net"
+	"runtime"
+	"time"
 
+	"github.com/gomodule/redigo/redis"
+)
 
 const HOST = "127.0.0.1"
 const PORT = 23000
@@ -18,10 +22,10 @@ const redis_db = 1
 
 type Param struct {
 	concurrent int
-	count int
+	count      int
 	recv_count int
-	room_id int
-	wait    int
+	room_id    int
+	wait       int
 }
 
 var param Param
@@ -32,28 +36,27 @@ var recv_c chan bool
 var redis_pool *redis.Pool
 var seededRand *rand.Rand
 
-
 func init() {
 	flag.IntVar(&param.concurrent, "c", 10, "concurrent number")
 	flag.IntVar(&param.recv_count, "r", 20, "recv number")
 	flag.IntVar(&param.count, "n", 5000, "request number")
 	flag.IntVar(&param.room_id, "i", 10, "room id")
-	flag.IntVar(&param.wait, "w", 0, "wait before send")	
+	flag.IntVar(&param.wait, "w", 0, "wait before send")
 }
 
 func recv(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int) {
 	seq := 2
-	
+
 	pingTs := time.Now()
-	n := count*(concurrent)
+	n := count * (concurrent)
 	received_num := 0
-	
+
 	for received_num < n {
 		now := time.Now()
 		d := now.Sub(pingTs)
 		if d > time.Duration(3*60)*time.Second {
 			seq++
-			p := &Message{cmd:MSG_PING, seq:seq, version:DEFAULT_VERSION, flag:0}
+			p := &Message{cmd: MSG_PING, seq: seq, version: DEFAULT_VERSION, flag: 0}
 			err := SendMessage(conn, p)
 			if err != nil {
 				log.Println("send ping err:", err)
@@ -61,7 +64,6 @@ func recv(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 			pingTs = now
 		}
 
-		
 		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		msg, err := ReceiveServerMessage(conn)
 		if err != nil {
@@ -69,13 +71,13 @@ func recv(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 				log.Println("receive message timeout err:", err)
 				continue
 			}
-			log.Println("receive message err:", err)							
+			log.Println("receive message err:", err)
 			break
 		}
-	
+
 		if msg.cmd == MSG_ROOM_IM {
 			received_num++
-			if received_num % 10000 == 0 {
+			if received_num%10000 == 0 {
 				log.Printf("%d received:%d", uid, received_num)
 			}
 		}
@@ -90,9 +92,8 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 
 	seq := 2
 
-
 	go func() {
-		n := count*(concurrent-1)
+		n := count * (concurrent - 1)
 		received_num := 0
 		ack_num := 0
 		for received_num < n || ack_num < count {
@@ -104,7 +105,7 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 			}
 			if msg.cmd == MSG_ACK {
 				ack_num++
-				if ack_num % 1000 == 0 {
+				if ack_num%1000 == 0 {
 					log.Printf("%d ack:%d", uid, ack_num)
 				}
 				ack_c <- 0
@@ -113,7 +114,7 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 
 			if msg.cmd == MSG_ROOM_IM {
 				received_num++
-				if received_num % 10000 == 0 {
+				if received_num%10000 == 0 {
 					log.Printf("%d received:%d", uid, received_num)
 				}
 			}
@@ -126,15 +127,15 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 		begin := time.Now()
 		content := fmt.Sprintf("test....%d", i)
 		seq++
-		msg := &Message{cmd:MSG_ROOM_IM, seq:seq, version:DEFAULT_VERSION, flag:0,
-			body:&RoomMessage{&RTMessage{uid, room_id, content}}}
+		msg := &Message{cmd: MSG_ROOM_IM, seq: seq, version: DEFAULT_VERSION, flag: 0,
+			body: &RoomMessage{&RTMessage{uid, room_id, content}}}
 		SendMessage(conn, msg)
-		
+
 		var e bool
 		select {
-		case <- ack_c:
+		case <-ack_c:
 			break
-		case <- close_c:
+		case <-close_c:
 			e = true
 			break
 		}
@@ -144,8 +145,8 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 
 		end := time.Now()
 		d := end.Sub(begin)
-		if i % 100 == 0 {
-			log.Printf("send message duration:%d", d)			
+		if i%100 == 0 {
+			log.Printf("send message duration:%d", d)
 		}
 		if param.wait != 0 {
 			if d >= time.Duration(param.wait)*time.Second {
@@ -156,16 +157,15 @@ func send(uid int64, room_id int64, conn *net.TCPConn, count int, concurrent int
 		}
 	}
 
-	<- close_c
+	<-close_c
 
 	conn.Close()
 	log.Printf("%d send complete", uid)
 	send_c <- true
 }
 
-
 func ConnectServer(uid int64) *net.TCPConn {
-	token, err := login(uid)	
+	token, err := login(uid)
 	if err != nil {
 		panic(err)
 	}
@@ -179,8 +179,8 @@ func ConnectServer(uid int64) *net.TCPConn {
 		return nil
 	}
 	seq := 1
-	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{cmd:MSG_AUTH_TOKEN, seq:seq, version:DEFAULT_VERSION, flag:0, body:auth})
+	auth := &AuthenticationToken{token: token, platform_id: 1, device_id: "00000000"}
+	SendMessage(conn, &Message{cmd: MSG_AUTH_TOKEN, seq: seq, version: DEFAULT_VERSION, flag: 0, body: auth})
 	ReceiveMessage(conn)
 
 	log.Printf("uid:%d connected\n", uid)
@@ -188,19 +188,18 @@ func ConnectServer(uid int64) *net.TCPConn {
 
 }
 
-
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())	
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 
 	log.Printf("concurrent:%d, recv:%d, request:%d room id:%d wait:%d\n",
 		param.concurrent, param.recv_count, param.count, param.room_id, param.wait)
-	
+
 	seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	redis_pool = NewRedisPool(redis_address, redis_password, redis_db)
-	
+
 	send_c = make(chan bool, 100)
 	recv_c = make(chan bool, 10000)
 	u := int64(1000)
@@ -209,38 +208,38 @@ func main() {
 	recv_count := param.recv_count
 	count := param.count
 	room_id := int64(param.room_id)
-	
+
 	conns := make([]*net.TCPConn, 0, 1000)
-	for i := 0; i < recv_count + concurrent; i++ {
+	for i := 0; i < recv_count+concurrent; i++ {
 		conn := ConnectServer(u + int64(i))
 
 		var room_body Room = Room(room_id)
-		m := &Message{cmd:MSG_ENTER_ROOM, seq:2, version:DEFAULT_VERSION, flag:0, body:&room_body}
+		m := &Message{cmd: MSG_ENTER_ROOM, seq: 2, version: DEFAULT_VERSION, flag: 0, body: &room_body}
 		SendMessage(conn, m)
 
 		if i < recv_count {
 			uid := u + int64(i)
 			go recv(uid, room_id, conn, param.count, param.concurrent)
 		}
-		
+
 		conns = append(conns, conn)
 		if i%500 == 0 && i > 0 {
-			time.Sleep(time.Second*1)
+			time.Sleep(time.Second * 1)
 		}
 	}
 
-	time.Sleep(time.Second*2)
+	time.Sleep(time.Second * 2)
 
 	fmt.Println("connected")
 
 	begin := time.Now().UnixNano()
 	for i := 0; i < concurrent; i++ {
-		uid := u + int64(i + recv_count)
+		uid := u + int64(i+recv_count)
 		go send(uid, room_id, conns[i+recv_count], param.count, param.concurrent)
 	}
 
 	for i := 0; i < concurrent; i++ {
-		<- send_c
+		<-send_c
 	}
 
 	end := time.Now().UnixNano()
@@ -253,7 +252,7 @@ func main() {
 
 	fmt.Println("waiting recv completed...")
 	for i := 0; i < recv_count; i++ {
-		<- recv_c
+		<-recv_c
 	}
 	fmt.Println("recv completed")
 }

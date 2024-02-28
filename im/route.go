@@ -1,17 +1,22 @@
 package main
 
-import "sync"
-import log "github.com/sirupsen/logrus"
+import (
+	"sync"
 
-//一个聊天室中不允许有多个相同uid的client
+	"github.com/GoBelieveIO/im_service/set"
+	log "github.com/sirupsen/logrus"
+)
+
+// 一个聊天室中不允许有多个相同uid的client
 const ROOM_SINGLE = false
-//一个聊天室中不允许有多个相同uid和deviceid的client
+
+// 一个聊天室中不允许有多个相同uid和deviceid的client
 const ROOM_DEVICE_SINGLE = true
 
 type Route struct {
-	appid  int64
-	mutex   sync.Mutex
-	clients map[int64]ClientSet
+	appid        int64
+	mutex        sync.Mutex
+	clients      map[int64]ClientSet
 	room_clients map[int64]ClientSet
 }
 
@@ -28,7 +33,7 @@ func (route *Route) GetRoomCount(low_level int) (int, int, map[int64]int) {
 	defer route.mutex.Unlock()
 	stat := make(map[int64]int)
 	count := 0
-	for k, v := range(route.room_clients) {
+	for k, v := range route.room_clients {
 		if len(v) >= low_level {
 			stat[k] = len(v)
 		}
@@ -40,7 +45,7 @@ func (route *Route) GetRoomCount(low_level int) (int, int, map[int64]int) {
 func (route *Route) AddRoomClient(room_id int64, client *Client) {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
-	set, ok := route.room_clients[room_id]; 
+	set, ok := route.room_clients[room_id]
 	if !ok {
 		set = NewClientSet()
 		route.room_clients[room_id] = set
@@ -74,8 +79,7 @@ func (route *Route) AddRoomClient(room_id int64, client *Client) {
 	set.Add(client)
 }
 
-
-//todo optimise client set clone
+// todo optimise client set clone
 func (route *Route) FindRoomClientSet(room_id int64) ClientSet {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
@@ -102,13 +106,12 @@ func (route *Route) RemoveRoomClient(room_id int64, client *Client) bool {
 	return false
 }
 
-
 func (route *Route) GetClientCount() (int, int) {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
 
 	count := 0
-	for _, v := range(route.clients) {
+	for _, v := range route.clients {
 		count += len(v)
 	}
 	return len(route.clients), count
@@ -118,7 +121,7 @@ func (route *Route) AddClient(client *Client) bool {
 	is_new := false
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
-	set, ok := route.clients[client.uid]; 
+	set, ok := route.clients[client.uid]
 	if !ok {
 		set = NewClientSet()
 		route.clients[client.uid] = set
@@ -132,7 +135,7 @@ func (route *Route) RemoveClient(client *Client) (bool, bool) {
 	route.mutex.Lock()
 	defer route.mutex.Unlock()
 	if set, ok := route.clients[client.uid]; ok {
-		is_delete := false		
+		is_delete := false
 		set.Remove(client)
 		if set.Count() == 0 {
 			delete(route.clients, client.uid)
@@ -167,7 +170,6 @@ func (route *Route) IsOnline(uid int64) bool {
 	return false
 }
 
-
-func (route *Route) GetUserIDs() IntSet {
-	return NewIntSet()
+func (route *Route) GetUserIDs() set.IntSet {
+	return set.NewIntSet()
 }

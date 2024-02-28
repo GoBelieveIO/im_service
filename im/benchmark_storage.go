@@ -1,9 +1,14 @@
+//go:build exclude
+
 package main
-import "log"
-import "flag"
-import "runtime"
-import "time"
-import "fmt"
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"runtime"
+	"time"
+)
 
 var storage_address string = "127.0.0.1:13333"
 var appid int64 = 8
@@ -26,8 +31,8 @@ func newRPCClient(addr string) *RPCStorage {
 
 func Test_SetAndEnqueue() {
 	dc := newRPCClient(storage_address)
-	im := &IMMessage{sender:1, receiver:1000, content:"1111"}
-	m := &Message{cmd:MSG_IM, body:im}
+	im := &IMMessage{sender: 1, receiver: 1000, content: "1111"}
+	m := &Message{cmd: MSG_IM, body: im}
 	msgid, _, err := dc.SaveMessage(appid, 1000, device_id, m)
 
 	if err != nil {
@@ -39,10 +44,10 @@ func Test_SetAndEnqueue() {
 
 func benchmark() {
 	dc := newRPCClient(storage_address)
-	
+
 	for i := 0; i < count; i++ {
-		im := &IMMessage{sender:1, receiver:1000, content:"1111"}
-		m := &Message{cmd:MSG_IM, body:im}
+		im := &IMMessage{sender: 1, receiver: 1000, content: "1111"}
+		m := &Message{cmd: MSG_IM, body: im}
 
 		_, _, err := dc.SaveMessage(appid, 1000, device_id, m)
 		if err != nil {
@@ -57,7 +62,6 @@ func benchmark() {
 
 }
 
-
 func main() {
 	runtime.GOMAXPROCS(4)
 	flag.Parse()
@@ -67,7 +71,6 @@ func main() {
 
 	c = make(chan bool, 100)
 
-
 	begin := time.Now().UnixNano()
 
 	for i := 0; i < concurrent; i++ {
@@ -75,7 +78,7 @@ func main() {
 	}
 
 	for i := 0; i < concurrent; i++ {
-		<- c
+		<-c
 	}
 	end := time.Now().UnixNano()
 

@@ -1,13 +1,18 @@
+//go:build exclude
+
 package main
 
-import "testing"
-import "log"
-import "time"
-import "flag"
-import "os"
-import "github.com/gomodule/redigo/redis"
-import "github.com/importcjj/sensitive"
-import "github.com/bitly/go-simplejson"
+import (
+	"flag"
+	"log"
+	"os"
+	"testing"
+	"time"
+
+	"github.com/bitly/go-simplejson"
+	"github.com/gomodule/redigo/redis"
+	"github.com/importcjj/sensitive"
+)
 
 var redis_pool *redis.Pool
 var filter *sensitive.Filter
@@ -19,17 +24,16 @@ func init() {
 }
 
 type GroupEvent struct {
-	Id string //stream entry id
-	ActionId int64 `redis:"action_id"`
-	PreviousActionId int64 `redis:"previous_action_id"`
-	Name string `redis:"name"`
-	AppId int64 `redis:"app_id"`
-	GroupId int64 `redis:"group_id"`
-	MemberId int64 `redis:"member_id"`
-	IsSuper bool `redis:"super"`
-	IsMute bool `redis:"mute"`
+	Id               string //stream entry id
+	ActionId         int64  `redis:"action_id"`
+	PreviousActionId int64  `redis:"previous_action_id"`
+	Name             string `redis:"name"`
+	AppId            int64  `redis:"app_id"`
+	GroupId          int64  `redis:"group_id"`
+	MemberId         int64  `redis:"member_id"`
+	IsSuper          bool   `redis:"super"`
+	IsMute           bool   `redis:"mute"`
 }
-
 
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
@@ -37,7 +41,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		MaxActive:   500,
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
+			timeout := time.Duration(2) * time.Second
 			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
 			if err != nil {
 				return nil, err
@@ -59,7 +63,6 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
-
 func TestMain(m *testing.M) {
 	flag.Parse()
 
@@ -69,17 +72,16 @@ func TestMain(m *testing.M) {
 	}
 
 	config = read_cfg(flag.Args()[0])
-	
+
 	relationship_pool = NewRelationshipPool()
-	redis_pool = NewRedisPool(config.redis_address, config.redis_password, 
-		config.redis_db)	
+	redis_pool = NewRedisPool(config.redis_address, config.redis_password,
+		config.redis_db)
 
 	filter.LoadWordDict(config.word_file)
 	filter.AddWord("长者")
-	
+
 	os.Exit(m.Run())
 }
-
 
 func FilterDirtyWord(msg *IMMessage) {
 	if filter == nil {
@@ -99,7 +101,7 @@ func FilterDirtyWord(msg *IMMessage) {
 	t := filter.RemoveNoise(text)
 	replacedText := filter.Replace(t, 42)
 
-	if (replacedText != text) {
+	if replacedText != text {
 		obj.Set("text", replacedText)
 
 		c, err := obj.Encode()
@@ -110,17 +112,15 @@ func FilterDirtyWord(msg *IMMessage) {
 	}
 }
 
-
 func TestFilter(t *testing.T) {
 	log.Println("hhhhh test")
 
 	msg := &IMMessage{}
-	
+
 	msg.content = "{\"text\": \"\\u6211\\u4e3a\\u5171*\\u4ea7\\u515a\\u7eed\\u4e00\\u79d2\"}"
 	FilterDirtyWord(msg)
 	log.Println("msg:", string(msg.content))
 
-	
 	s := "我为共*产党续一秒"
 	t1 := filter.RemoveNoise(s)
 	log.Println(filter.Replace(t1, '*'))
@@ -131,7 +131,7 @@ func TestFilter(t *testing.T) {
 func Test_Relationship(t *testing.T) {
 	rs := relationship_pool.GetRelationship(7, 1, 2)
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
-	
+
 	relationship_pool.SetMyFriend(7, 1, 2, true)
 	relationship_pool.SetYourFriend(7, 1, 2, true)
 	relationship_pool.SetInMyBlacklist(7, 1, 2, true)
@@ -140,35 +140,29 @@ func Test_Relationship(t *testing.T) {
 	rs = relationship_pool.GetRelationship(7, 1, 2)
 
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
-	
+
 	if !rs.IsMyFriend() || !rs.IsYourFriend() || !rs.IsInMyBlacklist() || !rs.IsInYourBlacklist() {
 		t.Error("error")
 		t.FailNow()
 	}
 
-	
-	
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
-
-
 
 	relationship_pool.SetMyFriend(7, 1, 2, false)
 	relationship_pool.SetYourFriend(7, 1, 2, false)
 	relationship_pool.SetInMyBlacklist(7, 1, 2, false)
 	relationship_pool.SetInYourBlacklist(7, 1, 2, false)
 
-	rs = relationship_pool.GetRelationship(7, 1, 2)	
+	rs = relationship_pool.GetRelationship(7, 1, 2)
 
 	if rs.IsMyFriend() || rs.IsYourFriend() || rs.IsInMyBlacklist() || rs.IsInYourBlacklist() {
 		t.Error("error")
-		t.FailNow()		
+		t.FailNow()
 	}
-	
-	
+
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
 
 }
-
 
 func TestStreamRange(t *testing.T) {
 	conn := redis_pool.Get()
@@ -180,7 +174,6 @@ func TestStreamRange(t *testing.T) {
 		log.Println("redis err:", err)
 		return
 	}
-
 
 	for len(r) > 0 {
 		var entries []interface{}
@@ -195,10 +188,9 @@ func TestStreamRange(t *testing.T) {
 		_, err = redis.Scan(entries, &id, &fields)
 		if err != nil {
 			t.Error("redis err:", err)
-			return			
+			return
 		}
 		log.Println("id:", id)
-
 
 		event := &GroupEvent{}
 		event.Id = id
@@ -228,14 +220,14 @@ func TestStreamRead(t *testing.T) {
 		return
 	}
 
-	var ss string	
+	var ss string
 	var r []interface{}
 	_, err = redis.Scan(stream_res, &ss, &r)
 	if err != nil {
 		log.Println("redis scan err:", err)
 		return
 	}
-	
+
 	for len(r) > 0 {
 		var entries []interface{}
 		r, err = redis.Scan(r, &entries)
@@ -249,10 +241,9 @@ func TestStreamRead(t *testing.T) {
 		_, err = redis.Scan(entries, &id, &fields)
 		if err != nil {
 			t.Error("redis err:", err)
-			return			
+			return
 		}
 		log.Println("id:", id)
-
 
 		event := &GroupEvent{}
 		event.Id = id

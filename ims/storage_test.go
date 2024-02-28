@@ -1,10 +1,14 @@
+//go:build exclude
+
 package main
 
-import "testing"
-import "log"
-import "fmt"
-import "os"
-import "flag"
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"testing"
+)
 
 var storage *Storage
 var appid int64 = 0

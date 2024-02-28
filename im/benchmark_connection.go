@@ -1,18 +1,22 @@
+//go:build exclude
+
 package main
 
-import "net"
-import "log"
-import "runtime"
-import "time"
-import "flag"
-import "math/rand"
-import "github.com/gomodule/redigo/redis"
+import (
+	"flag"
+	"log"
+	"math/rand"
+	"net"
+	"runtime"
+	"time"
+
+	"github.com/gomodule/redigo/redis"
+)
 
 const APPID = 7
 const REDIS_HOST = "127.0.0.1:6379"
 const REDIS_PASSWORD = ""
 const REDIS_DB = 0
-
 
 var first int64
 var last int64
@@ -31,7 +35,6 @@ func init() {
 	flag.IntVar(&port, "port", 23000, "port")
 }
 
-
 func receive(uid int64) {
 	ip := net.ParseIP(host)
 	addr := net.TCPAddr{ip, port, ""}
@@ -47,9 +50,9 @@ func receive(uid int64) {
 	}
 
 	token, err := login(uid)
-	
+
 	seq := 1
-	SendMessage(conn, &Message{cmd:MSG_AUTH_TOKEN, seq:seq, version:DEFAULT_VERSION, flag:0, body:&AuthenticationToken{token: token, platform_id:PLATFORM_WEB, device_id:"1"}})
+	SendMessage(conn, &Message{cmd: MSG_AUTH_TOKEN, seq: seq, version: DEFAULT_VERSION, flag: 0, body: &AuthenticationToken{token: token, platform_id: PLATFORM_WEB, device_id: "1"}})
 	ReceiveMessage(conn)
 
 	q := make(chan bool, 10)
@@ -67,10 +70,10 @@ func receive(uid int64) {
 				msgid++
 				receiver := first + rand.Int63()%(last-first)
 				im := &IMMessage{uid, receiver, 0, int32(msgid), "test"}
-				SendMessage(conn, &Message{cmd:MSG_IM, seq:seq, version:DEFAULT_VERSION, flag:0, body:im})
+				SendMessage(conn, &Message{cmd: MSG_IM, seq: seq, version: DEFAULT_VERSION, flag: 0, body: im})
 			case <-ticker.C:
 				seq++
-				SendMessage(conn, &Message{cmd:MSG_PING, seq:seq, version:DEFAULT_VERSION, flag:0, body:nil})
+				SendMessage(conn, &Message{cmd: MSG_PING, seq: seq, version: DEFAULT_VERSION, flag: 0, body: nil})
 			case m := <-wt:
 				if m == nil {
 					q <- true
@@ -93,7 +96,7 @@ func receive(uid int64) {
 			}
 
 			if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-				ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq:int32(msg.seq)}}
+				ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(msg.seq)}}
 				wt <- ack
 			}
 		}
@@ -125,7 +128,7 @@ func main() {
 
 	seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	redis_pool = NewRedisPool(REDIS_HOST, REDIS_PASSWORD, REDIS_DB)
-	
+
 	c := make(chan bool, 100)
 	var i int64
 	var j int64

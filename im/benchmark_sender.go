@@ -1,14 +1,18 @@
+//go:build exclude
+
 package main
 
-import "fmt"
-import "net"
-import "log"
-import "runtime"
-import "flag"
-import "time"
-import "math/rand"
-import "github.com/gomodule/redigo/redis"
+import (
+	"flag"
+	"fmt"
+	"log"
+	"math/rand"
+	"net"
+	"runtime"
+	"time"
 
+	"github.com/gomodule/redigo/redis"
+)
 
 var first int64
 var last int64
@@ -29,8 +33,6 @@ func init() {
 	flag.IntVar(&port, "port", 23000, "port")
 }
 
-
-
 func send(uid int64) {
 	ip := net.ParseIP(host)
 	addr := net.TCPAddr{ip, port, ""}
@@ -40,7 +42,7 @@ func send(uid int64) {
 		log.Println("login error")
 		return
 	}
-	
+
 	conn, err := net.DialTCP("tcp4", nil, &addr)
 	if err != nil {
 		log.Println("connect error")
@@ -48,8 +50,8 @@ func send(uid int64) {
 	}
 	seq := 1
 
-	auth := &AuthenticationToken{token:token, platform_id:1, device_id:"00000000"}
-	SendMessage(conn, &Message{cmd:MSG_AUTH_TOKEN, seq:seq, version:DEFAULT_VERSION, body:auth})	
+	auth := &AuthenticationToken{token: token, platform_id: 1, device_id: "00000000"}
+	SendMessage(conn, &Message{cmd: MSG_AUTH_TOKEN, seq: seq, version: DEFAULT_VERSION, body: auth})
 	ReceiveMessage(conn)
 
 	for i := 0; i < 18000; i++ {
@@ -58,7 +60,7 @@ func send(uid int64) {
 		log.Println("receiver:", receiver)
 		content := fmt.Sprintf("test....%d", i)
 		seq++
-		msg := &Message{cmd:MSG_IM, seq:seq, version:DEFAULT_VERSION, flag:0, body:&IMMessage{uid, receiver, 0, int32(i), content}}
+		msg := &Message{cmd: MSG_IM, seq: seq, version: DEFAULT_VERSION, flag: 0, body: &IMMessage{uid, receiver, 0, int32(i), content}}
 		SendMessage(conn, msg)
 		for {
 			ack := ReceiveMessage(conn)

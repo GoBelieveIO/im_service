@@ -1,7 +1,13 @@
+//go:build exclude
+
 package main
-import "github.com/gomodule/redigo/redis"
-import "time"
-import "fmt"
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gomodule/redigo/redis"
+)
 
 const APP_ID = 7
 const CHARSET = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -20,7 +26,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		MaxActive:   500,
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			timeout := time.Duration(2)*time.Second
+			timeout := time.Duration(2) * time.Second
 			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
 			if err != nil {
 				return nil, err
@@ -45,9 +51,9 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 func login(uid int64) (string, error) {
 	conn := redis_pool.Get()
 	defer conn.Close()
-	
+
 	token := RandomStringWithCharset(24, CHARSET)
-	
+
 	key := fmt.Sprintf("access_token_%s", token)
 	_, err := conn.Do("HMSET", key, "access_token", token, "user_id", uid, "app_id", APP_ID)
 	if err != nil {

@@ -19,7 +19,11 @@
 
 package main
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/GoBelieveIO/im_service/set"
+)
 
 type AppRoute struct {
 	mutex sync.Mutex
@@ -55,11 +59,11 @@ func (app_route *AppRoute) AddRoute(route *Route) {
 	app_route.apps[route.appid] = route
 }
 
-func (app_route *AppRoute) GetUsers() map[int64]IntSet {
+func (app_route *AppRoute) GetUsers() map[int64]set.IntSet {
 	app_route.mutex.Lock()
 	defer app_route.mutex.Unlock()
 
-	r := make(map[int64]IntSet)
+	r := make(map[int64]set.IntSet)
 	for appid, route := range app_route.apps {
 		uids := route.GetUserIDs()
 		r[appid] = uids
@@ -67,8 +71,8 @@ func (app_route *AppRoute) GetUsers() map[int64]IntSet {
 	return r
 }
 
-type ClientSet = Set[*Client]
+type ClientSet = set.Set[*Client]
 
 func NewClientSet() ClientSet {
-	return NewSet[*Client]()
+	return set.NewSet[*Client]()
 }

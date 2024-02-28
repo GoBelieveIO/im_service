@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015, GoBelieve     
+ * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,12 +18,16 @@
  */
 
 package main
-import "net/http"
-import "encoding/json"
-import "net/url"
-import "strconv"
-import log "github.com/sirupsen/logrus"
 
+import (
+	"encoding/json"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"github.com/GoBelieveIO/im_service/set"
+	log "github.com/sirupsen/logrus"
+)
 
 func WriteHttpObj(data map[string]interface{}, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
@@ -32,7 +36,6 @@ func WriteHttpObj(data map[string]interface{}, w http.ResponseWriter) {
 	b, _ := json.Marshal(obj)
 	w.Write(b)
 }
-
 
 func WriteHttpError(status int, err string, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
@@ -46,36 +49,35 @@ func WriteHttpError(status int, err string, w http.ResponseWriter) {
 	w.Write(b)
 }
 
-
-//获取当前所有在线的用户
+// 获取当前所有在线的用户
 func GetOnlineClients(w http.ResponseWriter, req *http.Request) {
 	clients := GetClientSet()
 
 	type App struct {
-		AppId int64 `json:"appid"`
+		AppId int64   `json:"appid"`
 		Users []int64 `json:"users"`
 	}
-	
-	r := make(map[int64]IntSet)
-	for c := range(clients) {
+
+	r := make(map[int64]set.IntSet)
+	for c := range clients {
 		app_users := c.app_route.GetUsers()
-		for appid, users := range(app_users) {
+		for appid, users := range app_users {
 			if _, ok := r[appid]; !ok {
-				r[appid] = NewIntSet()
+				r[appid] = set.NewIntSet()
 			}
 			uids := r[appid]
-			for uid := range(users) {
+			for uid := range users {
 				uids.Add(uid)
 			}
 		}
 	}
 
 	apps := make([]*App, 0, len(r))
-	for appid, users := range(r) {
+	for appid, users := range r {
 		app := &App{}
 		app.AppId = appid
 		app.Users = make([]int64, 0, len(users))
-		for uid := range(users) {
+		for uid := range users {
 			app.Users = append(app.Users, uid)
 		}
 		apps = append(apps, app)
@@ -94,7 +96,7 @@ func GetOnlineClients(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-//获取单个用户在线状态
+// 获取单个用户在线状态
 func GetOnlineStatus(w http.ResponseWriter, req *http.Request) {
 	log.Info("get user online status")
 	m, _ := url.ParseQuery(req.URL.RawQuery)
