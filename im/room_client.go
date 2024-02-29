@@ -19,9 +19,12 @@
 
 package main
 
-import log "github.com/sirupsen/logrus"
-import "sync/atomic"
-import "bytes"
+import (
+	"bytes"
+	"sync/atomic"
+
+	log "github.com/sirupsen/logrus"
+)
 
 type RoomClient struct {
 	*Connection
@@ -32,7 +35,7 @@ func (client *RoomClient) Logout() {
 	if client.room_id > 0 {
 		channel := GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
-		route := app_route.FindOrAddRoute(client.appid)
+		route := client.app_route.FindOrAddRoute(client.appid)
 		route.RemoveRoomClient(client.room_id, client.Client())
 	}
 }
@@ -59,7 +62,7 @@ func (client *RoomClient) HandleEnterRoom(room *Room) {
 	if room_id == 0 || client.room_id == room_id {
 		return
 	}
-	route := app_route.FindOrAddRoute(client.appid)
+	route := client.app_route.FindOrAddRoute(client.appid)
 	if client.room_id > 0 {
 		channel := GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
@@ -88,7 +91,7 @@ func (client *RoomClient) HandleLeaveRoom(room *Room) {
 		return
 	}
 
-	route := app_route.FindOrAddRoute(client.appid)
+	route := client.app_route.FindOrAddRoute(client.appid)
 	route.RemoveRoomClient(client.room_id, client.Client())
 	channel := GetRoomChannel(client.room_id)
 	channel.UnsubscribeRoom(client.appid, client.room_id)
@@ -113,7 +116,7 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 	}
 
 	m := &Message{cmd: MSG_ROOM_IM, body: room_im, body_data: room_im.ToData()}
-	DispatchMessageToRoom(m, room_id, client.appid, client.Client())
+	DispatchMessageToRoom(client.app_route, m, room_id, client.appid, client.Client())
 
 	mbuffer := new(bytes.Buffer)
 	WriteMessage(mbuffer, m)
@@ -128,5 +131,5 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 		log.Warning("send room message ack error")
 	}
 
-	atomic.AddInt64(&server_summary.in_message_count, 1)
+	atomic.AddInt64(&client.server_summary.in_message_count, 1)
 }

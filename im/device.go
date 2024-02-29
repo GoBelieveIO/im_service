@@ -19,10 +19,13 @@
 
 package main
 
-import "fmt"
-import "github.com/gomodule/redigo/redis"
+import (
+	"fmt"
 
-func GetDeviceID(device_id string, platform_id int) (int64, error) {
+	"github.com/gomodule/redigo/redis"
+)
+
+func GetDeviceID(redis_pool *redis.Pool, device_id string, platform_id int) (int64, error) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 	key := fmt.Sprintf("devices_%s_%d", device_id, platform_id)

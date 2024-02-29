@@ -22,9 +22,10 @@ package main
 import (
 	"bytes"
 	"errors"
+	"net/http"
+
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"net/http"
 )
 
 func ReadBinaryMesage(b []byte) (*Message, error) {
@@ -43,7 +44,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     CheckOrigin,
 }
 
-func ServeWebsocket(w http.ResponseWriter, r *http.Request) {
+func ServeWebsocket(w http.ResponseWriter, r *http.Request, listener *Listener) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error("upgrade err:", err)
@@ -55,12 +56,12 @@ func ServeWebsocket(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	log.Info("new websocket connection, remote address:", conn.RemoteAddr())
-	handle_ws_client(conn)
+	handle_ws_client(conn, listener)
 }
 
-func StartWSSServer(tls_address string, cert_file string, key_file string) {
+func StartWSSServer(tls_address string, cert_file string, key_file string, listener *Listener) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", ServeWebsocket)
+	mux.Handle("/ws", &Handler[*Listener]{ServeWebsocket, listener})
 
 	if tls_address != "" && cert_file != "" && key_file != "" {
 		log.Infof("websocket Serving TLS at %s...", tls_address)
@@ -71,9 +72,9 @@ func StartWSSServer(tls_address string, cert_file string, key_file string) {
 	}
 }
 
-func StartWSServer(address string) {
+func StartWSServer(address string, listener *Listener) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", ServeWebsocket)
+	mux.Handle("/ws", &Handler[*Listener]{ServeWebsocket, listener})
 	err := http.ListenAndServe(address, mux)
 	if err != nil {
 		log.Fatalf("listen err:%s", err)

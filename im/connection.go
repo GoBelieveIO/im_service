@@ -28,7 +28,9 @@ import (
 
 	"container/list"
 
+	"github.com/gomodule/redigo/redis"
 	"github.com/gorilla/websocket"
+	"github.com/importcjj/sensitive"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -104,6 +106,13 @@ type Connection struct {
 
 	messages *list.List //待发送的消息队列 FIFO
 	mutex    sync.Mutex
+
+	filter         *sensitive.Filter
+	redis_pool     *redis.Pool
+	app_route      *AppRoute
+	server_summary *ServerSummary
+	rpc_storage    *RPCStorage
+	config         *Config
 }
 
 func (client *Connection) Client() *Client {
@@ -137,7 +146,7 @@ func (client *Connection) SendGroupMessage(group *Group, msg *Message) {
 
 	PublishGroupMessage(appid, group.gid, msg)
 
-	DispatchMessageToGroup(msg, group, appid, client.Client())
+	DispatchMessageToGroup(client.app_route, msg, group, appid, client.Client())
 }
 
 func (client *Connection) SendMessage(uid int64, msg *Message) bool {
@@ -145,7 +154,7 @@ func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 
 	PublishMessage(appid, uid, msg)
 
-	DispatchMessageToPeer(msg, uid, appid, client.Client())
+	DispatchMessageToPeer(client.app_route, msg, uid, appid, client.Client())
 	return true
 }
 

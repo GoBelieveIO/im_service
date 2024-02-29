@@ -19,15 +19,20 @@
 
 package main
 
-import "sync"
-import "strconv"
-import "strings"
-import "time"
-import "errors"
-import "github.com/gomodule/redigo/redis"
-import "database/sql"
-import _ "github.com/go-sql-driver/mysql"
-import log "github.com/sirupsen/logrus"
+import (
+	"database/sql"
+	"errors"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gomodule/redigo/redis"
+
+	_ "github.com/go-sql-driver/mysql"
+
+	log "github.com/sirupsen/logrus"
+)
 
 const GROUP_EXPIRE_DURATION = 60 * 60 //60min
 const GROUP_MANAGER_STREAM_NAME = "group_manager_stream"
@@ -61,20 +66,23 @@ type GroupManager struct {
 	last_entry_id string
 	dirty         bool
 	db            *sql.DB
+	redis_pool    *redis.Pool
+	redis_config  *RedisConfig
 }
 
-func NewGroupManager() *GroupManager {
+func NewGroupManager(redis_pool *redis.Pool, mysqldb_datasource string, redis_config *RedisConfig) *GroupManager {
 	m := new(GroupManager)
 	m.groups = make(map[int64]*Group)
 	m.action_id = 0
 	m.last_entry_id = ""
 	m.dirty = true
 
-	db, err := sql.Open("mysql", config.mysqldb_datasource)
+	db, err := sql.Open("mysql", mysqldb_datasource)
 	if err != nil {
 		log.Fatal("open db:", err)
 	}
 	m.db = db
+	m.redis_pool = redis_pool
 	return m
 }
 
@@ -291,7 +299,7 @@ func (group_manager *GroupManager) handleEvent(event *GroupEvent) {
 }
 
 func (group_manager *GroupManager) getActionID() (int64, error) {
-	conn := redis_pool.Get()
+	conn := group_manager.redis_pool.Get()
 	defer conn.Close()
 
 	actions, err := redis.String(conn.Do("GET", "groups_actions"))
@@ -323,7 +331,7 @@ func (group_manager *GroupManager) getActionID() (int64, error) {
 }
 
 func (group_manager *GroupManager) getLastEntryID() (string, error) {
-	conn := redis_pool.Get()
+	conn := group_manager.redis_pool.Get()
 	defer conn.Close()
 
 	r, err := redis.Values(conn.Do("XREVRANGE", GROUP_MANAGER_STREAM_NAME, "+", "-", "COUNT", "1"))
@@ -433,7 +441,7 @@ func (group_manager *GroupManager) readEvents(c redis.Conn) ([]*GroupEvent, erro
 }
 
 func (group_manager *GroupManager) RunOnce() bool {
-	c, err := redis.Dial("tcp", config.redis_address)
+	c, err := redis.Dial("tcp", group_manager.redis_config.redis_address)
 	if err != nil {
 		log.Info("dial redis error:", err)
 		return false
@@ -441,7 +449,7 @@ func (group_manager *GroupManager) RunOnce() bool {
 
 	defer c.Close()
 
-	password := config.redis_password
+	password := group_manager.redis_config.redis_password
 	if len(password) > 0 {
 		if _, err := c.Do("AUTH", password); err != nil {
 			log.Info("redis auth err:", err)
@@ -449,7 +457,7 @@ func (group_manager *GroupManager) RunOnce() bool {
 		}
 	}
 
-	db := config.redis_db
+	db := group_manager.redis_config.redis_db
 	if db > 0 && db < 16 {
 		if _, err := c.Do("SELECT", db); err != nil {
 			log.Info("redis select err:", err)

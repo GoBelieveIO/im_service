@@ -19,21 +19,25 @@
 
 package main
 
-import "fmt"
-import "errors"
-import "encoding/json"
-import "github.com/dgrijalva/jwt-go"
-import "github.com/gomodule/redigo/redis"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/dgrijalva/jwt-go"
+	"github.com/gomodule/redigo/redis"
+)
 
 type Auth interface {
 	LoadUserAccessToken(token string) (int64, int64, error)
 }
 
 type RedisAuth struct {
+	redis_pool *redis.Pool
 }
 
 func (a *RedisAuth) LoadUserAccessToken(token string) (int64, int64, error) {
-	conn := redis_pool.Get()
+	conn := a.redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("access_token_%s", token)
@@ -74,6 +78,7 @@ func (a *RedisAuth) LoadUserAccessToken(token string) (int64, int64, error) {
 }
 
 type JWTAuth struct {
+	jwt_signing_key string
 }
 
 func (a *JWTAuth) LoadUserAccessToken(tokenString string) (int64, int64, error) {
@@ -83,7 +88,7 @@ func (a *JWTAuth) LoadUserAccessToken(tokenString string) (int64, int64, error) 
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
-		return config.jwt_signing_key, nil
+		return a.jwt_signing_key, nil
 	})
 	if err != nil {
 		return 0, 0, err

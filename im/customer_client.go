@@ -19,8 +19,11 @@
 
 package main
 
-import "time"
-import log "github.com/sirupsen/logrus"
+import (
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 type CustomerClient struct {
 	*Connection
@@ -54,7 +57,7 @@ func (client *CustomerClient) HandleCustomerMessageV2(message *Message) {
 	}
 
 	//限制在客服app和普通app之间
-	if msg.sender_appid != config.kefu_appid && msg.receiver_appid != config.kefu_appid {
+	if msg.sender_appid != client.config.kefu_appid && msg.receiver_appid != client.config.kefu_appid {
 		log.Warningf("invalid appid, customer message sender:%d %d receiver:%d %d",
 			msg.sender_appid, msg.sender, msg.receiver_appid, msg.receiver)
 		return
@@ -67,13 +70,13 @@ func (client *CustomerClient) HandleCustomerMessageV2(message *Message) {
 
 	m := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, body: msg}
 
-	msgid, prev_msgid, err := rpc_storage.SaveMessage(msg.receiver_appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := client.rpc_storage.SaveMessage(msg.receiver_appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return
 	}
 
-	msgid2, prev_msgid2, err := rpc_storage.SaveMessage(msg.sender_appid, msg.sender, client.device_ID, m)
+	msgid2, prev_msgid2, err := client.rpc_storage.SaveMessage(msg.sender_appid, msg.sender, client.device_ID, m)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return
@@ -83,10 +86,10 @@ func (client *CustomerClient) HandleCustomerMessageV2(message *Message) {
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m1 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	SendAppMessage(msg.receiver_appid, msg.receiver, m1)
+	SendAppMessage(client.app_route, msg.receiver_appid, msg.receiver, m1)
 
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
-	SendAppMessage(msg.receiver_appid, msg.receiver, notify)
+	SendAppMessage(client.app_route, msg.receiver_appid, msg.receiver, notify)
 
 	//发送给自己的其它登录点
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}

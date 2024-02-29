@@ -51,42 +51,15 @@ var (
 	GIT_BRANCH    string
 )
 
-var auth Auth
-
-var rpc_storage *RPCStorage
-
 // route server
 var route_channels []*Channel
 
 // super group route server
 var group_route_channels []*Channel
 
-var app_route *AppRoute
-
-var group_manager *GroupManager
-var redis_pool *redis.Pool
-
-var config *Config
-var server_summary *ServerSummary
-
-var sync_c chan *storage.SyncHistory
-var group_sync_c chan *storage.SyncGroupHistory
-
-var relationship_pool *RelationshipPool
-
 // round-robin
 var current_deliver_index uint64
 var group_message_delivers []*GroupMessageDeliver
-var filter *sensitive.Filter
-
-var low_memory int32 //低内存状态
-
-func init() {
-	app_route = NewAppRoute()
-	server_summary = NewServerSummary()
-	sync_c = make(chan *storage.SyncHistory, 100)
-	group_sync_c = make(chan *storage.SyncGroupHistory, 100)
-}
 
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
@@ -117,7 +90,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 }
 
 // 过滤敏感词
-func FilterDirtyWord(msg *IMMessage) {
+func FilterDirtyWord(filter *sensitive.Filter, msg *IMMessage) {
 	if filter == nil {
 		log.Info("filter is null")
 		return
@@ -159,22 +132,20 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 }
 
-func StartHttpServer(addr string) {
-	http.HandleFunc("/summary", Summary)
+func StartHttpServer(addr string, app_route *AppRoute, redis_pool *redis.Pool, server_summary *ServerSummary, rpc_storage *RPCStorage) {
 	http.HandleFunc("/stack", Stack)
-
-	//rpc function
-	http.HandleFunc("/post_group_notification", PostGroupNotification)
-	http.HandleFunc("/post_peer_message", PostPeerMessage)
-	http.HandleFunc("/post_group_message", PostGroupMessage)
-	http.HandleFunc("/load_latest_message", LoadLatestMessage)
-	http.HandleFunc("/load_history_message", LoadHistoryMessage)
-	http.HandleFunc("/post_system_message", SendSystemMessage)
-	http.HandleFunc("/post_notification", SendNotification)
-	http.HandleFunc("/post_room_message", SendRoomMessage)
-	http.HandleFunc("/post_customer_message", SendCustomerMessage)
-	http.HandleFunc("/post_realtime_message", SendRealtimeMessage)
-	http.HandleFunc("/get_offline_count", GetOfflineCount)
+	handle_http2("/summary", Summary, app_route, server_summary)
+	handle_http2("/post_group_notification", PostGroupNotification, app_route, rpc_storage)
+	handle_http3("/post_peer_message", PostPeerMessage, app_route, server_summary, rpc_storage)
+	handle_http3("/post_group_message", PostGroupMessage, app_route, server_summary, rpc_storage)
+	handle_http2("/post_system_message", SendSystemMessage, app_route, rpc_storage)
+	handle_http("/post_notification", SendNotification, app_route)
+	handle_http("/post_room_message", SendRoomMessage, app_route)
+	handle_http2("/post_customer_message", SendCustomerMessage, app_route, rpc_storage)
+	handle_http("/post_realtime_message", SendRealtimeMessage, app_route)
+	handle_http2("/get_offline_count", GetOfflineCount, redis_pool, rpc_storage)
+	handle_http("/load_latest_message", LoadLatestMessage, rpc_storage)
+	handle_http("/load_history_message", LoadHistoryMessage, rpc_storage)
 
 	handler := loggingHandler{http.DefaultServeMux}
 
@@ -184,22 +155,24 @@ func StartHttpServer(addr string) {
 	}
 }
 
-func SyncKeyService() {
+func SyncKeyService(redis_pool *redis.Pool,
+	sync_c chan *storage.SyncHistory,
+	group_sync_c chan *storage.SyncGroupHistory) {
 	for {
 		select {
 		case s := <-sync_c:
-			origin := GetSyncKey(s.AppID, s.Uid)
+			origin := GetSyncKey(redis_pool, s.AppID, s.Uid)
 			if s.LastMsgID > origin {
 				log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
-				SaveSyncKey(s.AppID, s.Uid, s.LastMsgID)
+				SaveSyncKey(redis_pool, s.AppID, s.Uid, s.LastMsgID)
 			}
 			break
 		case s := <-group_sync_c:
-			origin := GetGroupSyncKey(s.AppID, s.Uid, s.GroupID)
+			origin := GetGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID)
 			if s.LastMsgID > origin {
 				log.Infof("save group sync key:%d %d %d %d",
 					s.AppID, s.Uid, s.GroupID, s.LastMsgID)
-				SaveGroupSyncKey(s.AppID, s.Uid, s.GroupID, s.LastMsgID)
+				SaveGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID, s.LastMsgID)
 			}
 			break
 		}
@@ -261,7 +234,7 @@ func ReadRSS(platform string, pid int, pagesize int) int64 {
 	}
 }
 
-func MemStatService() {
+func MemStatService(low_memory *int32, config *Config) {
 	platform := runtime.GOOS
 	pagesize := os.Getpagesize()
 	pid := os.Getpid()
@@ -270,15 +243,15 @@ func MemStatService() {
 	for range ticker.C {
 		rss := ReadRSS(platform, pid, pagesize)
 		if rss > config.memory_limit {
-			atomic.StoreInt32(&low_memory, 1)
+			atomic.StoreInt32(low_memory, 1)
 		} else {
-			atomic.StoreInt32(&low_memory, 0)
+			atomic.StoreInt32(low_memory, 0)
 		}
-		log.Infof("process rss:%dk low memory:%d", rss/1024, low_memory)
+		log.Infof("process rss:%dk low memory:%d", rss/1024, *low_memory)
 	}
 }
 
-func initLog() {
+func initLog(config *Config) {
 	if config.log_filename != "" {
 		writer := &lumberjack.Logger{
 			Filename:   config.log_filename,
@@ -315,9 +288,9 @@ func main() {
 		return
 	}
 
-	config = read_cfg(flag.Args()[0])
+	config := read_cfg(flag.Args()[0])
 
-	initLog()
+	initLog(config)
 
 	log.Info("startup...")
 	log.Infof("port:%d\n", config.port)
@@ -344,16 +317,27 @@ func main() {
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 
-	redis_pool = NewRedisPool(config.redis_address, config.redis_password,
+	var low_memory int32 //低内存状态
+	sync_c := make(chan *storage.SyncHistory, 100)
+	group_sync_c := make(chan *storage.SyncGroupHistory, 100)
+	server_summary := NewServerSummary()
+	app_route := NewAppRoute()
+	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
 		config.redis_db)
 
-	auth = NewAuth(config.auth_method)
+	auth := NewAuth(config.auth_method)
 
-	rpc_storage = NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
+	rpc_storage := NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
 
+	dispatch_app_message := func(m *RouteMessage) {
+		DispatchAppMessage(app_route, m)
+	}
+	dispatch_room_message := func(m *RouteMessage) {
+		DispatchRoomMessage(app_route, m)
+	}
 	route_channels = make([]*Channel, 0)
 	for _, addr := range config.route_addrs {
-		channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
+		channel := NewChannel(addr, dispatch_app_message, DispatchGroupMessage, dispatch_room_message)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
@@ -361,21 +345,22 @@ func main() {
 	if len(config.group_route_addrs) > 0 {
 		group_route_channels = make([]*Channel, 0)
 		for _, addr := range config.group_route_addrs {
-			channel := NewChannel(addr, DispatchAppMessage, DispatchGroupMessage, DispatchRoomMessage)
+			channel := NewChannel(addr, dispatch_app_message, DispatchGroupMessage, dispatch_room_message)
 			channel.Start()
 			group_route_channels = append(group_route_channels, channel)
 		}
 	} else {
 		group_route_channels = route_channels
 	}
-
+	var filter *sensitive.Filter
 	if len(config.word_file) > 0 {
 		filter = sensitive.New()
 		filter.LoadWordDict(config.word_file)
 	}
 
+	var group_manager *GroupManager
 	if len(config.mysqldb_datasource) > 0 {
-		group_manager = NewGroupManager()
+		group_manager = NewGroupManager(redis_pool, config.mysqldb_datasource, config.redis_config())
 		group_manager.Start()
 	}
 
@@ -383,35 +368,49 @@ func main() {
 	for i := 0; i < config.group_deliver_count; i++ {
 		q := fmt.Sprintf("q%d", i)
 		r := path.Join(config.pending_root, q)
-		deliver := NewGroupMessageDeliver(r)
+		deliver := NewGroupMessageDeliver(r, group_manager, app_route, rpc_storage)
 		deliver.Start()
 		group_message_delivers[i] = deliver
 	}
 
-	go ListenRedis()
-	go SyncKeyService()
+	go ListenRedis(app_route, config.redis_config())
+	go SyncKeyService(redis_pool, sync_c, group_sync_c)
 
 	if config.memory_limit > 0 {
-		go MemStatService()
+		go MemStatService(&low_memory, config)
 	}
 
+	var relationship_pool *RelationshipPool
 	if config.friend_permission || config.enable_blacklist {
-		relationship_pool = NewRelationshipPool(config)
+		relationship_pool = NewRelationshipPool(config, redis_pool)
 		relationship_pool.Start()
 	}
 
-	go StartHttpServer(config.http_listen_address)
+	go StartHttpServer(config.http_listen_address, app_route, redis_pool, server_summary, rpc_storage)
 
+	listener := &Listener{
+		group_manager:     group_manager,
+		filter:            filter,
+		redis_pool:        redis_pool,
+		server_summary:    server_summary,
+		relationship_pool: relationship_pool,
+		auth:              auth,
+		rpc_storage:       rpc_storage,
+		sync_c:            sync_c,
+		group_sync_c:      group_sync_c,
+		low_memory:        &low_memory,
+		config:            config,
+	}
 	if len(config.ws_address) > 0 {
-		go StartWSServer(config.ws_address)
+		go StartWSServer(config.ws_address, listener)
 	}
 	if len(config.wss_address) > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
-		go StartWSSServer(config.wss_address, config.cert_file, config.key_file)
+		go StartWSSServer(config.wss_address, config.cert_file, config.key_file, listener)
 	}
 
 	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
-		go ListenSSL(config.ssl_port, config.cert_file, config.key_file)
+		go ListenSSL(config.ssl_port, config.cert_file, config.key_file, listener)
 	}
-	ListenClient(config.port)
+	ListenClient(config.port, listener)
 	log.Infof("exit")
 }

@@ -19,10 +19,13 @@
 
 package main
 
-import "time"
-import "bytes"
-import "sync/atomic"
-import log "github.com/sirupsen/logrus"
+import (
+	"bytes"
+	"sync/atomic"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 func GetChannel(uid int64) *Channel {
 	if uid < 0 {
@@ -124,17 +127,17 @@ func PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	channel.PublishGroup(amsg)
 }
 
-func SendAppGroupMessage(appid int64, group *Group, msg *Message) {
+func SendAppGroupMessage(app_route *AppRoute, appid int64, group *Group, msg *Message) {
 	PublishGroupMessage(appid, group.gid, msg)
-	DispatchMessageToGroup(msg, group, appid, nil)
+	DispatchMessageToGroup(app_route, msg, group, appid, nil)
 }
 
-func SendAppMessage(appid int64, uid int64, msg *Message) {
+func SendAppMessage(app_route *AppRoute, appid int64, uid int64, msg *Message) {
 	PublishMessage(appid, uid, msg)
-	DispatchMessageToPeer(msg, uid, appid, nil)
+	DispatchMessageToPeer(app_route, msg, uid, appid, nil)
 }
 
-func DispatchAppMessage(amsg *RouteMessage) {
+func DispatchAppMessage(app_route *AppRoute, amsg *RouteMessage) {
 	now := time.Now().UnixNano()
 	d := now - amsg.timestamp
 
@@ -157,10 +160,10 @@ func DispatchAppMessage(amsg *RouteMessage) {
 		meta := &Metadata{sync_key: amsg.msgid, prev_sync_key: amsg.prev_msgid}
 		msg.meta = meta
 	}
-	DispatchMessageToPeer(msg, amsg.receiver, amsg.appid, nil)
+	DispatchMessageToPeer(app_route, msg, amsg.receiver, amsg.appid, nil)
 }
 
-func DispatchRoomMessage(amsg *RouteMessage) {
+func DispatchRoomMessage(app_route *AppRoute, amsg *RouteMessage) {
 	mbuffer := bytes.NewBuffer(amsg.msg)
 	msg := ReceiveMessage(mbuffer)
 	if msg == nil {
@@ -171,7 +174,7 @@ func DispatchRoomMessage(amsg *RouteMessage) {
 	log.Info("dispatch room message", Command(msg.cmd))
 
 	room_id := amsg.receiver
-	DispatchMessageToRoom(msg, room_id, amsg.appid, nil)
+	DispatchMessageToRoom(app_route, msg, room_id, amsg.appid, nil)
 }
 
 func DispatchGroupMessage(amsg *RouteMessage) {
@@ -204,7 +207,7 @@ func DispatchGroupMessage(amsg *RouteMessage) {
 	deliver.DispatchMessage(msg, amsg.receiver, amsg.appid)
 }
 
-func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Client) bool {
+func DispatchMessageToGroup(app_route *AppRoute, msg *Message, group *Group, appid int64, client *Client) bool {
 	if group == nil {
 		return false
 	}
@@ -233,7 +236,7 @@ func DispatchMessageToGroup(msg *Message, group *Group, appid int64, client *Cli
 	return true
 }
 
-func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client) bool {
+func DispatchMessageToPeer(app_route *AppRoute, msg *Message, uid int64, appid int64, client *Client) bool {
 	route := app_route.FindRoute(appid)
 	if route == nil {
 		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
@@ -253,7 +256,7 @@ func DispatchMessageToPeer(msg *Message, uid int64, appid int64, client *Client)
 	return true
 }
 
-func DispatchMessageToRoom(msg *Message, room_id int64, appid int64, client *Client) bool {
+func DispatchMessageToRoom(app_route *AppRoute, msg *Message, room_id int64, appid int64, client *Client) bool {
 	route := app_route.FindOrAddRoute(appid)
 	clients := route.FindRoomClientSet(room_id)
 

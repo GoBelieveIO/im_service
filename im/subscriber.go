@@ -19,14 +19,18 @@
 
 package main
 
-import "time"
-import "strings"
-import "strconv"
-import "sync/atomic"
-import "github.com/gomodule/redigo/redis"
-import log "github.com/sirupsen/logrus"
+import (
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
 
-func HandleForbidden(data string) {
+	"github.com/gomodule/redigo/redis"
+
+	log "github.com/sirupsen/logrus"
+)
+
+func HandleForbidden(data string, app_route *AppRoute) {
 	arr := strings.Split(data, ",")
 	if len(arr) != 3 {
 		log.Info("message error:", data)
@@ -65,7 +69,7 @@ func HandleForbidden(data string) {
 	}
 }
 
-func SubscribeRedis() bool {
+func SubscribeRedis(app_route *AppRoute, config *RedisConfig) bool {
 	c, err := redis.Dial("tcp", config.redis_address)
 	if err != nil {
 		log.Info("dial redis error:", err)
@@ -88,7 +92,7 @@ func SubscribeRedis() bool {
 		case redis.Message:
 			log.Infof("%s: message: %s\n", v.Channel, v.Data)
 			if v.Channel == "speak_forbidden" {
-				HandleForbidden(string(v.Data))
+				HandleForbidden(string(v.Data), app_route)
 			}
 		case redis.Subscription:
 			log.Infof("%s: %s %d\n", v.Channel, v.Kind, v.Count)
@@ -99,10 +103,10 @@ func SubscribeRedis() bool {
 	}
 }
 
-func ListenRedis() {
+func ListenRedis(app_route *AppRoute, config *RedisConfig) {
 	nsleep := 1
 	for {
-		connected := SubscribeRedis()
+		connected := SubscribeRedis(app_route, config)
 		if !connected {
 			nsleep *= 2
 			if nsleep > 60 {

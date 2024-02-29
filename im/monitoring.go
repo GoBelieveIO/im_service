@@ -1,14 +1,17 @@
 package main
 
-import "net/http"
-import "encoding/json"
-import "os"
-import "fmt"
-import "net/url"
-import "strconv"
-import "runtime"
-import "runtime/pprof"
-import log "github.com/sirupsen/logrus"
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"runtime"
+	"runtime/pprof"
+	"strconv"
+
+	log "github.com/sirupsen/logrus"
+)
 
 type ServerSummary struct {
 	nconnections      int64
@@ -23,7 +26,7 @@ func NewServerSummary() *ServerSummary {
 	return s
 }
 
-func Summary(rw http.ResponseWriter, req *http.Request) {
+func Summary(rw http.ResponseWriter, req *http.Request, app_route *AppRoute, server_summary *ServerSummary) {
 	m, _ := url.ParseQuery(req.URL.RawQuery)
 
 	appid, _ := strconv.ParseInt(m.Get("appid"), 10, 64)

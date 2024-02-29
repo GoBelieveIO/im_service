@@ -19,10 +19,13 @@
 
 package main
 
-import "strconv"
-import "log"
-import "strings"
-import "github.com/richmonkey/cfg"
+import (
+	"log"
+	"strconv"
+	"strings"
+
+	"github.com/richmonkey/cfg"
+)
 
 const DEFAULT_GROUP_DELIVER_COUNT = 4
 
@@ -67,6 +70,16 @@ type Config struct {
 
 	auth_method     string //jwt or redis
 	jwt_signing_key []byte
+}
+
+func (config *Config) redis_config() *RedisConfig {
+	return &RedisConfig{config.redis_address, config.redis_password, config.redis_db}
+}
+
+type RedisConfig struct {
+	redis_address  string
+	redis_password string
+	redis_db       int
 }
 
 func get_int(app_cfg map[string]string, key string) int {

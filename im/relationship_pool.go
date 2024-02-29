@@ -73,9 +73,11 @@ type RelationshipPool struct {
 	last_entry_id string
 	action_id     int64
 	db            *sql.DB
+	redis_pool    *redis.Pool
+	redis_config  *RedisConfig
 }
 
-func NewRelationshipPool(config *Config) *RelationshipPool {
+func NewRelationshipPool(config *Config, redis_pool *redis.Pool) *RelationshipPool {
 	rp := &RelationshipPool{}
 	rp.items = &sync.Map{}
 
@@ -84,6 +86,7 @@ func NewRelationshipPool(config *Config) *RelationshipPool {
 		log.Fatal("open db:", err)
 	}
 	rp.db = db
+	rp.redis_pool = redis_pool
 	return rp
 }
 
@@ -320,7 +323,7 @@ func (rp *RelationshipPool) ReloadRelation() {
 }
 
 func (rp *RelationshipPool) getLastEntryID() (string, error) {
-	conn := redis_pool.Get()
+	conn := rp.redis_pool.Get()
 	defer conn.Close()
 
 	r, err := redis.Values(conn.Do("XREVRANGE", RELATIONSHIP_POOL_STREAM_NAME, "+", "-", "COUNT", "1"))
@@ -351,7 +354,7 @@ func (rp *RelationshipPool) getLastEntryID() (string, error) {
 }
 
 func (rp *RelationshipPool) getActionID() (int64, error) {
-	conn := redis_pool.Get()
+	conn := rp.redis_pool.Get()
 	defer conn.Close()
 
 	actions, err := redis.String(conn.Do("GET", "friends_actions"))
@@ -484,7 +487,7 @@ func (rp *RelationshipPool) readEvents(c redis.Conn) ([]*RelationshipEvent, erro
 }
 
 func (rp *RelationshipPool) RunOnce() bool {
-	c, err := redis.Dial("tcp", config.redis_address)
+	c, err := redis.Dial("tcp", rp.redis_config.redis_address)
 	if err != nil {
 		log.Info("dial redis error:", err)
 		return false
@@ -492,7 +495,7 @@ func (rp *RelationshipPool) RunOnce() bool {
 
 	defer c.Close()
 
-	password := config.redis_password
+	password := rp.redis_config.redis_password
 	if len(password) > 0 {
 		if _, err := c.Do("AUTH", password); err != nil {
 			log.Info("redis auth err:", err)
@@ -500,7 +503,7 @@ func (rp *RelationshipPool) RunOnce() bool {
 		}
 	}
 
-	db := config.redis_db
+	db := rp.redis_config.redis_db
 	if db > 0 && db < 16 {
 		if _, err := c.Do("SELECT", db); err != nil {
 			log.Info("redis select err:", err)

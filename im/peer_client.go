@@ -29,6 +29,8 @@ import (
 
 type PeerClient struct {
 	*Connection
+	relationship_pool *RelationshipPool
+	sync_c            chan *storage.SyncHistory
 }
 
 func (client *PeerClient) Login() {
@@ -44,7 +46,7 @@ func (client *PeerClient) Login() {
 		c.Subscribe(client.appid, client.uid, client.online)
 	}
 
-	SetUserUnreadCount(client.appid, client.uid, 0)
+	SetUserUnreadCount(client.redis_pool, client.appid, client.uid, 0)
 }
 
 func (client *PeerClient) Logout() {
@@ -69,12 +71,12 @@ func (client *PeerClient) HandleSync(sync_key *SyncKey) {
 	last_id := sync_key.sync_key
 
 	if last_id == 0 {
-		last_id = GetSyncKey(client.appid, client.uid)
+		last_id = GetSyncKey(client.redis_pool, client.appid, client.uid)
 	}
 
 	log.Infof("syncing message:%d %d %d %d", client.appid, client.uid, client.device_ID, last_id)
 
-	ph, err := rpc_storage.SyncMessage(client.appid, client.uid, client.device_ID, last_id)
+	ph, err := client.rpc_storage.SyncMessage(client.appid, client.uid, client.device_ID, last_id)
 	if err != nil {
 		log.Warning("sync message err:", err)
 		return
@@ -125,7 +127,7 @@ func (client *PeerClient) HandleSyncKey(sync_key *SyncKey) {
 			Uid:       client.uid,
 			LastMsgID: last_id,
 		}
-		sync_c <- s
+		client.sync_c <- s
 	}
 }
 
@@ -143,10 +145,10 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	}
 
 	var rs Relationship = NoneRelationship
-	if config.friend_permission || config.enable_blacklist {
-		rs = relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
+	if client.config.friend_permission || client.config.enable_blacklist {
+		rs = client.relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
 	}
-	if config.friend_permission {
+	if client.config.friend_permission {
 		if !rs.IsMyFriend() {
 			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_NOT_MY_FRIEND}}
 			client.EnqueueMessage(ack)
@@ -161,7 +163,7 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 			return
 		}
 	}
-	if config.enable_blacklist {
+	if client.config.enable_blacklist {
 		if rs.IsInYourBlacklist() {
 			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_IN_YOUR_BLACKLIST}}
 			client.EnqueueMessage(ack)
@@ -171,19 +173,19 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	}
 
 	if message.flag&MESSAGE_FLAG_TEXT != 0 {
-		FilterDirtyWord(msg)
+		FilterDirtyWord(client.filter, msg)
 	}
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, body: msg}
 
-	msgid, prev_msgid, err := rpc_storage.SaveMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := client.rpc_storage.SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:%v", msg.sender, msg.receiver, err)
 		return
 	}
 
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
-	msgid2, prev_msgid2, err := rpc_storage.SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	msgid2, prev_msgid2, err := client.rpc_storage.SaveMessage(client.appid, msg.sender, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:%v", msg.sender, msg.receiver, err)
 		return
@@ -212,12 +214,12 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 		log.Warning("send peer message ack error")
 	}
 
-	atomic.AddInt64(&server_summary.in_message_count, 1)
+	atomic.AddInt64(&client.server_summary.in_message_count, 1)
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
 func (client *PeerClient) HandleUnreadCount(u *MessageUnreadCount) {
-	SetUserUnreadCount(client.appid, client.uid, u.count)
+	SetUserUnreadCount(client.redis_pool, client.appid, client.uid, u.count)
 }
 
 func (client *PeerClient) HandleRTMessage(msg *Message) {
@@ -230,7 +232,7 @@ func (client *PeerClient) HandleRTMessage(msg *Message) {
 	m := &Message{cmd: MSG_RT, body: rt}
 	client.SendMessage(rt.receiver, m)
 
-	atomic.AddInt64(&server_summary.in_message_count, 1)
+	atomic.AddInt64(&client.server_summary.in_message_count, 1)
 	log.Infof("realtime message sender:%d receiver:%d", rt.sender, rt.receiver)
 }
 

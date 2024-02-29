@@ -19,11 +19,14 @@
 
 package main
 
-import "fmt"
-import log "github.com/sirupsen/logrus"
-import "github.com/gomodule/redigo/redis"
+import (
+	"fmt"
 
-func GetSyncKey(appid int64, uid int64) int64 {
+	"github.com/gomodule/redigo/redis"
+	log "github.com/sirupsen/logrus"
+)
+
+func GetSyncKey(redis_pool *redis.Pool, appid int64, uid int64) int64 {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -37,7 +40,7 @@ func GetSyncKey(appid int64, uid int64) int64 {
 	return origin
 }
 
-func GetGroupSyncKey(appid int64, uid int64, group_id int64) int64 {
+func GetGroupSyncKey(redis_pool *redis.Pool, appid int64, uid int64, group_id int64) int64 {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -52,7 +55,7 @@ func GetGroupSyncKey(appid int64, uid int64, group_id int64) int64 {
 	return origin
 }
 
-func SaveSyncKey(appid int64, uid int64, sync_key int64) {
+func SaveSyncKey(redis_pool *redis.Pool, appid int64, uid int64, sync_key int64) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -64,7 +67,7 @@ func SaveSyncKey(appid int64, uid int64, sync_key int64) {
 	}
 }
 
-func SaveGroupSyncKey(appid int64, uid int64, group_id int64, sync_key int64) {
+func SaveGroupSyncKey(redis_pool *redis.Pool, appid int64, uid int64, group_id int64, sync_key int64) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -77,7 +80,7 @@ func SaveGroupSyncKey(appid int64, uid int64, group_id int64, sync_key int64) {
 	}
 }
 
-func GetUserPreferences(appid int64, uid int64) (int, bool, error) {
+func GetUserPreferences(redis_pool *redis.Pool, appid int64, uid int64) (int, bool, error) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -102,7 +105,7 @@ func GetUserPreferences(appid int64, uid int64) (int, bool, error) {
 	return forbidden, notification_on != 0, nil
 }
 
-func SetUserUnreadCount(appid int64, uid int64, count int32) {
+func SetUserUnreadCount(redis_pool *redis.Pool, appid int64, uid int64, count int32) {
 	conn := redis_pool.Get()
 	defer conn.Close()
 

@@ -9,7 +9,7 @@ import (
 )
 
 func TestFilter(t *testing.T) {
-	filter = sensitive.New()
+	filter := sensitive.New()
 
 	err := filter.LoadWordDict("../bin/dict.txt")
 	if err != nil {
@@ -20,7 +20,7 @@ func TestFilter(t *testing.T) {
 	msg := &IMMessage{}
 
 	msg.content = "{\"text\": \"\\u6211\\u4e3a\\u5171*\\u4ea7\\u515a\\u7eed\\u4e00\\u79d2\"}"
-	FilterDirtyWord(msg)
+	FilterDirtyWord(filter, msg)
 	log.Println("msg:", string(msg.content))
 
 	s := "我为共*产党续一秒"
@@ -32,7 +32,9 @@ func TestFilter(t *testing.T) {
 
 func Test_Relationship(t *testing.T) {
 	config := read_cfg("../bin/im.cfg")
-	relationship_pool := NewRelationshipPool(config)
+	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
+		config.redis_db)
+	relationship_pool := NewRelationshipPool(config, redis_pool)
 	rs := relationship_pool.GetRelationship(7, 1, 2)
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
 

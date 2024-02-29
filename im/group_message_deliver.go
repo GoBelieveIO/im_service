@@ -19,14 +19,17 @@
 
 package main
 
-import "os"
-import "fmt"
-import "bytes"
-import "sync"
-import "time"
-import "encoding/binary"
-import "sync/atomic"
-import log "github.com/sirupsen/logrus"
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
@@ -65,9 +68,13 @@ type GroupMessageDeliver struct {
 	id                  int64                    //自增的callback id
 	callbacks           map[int64]chan *Metadata //返回保存到ims的消息id
 	callbackid_to_msgid map[int64]int64          //callback -> msgid
+
+	group_manager *GroupManager
+	app_route     *AppRoute
+	rpc_storage   *RPCStorage
 }
 
-func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
+func NewGroupMessageDeliver(root string, group_manager *GroupManager, app_route *AppRoute, rpc_storage *RPCStorage) *GroupMessageDeliver {
 	storage := new(GroupMessageDeliver)
 
 	storage.root = root
@@ -85,7 +92,9 @@ func NewGroupMessageDeliver(root string) *GroupMessageDeliver {
 	storage.dt = make(chan *GroupMessageDispatch, 1000)
 	storage.callbacks = make(map[int64]chan *Metadata)
 	storage.callbackid_to_msgid = make(map[int64]int64)
-
+	storage.group_manager = group_manager
+	storage.app_route = app_route
+	storage.rpc_storage = rpc_storage
 	storage.openWriteFile()
 	storage.openCursorFile()
 	storage.readLatestMessageID()
@@ -404,7 +413,7 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 
 	PublishMessage(appid, uid, msg)
 
-	route := app_route.FindRoute(appid)
+	route := storage.app_route.FindRoute(appid)
 	if route == nil {
 		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
 		return false
@@ -434,7 +443,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 
 	batch_members := make(map[int64][]int64)
 	for _, member := range gm.members {
-		index := rpc_storage.GetStorageRPCIndex(member)
+		index := storage.rpc_storage.GetStorageRPCIndex(member)
 		if _, ok := batch_members[index]; !ok {
 			batch_members[index] = []int64{member}
 		} else {
@@ -445,7 +454,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 	}
 
 	for _, mb := range batch_members {
-		r, err := rpc_storage.SavePeerGroupMessage(gm.appid, mb, gm.device_ID, m)
+		r, err := storage.rpc_storage.SavePeerGroupMessage(gm.appid, mb, gm.device_ID, m)
 		if err != nil {
 			log.Errorf("save peer group message:%d %d err:%s", gm.sender, gm.gid, err)
 			return nil, false
@@ -590,7 +599,7 @@ func (storage *GroupMessageDeliver) run() {
 }
 
 func (storage *GroupMessageDeliver) LoadGroup(gid int64) *Group {
-	group := group_manager.FindGroup(gid)
+	group := storage.group_manager.FindGroup(gid)
 	if group != nil {
 		return group
 	}
@@ -604,9 +613,9 @@ func (storage *GroupMessageDeliver) LoadGroup(gid int64) *Group {
 
 func (storage *GroupMessageDeliver) DispatchMessage(msg *Message, group_id int64, appid int64) {
 	//assert(msg.appid > 0)
-	group := group_manager.FindGroup(group_id)
+	group := storage.group_manager.FindGroup(group_id)
 	if group != nil {
-		DispatchMessageToGroup(msg, group, appid, nil)
+		DispatchMessageToGroup(storage.app_route, msg, group, appid, nil)
 	} else {
 		select {
 		case storage.dt <- &GroupMessageDispatch{gid: group_id, appid: appid, msg: msg}:
@@ -617,16 +626,16 @@ func (storage *GroupMessageDeliver) DispatchMessage(msg *Message, group_id int64
 }
 
 func (storage *GroupMessageDeliver) dispatchMessage(msg *Message, group_id int64, appid int64) {
-	group := group_manager.LoadGroup(group_id)
+	group := storage.group_manager.LoadGroup(group_id)
 	if group == nil {
 		log.Warning("load group nil, can't dispatch group message")
 		return
 	}
-	DispatchMessageToGroup(msg, group, appid, nil)
+	DispatchMessageToGroup(storage.app_route, msg, group, appid, nil)
 }
 
 func (storage *GroupMessageDeliver) loadGroup(gl *GroupLoader) {
-	group := group_manager.LoadGroup(gl.gid)
+	group := storage.group_manager.LoadGroup(gl.gid)
 	gl.c <- group
 }
 

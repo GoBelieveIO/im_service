@@ -19,14 +19,19 @@
 
 package main
 
-import "sync"
-import "database/sql"
-import _ "github.com/go-sql-driver/mysql"
-import log "github.com/sirupsen/logrus"
-import "github.com/gomodule/redigo/redis"
-import "fmt"
-import "strconv"
-import "time"
+import (
+	"database/sql"
+	"sync"
+
+	_ "github.com/go-sql-driver/mysql"
+
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/gomodule/redigo/redis"
+	log "github.com/sirupsen/logrus"
+)
 
 type Store struct {
 	id       int64
@@ -39,6 +44,7 @@ type CustomerService struct {
 	stores         map[int64]*Store
 	sellers        map[int64]int //销售员 sellerid:timestamp
 	online_sellers map[int64]int //在线的销售员 sellerid:timestamp
+	redis_pool     *redis.Pool
 }
 
 func NewCustomerService() *CustomerService {
@@ -74,7 +80,7 @@ func (cs *CustomerService) LoadStore(db *sql.DB, store_id int64) (*Store, error)
 	return s, nil
 }
 
-func (cs *CustomerService) GetStore(store_id int64) (*Store, error) {
+func (cs *CustomerService) GetStore(store_id int64, mysqldb_datasource string) (*Store, error) {
 	cs.mutex.Lock()
 	if s, ok := cs.stores[store_id]; ok {
 		cs.mutex.Unlock()
@@ -82,7 +88,7 @@ func (cs *CustomerService) GetStore(store_id int64) (*Store, error) {
 	}
 	cs.mutex.Unlock()
 
-	db, err := sql.Open("mysql", config.mysqldb_datasource)
+	db, err := sql.Open("mysql", mysqldb_datasource)
 	if err != nil {
 		log.Info("error:", err)
 		return nil, err
@@ -100,7 +106,7 @@ func (cs *CustomerService) GetStore(store_id int64) (*Store, error) {
 }
 
 func (cs *CustomerService) GetLastSellerID(appid, uid, store_id int64) int64 {
-	conn := redis_pool.Get()
+	conn := cs.redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("users_%d_%d_%d", appid, uid, store_id)
@@ -114,7 +120,7 @@ func (cs *CustomerService) GetLastSellerID(appid, uid, store_id int64) int64 {
 }
 
 func (cs *CustomerService) SetLastSellerID(appid, uid, store_id, seller_id int64) {
-	conn := redis_pool.Get()
+	conn := cs.redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("users_%d_%d_%d", appid, uid, store_id)
@@ -140,7 +146,7 @@ func (cs *CustomerService) IsExist(store_id int64, seller_id int64) bool {
 	}
 	cs.mutex.Unlock()
 
-	conn := redis_pool.Get()
+	conn := cs.redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("stores_seller_%d", store_id)
@@ -161,7 +167,7 @@ func (cs *CustomerService) IsExist(store_id int64, seller_id int64) bool {
 
 // 随机获取一个的销售人员
 func (cs *CustomerService) GetSellerID(store_id int64) int64 {
-	conn := redis_pool.Get()
+	conn := cs.redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("stores_seller_%d", store_id)
@@ -176,7 +182,7 @@ func (cs *CustomerService) GetSellerID(store_id int64) int64 {
 }
 
 func (cs *CustomerService) GetOrderSellerID(store_id int64) int64 {
-	conn := redis_pool.Get()
+	conn := cs.redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("stores_zseller_%d", store_id)
@@ -204,7 +210,7 @@ func (cs *CustomerService) GetOrderSellerID(store_id int64) int64 {
 
 // 随机获取一个在线的销售人员
 func (cs *CustomerService) GetOnlineSellerID(store_id int64) int64 {
-	conn := redis_pool.Get()
+	conn := cs.redis_pool.Get()
 	defer conn.Close()
 
 	key := fmt.Sprintf("stores_online_seller_%d", store_id)
@@ -230,7 +236,7 @@ func (cs *CustomerService) IsOnline(store_id int64, seller_id int64) bool {
 	}
 	cs.mutex.Unlock()
 
-	conn := redis_pool.Get()
+	conn := cs.redis_pool.Get()
 	defer conn.Close()
 	key := fmt.Sprintf("stores_online_seller_%d", store_id)
 
