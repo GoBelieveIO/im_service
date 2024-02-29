@@ -22,16 +22,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"net/http"
-	"os"
-	"os/exec"
 	"path"
 	"runtime"
-	"strconv"
-	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -123,38 +116,6 @@ func FilterDirtyWord(filter *sensitive.Filter, msg *IMMessage) {
 	}
 }
 
-type loggingHandler struct {
-	handler http.Handler
-}
-
-func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Infof("http request:%s %s %s", r.RemoteAddr, r.Method, r.URL)
-	h.handler.ServeHTTP(w, r)
-}
-
-func StartHttpServer(addr string, app_route *AppRoute, redis_pool *redis.Pool, server_summary *ServerSummary, rpc_storage *RPCStorage) {
-	http.HandleFunc("/stack", Stack)
-	handle_http2("/summary", Summary, app_route, server_summary)
-	handle_http2("/post_group_notification", PostGroupNotification, app_route, rpc_storage)
-	handle_http3("/post_peer_message", PostPeerMessage, app_route, server_summary, rpc_storage)
-	handle_http3("/post_group_message", PostGroupMessage, app_route, server_summary, rpc_storage)
-	handle_http2("/post_system_message", SendSystemMessage, app_route, rpc_storage)
-	handle_http("/post_notification", SendNotification, app_route)
-	handle_http("/post_room_message", SendRoomMessage, app_route)
-	handle_http2("/post_customer_message", SendCustomerMessage, app_route, rpc_storage)
-	handle_http("/post_realtime_message", SendRealtimeMessage, app_route)
-	handle_http2("/get_offline_count", GetOfflineCount, redis_pool, rpc_storage)
-	handle_http("/load_latest_message", LoadLatestMessage, rpc_storage)
-	handle_http("/load_history_message", LoadHistoryMessage, rpc_storage)
-
-	handler := loggingHandler{http.DefaultServeMux}
-
-	err := http.ListenAndServe(addr, handler)
-	if err != nil {
-		log.Fatal("http server err:", err)
-	}
-}
-
 func SyncKeyService(redis_pool *redis.Pool,
 	sync_c chan *storage.SyncHistory,
 	group_sync_c chan *storage.SyncGroupHistory) {
@@ -176,78 +137,6 @@ func SyncKeyService(redis_pool *redis.Pool,
 			}
 			break
 		}
-	}
-}
-
-func formatStdOut(stdout []byte, userfulIndex int) []string {
-	eol := "\n"
-	infoArr := strings.Split(string(stdout), eol)[userfulIndex]
-	ret := strings.Fields(infoArr)
-	return ret
-}
-
-func ReadRSSDarwin(pid int) int64 {
-	args := "-o rss -p"
-	stdout, _ := exec.Command("ps", args, strconv.Itoa(pid)).Output()
-	ret := formatStdOut(stdout, 1)
-	if len(ret) == 0 {
-		log.Warning("can't find process")
-		return 0
-	}
-
-	rss, _ := strconv.ParseInt(ret[0], 10, 64)
-	return rss * 1024
-}
-
-func ReadRSSLinux(pid int, pagesize int) int64 {
-	//http://man7.org/linux/man-pages/man5/proc.5.html
-	procStatFileBytes, err := ioutil.ReadFile(path.Join("/proc", strconv.Itoa(pid), "stat"))
-	if err != nil {
-		log.Warning("read file err:", err)
-		return 0
-	}
-
-	splitAfter := strings.SplitAfter(string(procStatFileBytes), ")")
-
-	if len(splitAfter) == 0 || len(splitAfter) == 1 {
-		log.Warning("Can't find process ")
-		return 0
-	}
-
-	infos := strings.Split(splitAfter[1], " ")
-	if len(infos) < 23 {
-		//impossible
-		return 0
-	}
-
-	rss, _ := strconv.ParseInt(infos[22], 10, 64)
-	return rss * int64(pagesize)
-}
-
-func ReadRSS(platform string, pid int, pagesize int) int64 {
-	if platform == "linux" {
-		return ReadRSSLinux(pid, pagesize)
-	} else if platform == "darwin" {
-		return ReadRSSDarwin(pid)
-	} else {
-		return 0
-	}
-}
-
-func MemStatService(low_memory *int32, config *Config) {
-	platform := runtime.GOOS
-	pagesize := os.Getpagesize()
-	pid := os.Getpid()
-	//3 min
-	ticker := time.NewTicker(time.Second * 60 * 3)
-	for range ticker.C {
-		rss := ReadRSS(platform, pid, pagesize)
-		if rss > config.memory_limit {
-			atomic.StoreInt32(low_memory, 1)
-		} else {
-			atomic.StoreInt32(low_memory, 0)
-		}
-		log.Infof("process rss:%dk low memory:%d", rss/1024, *low_memory)
 	}
 }
 
