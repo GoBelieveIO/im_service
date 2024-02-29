@@ -44,11 +44,11 @@ var (
 	GIT_BRANCH    string
 )
 
-// route server
-var route_channels []*Channel
+// // route server
+// var route_channels []*Channel
 
-// super group route server
-var group_route_channels []*Channel
+// // super group route server
+// var group_route_channels []*Channel
 
 // round-robin
 var current_deliver_index uint64
@@ -224,13 +224,14 @@ func main() {
 	dispatch_room_message := func(m *RouteMessage) {
 		DispatchRoomMessage(app_route, m)
 	}
-	route_channels = make([]*Channel, 0)
+	route_channels := make([]*Channel, 0)
 	for _, addr := range config.route_addrs {
 		channel := NewChannel(addr, dispatch_app_message, DispatchGroupMessage, dispatch_room_message)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
 
+	var group_route_channels []*Channel
 	if len(config.group_route_addrs) > 0 {
 		group_route_channels = make([]*Channel, 0)
 		for _, addr := range config.group_route_addrs {
@@ -241,6 +242,9 @@ func main() {
 	} else {
 		group_route_channels = route_channels
 	}
+	app_route.route_channels = route_channels
+	app_route.group_route_channels = group_route_channels
+
 	var filter *sensitive.Filter
 	if len(config.word_file) > 0 {
 		filter = sensitive.New()

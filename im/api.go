@@ -20,7 +20,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -49,7 +48,7 @@ func SendGroupNotification(appid int64, gid int64,
 
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-		SendAppMessage(app_route, appid, member, notify)
+		app_route.SendAnonymousMessage(appid, member, notify)
 	}
 }
 
@@ -68,7 +67,7 @@ func SendSuperGroupNotification(appid int64, gid int64,
 	for member := range members {
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncNotify{gid, msgid}}
-		SendAppMessage(app_route, appid, member, notify)
+		app_route.SendAnonymousMessage(appid, member, notify)
 	}
 }
 
@@ -87,12 +86,11 @@ func SendGroupIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_
 		}
 
 		//推送外部通知
-		PushGroupMessage(appid, group, m)
+		app_route.PushGroupMessage(appid, group, m)
 
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncNotify{group_id: im.receiver, sync_key: msgid}}
-		SendAppGroupMessage(app_route, appid, group, notify)
-
+		app_route.SendAnonymousGroupMessage(appid, group, notify)
 	} else {
 		gm := &PendingGroupMessage{}
 		gm.appid = appid
@@ -130,15 +128,15 @@ func SendIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_summa
 	}
 
 	//推送外部通知
-	PushMessage(appid, im.receiver, m)
+	app_route.PushMessage(appid, im.receiver, m)
 
 	//发送同步的通知消息
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-	SendAppMessage(app_route, appid, im.receiver, notify)
+	app_route.SendAnonymousMessage(appid, im.receiver, notify)
 
 	//发送同步的通知消息
 	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid2}}
-	SendAppMessage(app_route, appid, im.sender, notify)
+	app_route.SendAnonymousMessage(appid, im.sender, notify)
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 }
@@ -539,7 +537,7 @@ func SendNotification(w http.ResponseWriter, req *http.Request, app_route *AppRo
 	}
 	sys := &SystemMessage{string(body)}
 	msg := &Message{cmd: MSG_NOTIFICATION, body: sys}
-	SendAppMessage(app_route, appid, uid, msg)
+	app_route.SendAnonymousMessage(appid, uid, msg)
 
 	w.WriteHeader(200)
 }
@@ -598,11 +596,11 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request, app_route *AppR
 		}
 
 		//推送通知
-		PushMessage(appid, uid, msg)
+		app_route.PushMessage(appid, uid, msg)
 
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-		SendAppMessage(app_route, appid, uid, notify)
+		app_route.SendAnonymousMessage(appid, uid, notify)
 	}
 
 	w.WriteHeader(200)
@@ -644,14 +642,7 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request, app_route *AppRou
 
 	msg := &Message{cmd: MSG_ROOM_IM, body: room_im}
 
-	DispatchMessageToRoom(app_route, msg, room_id, appid, nil)
-
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, msg)
-	msg_buf := mbuffer.Bytes()
-	amsg := &RouteMessage{appid: appid, receiver: room_id, msg: msg_buf}
-	channel := GetRoomChannel(room_id)
-	channel.PublishRoom(amsg)
+	app_route.SendAnonymousRoomMessage(appid, room_id, msg)
 
 	w.WriteHeader(200)
 }
@@ -728,15 +719,15 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request, app_route *Ap
 		return
 	}
 
-	PushMessage(receiver_appid, receiver, m)
+	app_route.PushMessage(receiver_appid, receiver, m)
 
 	//发送同步的通知消息
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-	SendAppMessage(app_route, receiver_appid, receiver, notify)
+	app_route.SendAnonymousMessage(receiver_appid, receiver, notify)
 
 	//发送给自己的其它登录点
 	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid2}}
-	SendAppMessage(app_route, sender_appid, sender, notify)
+	app_route.SendAnonymousMessage(sender_appid, sender, notify)
 
 	resp := make(map[string]interface{})
 	WriteHttpObj(resp, w)
@@ -777,6 +768,6 @@ func SendRealtimeMessage(w http.ResponseWriter, req *http.Request, app_route *Ap
 	rt.content = string(body)
 
 	msg := &Message{cmd: MSG_RT, body: rt}
-	SendAppMessage(app_route, appid, receiver, msg)
+	app_route.SendAnonymousMessage(appid, receiver, msg)
 	w.WriteHeader(200)
 }

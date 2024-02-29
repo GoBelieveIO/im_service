@@ -143,19 +143,26 @@ func (client *Connection) isSender(msg *Message, device_id int64) bool {
 // 发送超级群消息
 func (client *Connection) SendGroupMessage(group *Group, msg *Message) {
 	appid := client.appid
-
-	PublishGroupMessage(appid, group.gid, msg)
-
-	DispatchMessageToGroup(client.app_route, msg, group, appid, client.Client())
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	client.app_route.SendGroupMessage(appid, group, msg, sender)
 }
 
 func (client *Connection) SendMessage(uid int64, msg *Message) bool {
 	appid := client.appid
-
-	PublishMessage(appid, uid, msg)
-
-	DispatchMessageToPeer(client.app_route, msg, uid, appid, client.Client())
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	client.app_route.SendMessage(appid, uid, msg, sender)
 	return true
+}
+
+func (client *Connection) SendAppMessage(appid int64, uid int64, msg *Message) bool {
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	client.app_route.SendMessage(appid, uid, msg, sender)
+	return true
+}
+func (client *Connection) SendRoomMessage(room_id int64, msg *Message) {
+	appid := client.appid
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	client.app_route.SendRoomMessage(appid, room_id, msg, sender)
 }
 
 func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *Message) bool {

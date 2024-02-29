@@ -410,28 +410,8 @@ func (storage *GroupMessageDeliver) openReadFile() *os.File {
 
 // device_ID 发送者的设备ID
 func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender int64, device_ID int64, msg *Message) bool {
-
-	PublishMessage(appid, uid, msg)
-
-	route := storage.app_route.FindRoute(appid)
-	if route == nil {
-		log.Warningf("can't send message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
-		return false
-	}
-	clients := route.FindClientSet(uid)
-	if len(clients) == 0 {
-		return false
-	}
-
-	for c, _ := range clients {
-		//不再发送给自己
-		if c.device_ID == device_ID && sender == uid {
-			continue
-		}
-
-		c.EnqueueNonBlockMessage(msg)
-	}
-
+	msgSender := &Sender{appid: appid, uid: sender, deviceID: device_ID}
+	storage.app_route.SendMessage(appid, uid, msg, msgSender)
 	return true
 }
 
@@ -487,7 +467,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 		group_members[member] = 0
 	}
 	group := NewGroup(gm.gid, gm.appid, group_members)
-	PushGroupMessage(gm.appid, group, m)
+	storage.app_route.PushGroupMessage(gm.appid, group, m)
 	return metadata, true
 }
 
@@ -615,7 +595,7 @@ func (storage *GroupMessageDeliver) DispatchMessage(msg *Message, group_id int64
 	//assert(msg.appid > 0)
 	group := storage.group_manager.FindGroup(group_id)
 	if group != nil {
-		DispatchMessageToGroup(storage.app_route, msg, group, appid, nil)
+		storage.app_route.DispatchMessageToGroup(appid, group, msg)
 	} else {
 		select {
 		case storage.dt <- &GroupMessageDispatch{gid: group_id, appid: appid, msg: msg}:
@@ -631,7 +611,7 @@ func (storage *GroupMessageDeliver) dispatchMessage(msg *Message, group_id int64
 		log.Warning("load group nil, can't dispatch group message")
 		return
 	}
-	DispatchMessageToGroup(storage.app_route, msg, group, appid, nil)
+	storage.app_route.DispatchMessageToGroup(appid, group, msg)
 }
 
 func (storage *GroupMessageDeliver) loadGroup(gl *GroupLoader) {

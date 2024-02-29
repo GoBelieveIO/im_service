@@ -13,6 +13,12 @@ const ROOM_SINGLE = false
 // 一个聊天室中不允许有多个相同uid和deviceid的client
 const ROOM_DEVICE_SINGLE = true
 
+type ClientSet = set.Set[*Client]
+
+func NewClientSet() ClientSet {
+	return set.NewSet[*Client]()
+}
+
 type Route struct {
 	appid        int64
 	mutex        sync.Mutex

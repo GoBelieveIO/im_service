@@ -82,14 +82,14 @@ func (client *CustomerClient) HandleCustomerMessageV2(message *Message) {
 		return
 	}
 
-	PushMessage(msg.receiver_appid, msg.receiver, m)
+	client.app_route.PushMessage(msg.receiver_appid, msg.receiver, m)
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m1 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	SendAppMessage(client.app_route, msg.receiver_appid, msg.receiver, m1)
+	client.SendAppMessage(msg.receiver_appid, msg.receiver, m1)
 
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
-	SendAppMessage(client.app_route, msg.receiver_appid, msg.receiver, notify)
+	client.SendAppMessage(msg.receiver_appid, msg.receiver, notify)
 
 	//发送给自己的其它登录点
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}

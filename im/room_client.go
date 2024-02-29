@@ -20,7 +20,6 @@
 package main
 
 import (
-	"bytes"
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
@@ -33,7 +32,7 @@ type RoomClient struct {
 
 func (client *RoomClient) Logout() {
 	if client.room_id > 0 {
-		channel := GetRoomChannel(client.room_id)
+		channel := client.app_route.GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
 		route := client.app_route.FindOrAddRoute(client.appid)
 		route.RemoveRoomClient(client.room_id, client.Client())
@@ -64,7 +63,7 @@ func (client *RoomClient) HandleEnterRoom(room *Room) {
 	}
 	route := client.app_route.FindOrAddRoute(client.appid)
 	if client.room_id > 0 {
-		channel := GetRoomChannel(client.room_id)
+		channel := client.app_route.GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
 
 		route.RemoveRoomClient(client.room_id, client.Client())
@@ -72,7 +71,7 @@ func (client *RoomClient) HandleEnterRoom(room *Room) {
 
 	client.room_id = room_id
 	route.AddRoomClient(client.room_id, client.Client())
-	channel := GetRoomChannel(client.room_id)
+	channel := client.app_route.GetRoomChannel(client.room_id)
 	channel.SubscribeRoom(client.appid, client.room_id)
 }
 
@@ -93,7 +92,7 @@ func (client *RoomClient) HandleLeaveRoom(room *Room) {
 
 	route := client.app_route.FindOrAddRoute(client.appid)
 	route.RemoveRoomClient(client.room_id, client.Client())
-	channel := GetRoomChannel(client.room_id)
+	channel := client.app_route.GetRoomChannel(client.room_id)
 	channel.UnsubscribeRoom(client.appid, client.room_id)
 	client.room_id = 0
 }
@@ -116,14 +115,8 @@ func (client *RoomClient) HandleRoomIM(room_im *RoomMessage, seq int) {
 	}
 
 	m := &Message{cmd: MSG_ROOM_IM, body: room_im, body_data: room_im.ToData()}
-	DispatchMessageToRoom(client.app_route, m, room_id, client.appid, client.Client())
 
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, m)
-	msg_buf := mbuffer.Bytes()
-	amsg := &RouteMessage{appid: client.appid, receiver: room_id, msg: msg_buf}
-	channel := GetRoomChannel(client.room_id)
-	channel.PublishRoom(amsg)
+	client.SendRoomMessage(room_id, m)
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}}
 	r := client.EnqueueMessage(ack)
