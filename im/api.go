@@ -73,8 +73,8 @@ func SendSuperGroupNotification(appid int64, gid int64,
 
 func SendGroupIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_summary *ServerSummary, rpc_storage *RPCStorage) {
 	m := &Message{cmd: MSG_GROUP_IM, version: DEFAULT_VERSION, body: im}
-	deliver := GetGroupMessageDeliver(im.receiver)
-	group := deliver.LoadGroup(im.receiver)
+	loader := GetGroupLoader(im.receiver)
+	group := loader.LoadGroup(im.receiver)
 	if group == nil {
 		log.Warning("can't find group:", im.receiver)
 		return
@@ -200,8 +200,8 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request, app_route *
 		}
 	}
 
-	deliver := GetGroupMessageDeliver(group_id)
-	group := deliver.LoadGroup(group_id)
+	loader := GetGroupLoader(group_id)
+	group := loader.LoadGroup(group_id)
 	if group != nil {
 		ms := group.Members()
 		for m, _ := range ms {

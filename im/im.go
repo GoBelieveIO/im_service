@@ -27,11 +27,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
+func GetGroupLoader(group_id int64) *GroupLoader {
 	if group_id < 0 {
 		group_id = -group_id
 	}
 
+	index := uint64(group_id) % uint64(len(group_message_delivers))
+	return group_loaders[index]
+}
+
+func GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
 	deliver_index := atomic.AddUint64(&current_deliver_index, 1)
 	index := deliver_index % uint64(len(group_message_delivers))
 	return group_message_delivers[index]
@@ -103,6 +108,6 @@ func DispatchGroupMessage(amsg *RouteMessage) {
 		msg.meta = meta
 	}
 
-	deliver := GetGroupMessageDeliver(amsg.receiver)
-	deliver.DispatchMessage(msg, amsg.receiver, amsg.appid)
+	loader := GetGroupLoader(amsg.receiver)
+	loader.DispatchMessage(msg, amsg.receiver, amsg.appid)
 }

@@ -105,8 +105,8 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 
 	msg.timestamp = int32(time.Now().Unix())
 
-	deliver := GetGroupMessageDeliver(msg.receiver)
-	group := deliver.LoadGroup(msg.receiver)
+	loader := GetGroupLoader(msg.receiver)
+	group := loader.LoadGroup(msg.receiver)
 	if group == nil {
 		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq), status: ACK_GROUP_NONEXIST}}
 		client.EnqueueMessage(ack)

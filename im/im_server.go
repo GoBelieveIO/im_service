@@ -54,6 +54,8 @@ var (
 var current_deliver_index uint64
 var group_message_delivers []*GroupMessageDeliver
 
+var group_loaders []*GroupLoader
+
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
@@ -264,6 +266,13 @@ func main() {
 		deliver := NewGroupMessageDeliver(r, group_manager, app_route, rpc_storage)
 		deliver.Start()
 		group_message_delivers[i] = deliver
+	}
+
+	group_loaders = make([]*GroupLoader, config.group_deliver_count)
+	for i := 0; i < config.group_deliver_count; i++ {
+		loader := NewGroupLoader(group_manager, app_route)
+		loader.Start()
+		group_loaders[i] = loader
 	}
 
 	go ListenRedis(app_route, config.redis_config())
