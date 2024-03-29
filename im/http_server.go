@@ -36,17 +36,17 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 }
 
-func StartHttpServer(addr string, app_route *AppRoute, redis_pool *redis.Pool, server_summary *ServerSummary, rpc_storage *RPCStorage) {
+func StartHttpServer(addr string, app_route *AppRoute, app *App, redis_pool *redis.Pool, server_summary *ServerSummary, rpc_storage *RPCStorage) {
 	http.HandleFunc("/stack", Stack)
 	handle_http2("/summary", Summary, app_route, server_summary)
-	handle_http2("/post_group_notification", PostGroupNotification, app_route, rpc_storage)
-	handle_http3("/post_peer_message", PostPeerMessage, app_route, server_summary, rpc_storage)
-	handle_http3("/post_group_message", PostGroupMessage, app_route, server_summary, rpc_storage)
-	handle_http2("/post_system_message", SendSystemMessage, app_route, rpc_storage)
-	handle_http("/post_notification", SendNotification, app_route)
-	handle_http("/post_room_message", SendRoomMessage, app_route)
-	handle_http2("/post_customer_message", SendCustomerMessage, app_route, rpc_storage)
-	handle_http("/post_realtime_message", SendRealtimeMessage, app_route)
+	handle_http2("/post_group_notification", PostGroupNotification, app, rpc_storage)
+	handle_http3("/post_peer_message", PostPeerMessage, app, server_summary, rpc_storage)
+	handle_http3("/post_group_message", PostGroupMessage, app, server_summary, rpc_storage)
+	handle_http2("/post_system_message", SendSystemMessage, app, rpc_storage)
+	handle_http("/post_notification", SendNotification, app)
+	handle_http("/post_room_message", SendRoomMessage, app)
+	handle_http2("/post_customer_message", SendCustomerMessage, app, rpc_storage)
+	handle_http("/post_realtime_message", SendRealtimeMessage, app)
 	handle_http2("/get_offline_count", GetOfflineCount, redis_pool, rpc_storage)
 	handle_http("/load_latest_message", LoadLatestMessage, rpc_storage)
 	handle_http("/load_history_message", LoadHistoryMessage, rpc_storage)

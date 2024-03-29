@@ -82,7 +82,7 @@ func (client *CustomerClient) HandleCustomerMessageV2(message *Message) {
 		return
 	}
 
-	client.app_route.PushMessage(msg.receiver_appid, msg.receiver, m)
+	client.app.PushMessage(msg.receiver_appid, msg.receiver, m)
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m1 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}

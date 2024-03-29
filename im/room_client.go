@@ -32,7 +32,7 @@ type RoomClient struct {
 
 func (client *RoomClient) Logout() {
 	if client.room_id > 0 {
-		channel := client.app_route.GetRoomChannel(client.room_id)
+		channel := client.app.GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
 		route := client.app_route.FindOrAddRoute(client.appid)
 		route.RemoveRoomClient(client.room_id, client.Client())
@@ -63,7 +63,7 @@ func (client *RoomClient) HandleEnterRoom(room *Room) {
 	}
 	route := client.app_route.FindOrAddRoute(client.appid)
 	if client.room_id > 0 {
-		channel := client.app_route.GetRoomChannel(client.room_id)
+		channel := client.app.GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
 
 		route.RemoveRoomClient(client.room_id, client.Client())
@@ -71,7 +71,7 @@ func (client *RoomClient) HandleEnterRoom(room *Room) {
 
 	client.room_id = room_id
 	route.AddRoomClient(client.room_id, client.Client())
-	channel := client.app_route.GetRoomChannel(client.room_id)
+	channel := client.app.GetRoomChannel(client.room_id)
 	channel.SubscribeRoom(client.appid, client.room_id)
 }
 
@@ -92,7 +92,7 @@ func (client *RoomClient) HandleLeaveRoom(room *Room) {
 
 	route := client.app_route.FindOrAddRoute(client.appid)
 	route.RemoveRoomClient(client.room_id, client.Client())
-	channel := client.app_route.GetRoomChannel(client.room_id)
+	channel := client.app.GetRoomChannel(client.room_id)
 	channel.UnsubscribeRoom(client.appid, client.room_id)
 	client.room_id = 0
 }

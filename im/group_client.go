@@ -43,7 +43,7 @@ func (client *GroupClient) HandleSuperGroupMessage(msg *IMMessage, group *Group)
 	}
 
 	//推送外部通知
-	client.app_route.PushGroupMessage(client.appid, group, m)
+	client.app.PushGroupMessage(client.appid, group, m)
 
 	m.meta = &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m.flag = MESSAGE_FLAG_PUSH | MESSAGE_FLAG_SUPER_GROUP
@@ -72,7 +72,7 @@ func (client *GroupClient) HandleGroupMessage(im *IMMessage, group *Group) (int6
 	}
 
 	gm.content = im.content
-	deliver := GetGroupMessageDeliver(group.gid)
+	deliver := client.app.GetGroupMessageDeliver(group.gid)
 	m := &Message{cmd: MSG_PENDING_GROUP_MESSAGE, body: gm}
 
 	c := make(chan *Metadata, 1)
@@ -105,7 +105,7 @@ func (client *GroupClient) HandleGroupIMMessage(message *Message) {
 
 	msg.timestamp = int32(time.Now().Unix())
 
-	loader := GetGroupLoader(msg.receiver)
+	loader := client.app.GetGroupLoader(msg.receiver)
 	group := loader.LoadGroup(msg.receiver)
 	if group == nil {
 		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq), status: ACK_GROUP_NONEXIST}}

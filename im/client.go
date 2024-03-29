@@ -46,6 +46,8 @@ type Listener struct {
 	group_sync_c      chan *storage.SyncGroupHistory
 	sync_c            chan *storage.SyncHistory
 	low_memory        *int32
+	app_route         *AppRoute
+	app               *App
 	config            *Config
 }
 
@@ -68,6 +70,8 @@ func NewClient(conn Conn,
 	rpc_storage *RPCStorage,
 	sync_c chan *storage.SyncHistory,
 	group_sync_c chan *storage.SyncGroupHistory,
+	app_route *AppRoute,
+	app *App,
 	config *Config) *Client {
 	client := new(Client)
 
@@ -105,7 +109,8 @@ func handle_client(conn Conn, listener *Listener) {
 		listener.filter, listener.redis_pool,
 		listener.server_summary, listener.relationship_pool,
 		listener.auth, listener.rpc_storage, listener.sync_c,
-		listener.group_sync_c, listener.config)
+		listener.group_sync_c, listener.app_route,
+		listener.app, listener.config)
 	client.Run()
 }
 

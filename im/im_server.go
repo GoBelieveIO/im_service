@@ -44,18 +44,6 @@ var (
 	GIT_BRANCH    string
 )
 
-// // route server
-// var route_channels []*Channel
-
-// // super group route server
-// var group_route_channels []*Channel
-
-// round-robin
-var current_deliver_index uint64
-var group_message_delivers []*GroupMessageDeliver
-
-var group_loaders []*GroupLoader
-
 func NewRedisPool(server, password string, db int) *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:     100,
@@ -212,7 +200,7 @@ func main() {
 	sync_c := make(chan *storage.SyncHistory, 100)
 	group_sync_c := make(chan *storage.SyncGroupHistory, 100)
 	server_summary := NewServerSummary()
-	app_route := NewAppRoute()
+
 	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
 		config.redis_db)
 
@@ -220,15 +208,26 @@ func main() {
 
 	rpc_storage := NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
 
+	var group_manager *GroupManager
+	if len(config.mysqldb_datasource) > 0 {
+		group_manager = NewGroupManager(redis_pool, config.mysqldb_datasource, config.redis_config())
+		group_manager.Start()
+	}
+
+	app_route := NewAppRoute()
+	app := &App{}
 	dispatch_app_message := func(m *RouteMessage) {
-		DispatchAppMessage(app_route, m)
+		DispatchMessage(app_route, m)
 	}
 	dispatch_room_message := func(m *RouteMessage) {
 		DispatchRoomMessage(app_route, m)
 	}
+	dispatch_group_message := func(m *RouteMessage) {
+		DispatchGroupMessage(app, m)
+	}
 	route_channels := make([]*Channel, 0)
 	for _, addr := range config.route_addrs {
-		channel := NewChannel(addr, dispatch_app_message, DispatchGroupMessage, dispatch_room_message)
+		channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
@@ -237,42 +236,39 @@ func main() {
 	if len(config.group_route_addrs) > 0 {
 		group_route_channels = make([]*Channel, 0)
 		for _, addr := range config.group_route_addrs {
-			channel := NewChannel(addr, dispatch_app_message, DispatchGroupMessage, dispatch_room_message)
+			channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 			channel.Start()
 			group_route_channels = append(group_route_channels, channel)
 		}
 	} else {
 		group_route_channels = route_channels
 	}
-	app_route.route_channels = route_channels
-	app_route.group_route_channels = group_route_channels
+
+	group_message_delivers := make([]*GroupMessageDeliver, config.group_deliver_count)
+	for i := 0; i < config.group_deliver_count; i++ {
+		q := fmt.Sprintf("q%d", i)
+		r := path.Join(config.pending_root, q)
+		deliver := NewGroupMessageDeliver(r, group_manager, app, rpc_storage)
+		deliver.Start()
+		group_message_delivers[i] = deliver
+	}
+
+	group_loaders := make([]*GroupLoader, config.group_deliver_count)
+	for i := 0; i < config.group_deliver_count; i++ {
+		loader := NewGroupLoader(group_manager, app_route)
+		loader.Start()
+		group_loaders[i] = loader
+	}
+
+	app.route_channels = route_channels
+	app.group_route_channels = group_route_channels
+	app.group_message_delivers = group_message_delivers
+	app.group_loaders = group_loaders
 
 	var filter *sensitive.Filter
 	if len(config.word_file) > 0 {
 		filter = sensitive.New()
 		filter.LoadWordDict(config.word_file)
-	}
-
-	var group_manager *GroupManager
-	if len(config.mysqldb_datasource) > 0 {
-		group_manager = NewGroupManager(redis_pool, config.mysqldb_datasource, config.redis_config())
-		group_manager.Start()
-	}
-
-	group_message_delivers = make([]*GroupMessageDeliver, config.group_deliver_count)
-	for i := 0; i < config.group_deliver_count; i++ {
-		q := fmt.Sprintf("q%d", i)
-		r := path.Join(config.pending_root, q)
-		deliver := NewGroupMessageDeliver(r, group_manager, app_route, rpc_storage)
-		deliver.Start()
-		group_message_delivers[i] = deliver
-	}
-
-	group_loaders = make([]*GroupLoader, config.group_deliver_count)
-	for i := 0; i < config.group_deliver_count; i++ {
-		loader := NewGroupLoader(group_manager, app_route)
-		loader.Start()
-		group_loaders[i] = loader
 	}
 
 	go ListenRedis(app_route, config.redis_config())
@@ -288,7 +284,7 @@ func main() {
 		relationship_pool.Start()
 	}
 
-	go StartHttpServer(config.http_listen_address, app_route, redis_pool, server_summary, rpc_storage)
+	go StartHttpServer(config.http_listen_address, app_route, app, redis_pool, server_summary, rpc_storage)
 
 	listener := &Listener{
 		group_manager:     group_manager,
@@ -301,6 +297,8 @@ func main() {
 		sync_c:            sync_c,
 		group_sync_c:      group_sync_c,
 		low_memory:        &low_memory,
+		app_route:         app_route,
+		app:               app,
 		config:            config,
 	}
 	if len(config.ws_address) > 0 {

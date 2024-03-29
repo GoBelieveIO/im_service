@@ -34,11 +34,11 @@ type PeerClient struct {
 }
 
 func (client *PeerClient) Login() {
-	channel := client.app_route.GetChannel(client.uid)
+	channel := client.app.GetChannel(client.uid)
 
 	channel.Subscribe(client.appid, client.uid, client.online)
 
-	for _, c := range client.app_route.group_route_channels {
+	for _, c := range client.app.group_route_channels {
 		if c == channel {
 			continue
 		}
@@ -51,10 +51,10 @@ func (client *PeerClient) Login() {
 
 func (client *PeerClient) Logout() {
 	if client.uid > 0 {
-		channel := client.app_route.GetChannel(client.uid)
+		channel := client.app.GetChannel(client.uid)
 		channel.Unsubscribe(client.appid, client.uid, client.online)
 
-		for _, c := range client.app_route.group_route_channels {
+		for _, c := range client.app.group_route_channels {
 			if c == channel {
 				continue
 			}
@@ -192,7 +192,7 @@ func (client *PeerClient) HandleIMMessage(message *Message) {
 	}
 
 	//推送外部通知
-	client.app_route.PushMessage(client.appid, msg.receiver, m)
+	client.app.PushMessage(client.appid, msg.receiver, m)
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m1 := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}

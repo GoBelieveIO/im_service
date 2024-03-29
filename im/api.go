@@ -36,7 +36,7 @@ import (
 )
 
 func SendGroupNotification(appid int64, gid int64,
-	notification string, members set.IntSet, app_route *AppRoute, rpc_storage *RPCStorage) {
+	notification string, members set.IntSet, app *App, rpc_storage *RPCStorage) {
 
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
 
@@ -48,12 +48,12 @@ func SendGroupNotification(appid int64, gid int64,
 
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-		app_route.SendAnonymousMessage(appid, member, notify)
+		app.SendAnonymousMessage(appid, member, notify)
 	}
 }
 
 func SendSuperGroupNotification(appid int64, gid int64,
-	notification string, members set.IntSet, app_route *AppRoute, rpc_storage *RPCStorage) {
+	notification string, members set.IntSet, app *App, rpc_storage *RPCStorage) {
 
 	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
 
@@ -67,13 +67,13 @@ func SendSuperGroupNotification(appid int64, gid int64,
 	for member := range members {
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncNotify{gid, msgid}}
-		app_route.SendAnonymousMessage(appid, member, notify)
+		app.SendAnonymousMessage(appid, member, notify)
 	}
 }
 
-func SendGroupIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_summary *ServerSummary, rpc_storage *RPCStorage) {
+func SendGroupIMMessage(im *IMMessage, appid int64, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
 	m := &Message{cmd: MSG_GROUP_IM, version: DEFAULT_VERSION, body: im}
-	loader := GetGroupLoader(im.receiver)
+	loader := app.GetGroupLoader(im.receiver)
 	group := loader.LoadGroup(im.receiver)
 	if group == nil {
 		log.Warning("can't find group:", im.receiver)
@@ -86,11 +86,11 @@ func SendGroupIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_
 		}
 
 		//推送外部通知
-		app_route.PushGroupMessage(appid, group, m)
+		app.PushGroupMessage(appid, group, m)
 
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncNotify{group_id: im.receiver, sync_key: msgid}}
-		app_route.SendAnonymousGroupMessage(appid, group, notify)
+		app.SendAnonymousGroupMessage(appid, group, notify)
 	} else {
 		gm := &PendingGroupMessage{}
 		gm.appid = appid
@@ -107,14 +107,14 @@ func SendGroupIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_
 		}
 
 		gm.content = im.content
-		deliver := GetGroupMessageDeliver(group.gid)
+		deliver := app.GetGroupMessageDeliver(group.gid)
 		m := &Message{cmd: MSG_PENDING_GROUP_MESSAGE, body: gm}
 		deliver.SaveMessage(m, nil)
 	}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 }
 
-func SendIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_summary *ServerSummary, rpc_storage *RPCStorage) {
+func SendIMMessage(im *IMMessage, appid int64, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
 	m := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, body: im}
 	msgid, _, err := rpc_storage.SaveMessage(appid, im.receiver, 0, m)
 	if err != nil {
@@ -128,21 +128,21 @@ func SendIMMessage(im *IMMessage, appid int64, app_route *AppRoute, server_summa
 	}
 
 	//推送外部通知
-	app_route.PushMessage(appid, im.receiver, m)
+	app.PushMessage(appid, im.receiver, m)
 
 	//发送同步的通知消息
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-	app_route.SendAnonymousMessage(appid, im.receiver, notify)
+	app.SendAnonymousMessage(appid, im.receiver, notify)
 
 	//发送同步的通知消息
 	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid2}}
-	app_route.SendAnonymousMessage(appid, im.sender, notify)
+	app.SendAnonymousMessage(appid, im.sender, notify)
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 }
 
 // http
-func PostGroupNotification(w http.ResponseWriter, req *http.Request, app_route *AppRoute, rpc_storage *RPCStorage) {
+func PostGroupNotification(w http.ResponseWriter, req *http.Request, app *App, rpc_storage *RPCStorage) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -200,7 +200,7 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request, app_route *
 		}
 	}
 
-	loader := GetGroupLoader(group_id)
+	loader := app.GetGroupLoader(group_id)
 	group := loader.LoadGroup(group_id)
 	if group != nil {
 		ms := group.Members()
@@ -215,16 +215,16 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request, app_route *
 		return
 	}
 	if is_super {
-		SendSuperGroupNotification(appid, group_id, notification, members, app_route, rpc_storage)
+		SendSuperGroupNotification(appid, group_id, notification, members, app, rpc_storage)
 	} else {
-		SendGroupNotification(appid, group_id, notification, members, app_route, rpc_storage)
+		SendGroupNotification(appid, group_id, notification, members, app, rpc_storage)
 	}
 
 	log.Info("post group notification success")
 	w.WriteHeader(200)
 }
 
-func PostPeerMessage(w http.ResponseWriter, req *http.Request, app_route *AppRoute, server_summary *ServerSummary, rpc_storage *RPCStorage) {
+func PostPeerMessage(w http.ResponseWriter, req *http.Request, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -263,13 +263,13 @@ func PostPeerMessage(w http.ResponseWriter, req *http.Request, app_route *AppRou
 	im.timestamp = int32(time.Now().Unix())
 	im.content = content
 
-	SendIMMessage(im, appid, app_route, server_summary, rpc_storage)
+	SendIMMessage(im, appid, app, server_summary, rpc_storage)
 
 	w.WriteHeader(200)
 	log.Info("post peer im message success")
 }
 
-func PostGroupMessage(w http.ResponseWriter, req *http.Request, app_route *AppRoute, server_summary *ServerSummary, rpc_storage *RPCStorage) {
+func PostGroupMessage(w http.ResponseWriter, req *http.Request, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -308,7 +308,7 @@ func PostGroupMessage(w http.ResponseWriter, req *http.Request, app_route *AppRo
 	im.timestamp = int32(time.Now().Unix())
 	im.content = content
 
-	SendGroupIMMessage(im, appid, app_route, server_summary, rpc_storage)
+	SendGroupIMMessage(im, appid, app, server_summary, rpc_storage)
 
 	w.WriteHeader(200)
 
@@ -513,7 +513,7 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request, redis_pool *redis
 	WriteHttpObj(obj, w)
 }
 
-func SendNotification(w http.ResponseWriter, req *http.Request, app_route *AppRoute) {
+func SendNotification(w http.ResponseWriter, req *http.Request, app *App) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -537,12 +537,12 @@ func SendNotification(w http.ResponseWriter, req *http.Request, app_route *AppRo
 	}
 	sys := &SystemMessage{string(body)}
 	msg := &Message{cmd: MSG_NOTIFICATION, body: sys}
-	app_route.SendAnonymousMessage(appid, uid, msg)
+	app.SendAnonymousMessage(appid, uid, msg)
 
 	w.WriteHeader(200)
 }
 
-func SendSystemMessage(w http.ResponseWriter, req *http.Request, app_route *AppRoute, rpc_storage *RPCStorage) {
+func SendSystemMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_storage *RPCStorage) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -596,17 +596,17 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request, app_route *AppR
 		}
 
 		//推送通知
-		app_route.PushMessage(appid, uid, msg)
+		app.PushMessage(appid, uid, msg)
 
 		//发送同步的通知消息
 		notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-		app_route.SendAnonymousMessage(appid, uid, notify)
+		app.SendAnonymousMessage(appid, uid, notify)
 	}
 
 	w.WriteHeader(200)
 }
 
-func SendRoomMessage(w http.ResponseWriter, req *http.Request, app_route *AppRoute) {
+func SendRoomMessage(w http.ResponseWriter, req *http.Request, app *App) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -642,12 +642,12 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request, app_route *AppRou
 
 	msg := &Message{cmd: MSG_ROOM_IM, body: room_im}
 
-	app_route.SendAnonymousRoomMessage(appid, room_id, msg)
+	app.SendAnonymousRoomMessage(appid, room_id, msg)
 
 	w.WriteHeader(200)
 }
 
-func SendCustomerMessage(w http.ResponseWriter, req *http.Request, app_route *AppRoute, rpc_storage *RPCStorage) {
+func SendCustomerMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_storage *RPCStorage) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -719,21 +719,21 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request, app_route *Ap
 		return
 	}
 
-	app_route.PushMessage(receiver_appid, receiver, m)
+	app.PushMessage(receiver_appid, receiver, m)
 
 	//发送同步的通知消息
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
-	app_route.SendAnonymousMessage(receiver_appid, receiver, notify)
+	app.SendAnonymousMessage(receiver_appid, receiver, notify)
 
 	//发送给自己的其它登录点
 	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid2}}
-	app_route.SendAnonymousMessage(sender_appid, sender, notify)
+	app.SendAnonymousMessage(sender_appid, sender, notify)
 
 	resp := make(map[string]interface{})
 	WriteHttpObj(resp, w)
 }
 
-func SendRealtimeMessage(w http.ResponseWriter, req *http.Request, app_route *AppRoute) {
+func SendRealtimeMessage(w http.ResponseWriter, req *http.Request, app *App) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
@@ -768,6 +768,6 @@ func SendRealtimeMessage(w http.ResponseWriter, req *http.Request, app_route *Ap
 	rt.content = string(body)
 
 	msg := &Message{cmd: MSG_RT, body: rt}
-	app_route.SendAnonymousMessage(appid, receiver, msg)
+	app.SendAnonymousMessage(appid, receiver, msg)
 	w.WriteHeader(200)
 }

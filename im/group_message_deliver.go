@@ -42,11 +42,11 @@ type GroupMessageDeliver struct {
 	callbackid_to_msgid map[int64]int64          //callback -> msgid
 
 	group_manager *GroupManager
-	app_route     *AppRoute
+	app           *App
 	rpc_storage   *RPCStorage
 }
 
-func NewGroupMessageDeliver(root string, group_manager *GroupManager, app_route *AppRoute, rpc_storage *RPCStorage) *GroupMessageDeliver {
+func NewGroupMessageDeliver(root string, group_manager *GroupManager, app *App, rpc_storage *RPCStorage) *GroupMessageDeliver {
 	storage := new(GroupMessageDeliver)
 
 	storage.root = root
@@ -63,7 +63,7 @@ func NewGroupMessageDeliver(root string, group_manager *GroupManager, app_route 
 	storage.callbacks = make(map[int64]chan *Metadata)
 	storage.callbackid_to_msgid = make(map[int64]int64)
 	storage.group_manager = group_manager
-	storage.app_route = app_route
+	storage.app = app
 	storage.rpc_storage = rpc_storage
 	storage.openWriteFile()
 	storage.openCursorFile()
@@ -134,7 +134,7 @@ func (storage *GroupMessageDeliver) SaveMessage(msg *Message, ch chan *Metadata)
 // device_ID 发送者的设备ID
 func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender int64, device_ID int64, msg *Message) bool {
 	msgSender := &Sender{appid: appid, uid: sender, deviceID: device_ID}
-	storage.app_route.SendMessage(appid, uid, msg, msgSender)
+	storage.app.SendMessage(appid, uid, msg, msgSender)
 	return true
 }
 
@@ -190,7 +190,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 		group_members[member] = 0
 	}
 	group := NewGroup(gm.gid, gm.appid, group_members)
-	storage.app_route.PushGroupMessage(gm.appid, group, m)
+	storage.app.PushGroupMessage(gm.appid, group, m)
 	return metadata, true
 }
 
