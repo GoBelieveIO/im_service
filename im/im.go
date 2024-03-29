@@ -133,7 +133,7 @@ func (app *App) SendGroupMessage(appid int64, group *Group, msg *Message, sender
 		device_ID = sender.deviceID
 	}
 
-	app.app_route.dispatchMessageToGroup(appid, sender_id, device_ID, group, msg)
+	app.app_route.sendGroupMessage(appid, sender_id, device_ID, group, msg)
 }
 
 func (app *App) SendMessage(appid int64, uid int64, msg *Message, sender *Sender) {
@@ -147,7 +147,7 @@ func (app *App) SendMessage(appid int64, uid int64, msg *Message, sender *Sender
 		device_ID = sender.deviceID
 	}
 
-	app.app_route.dispatchMessageToPeer(sender_appid, sender_id, device_ID, appid, uid, msg)
+	app.app_route.sendPeerMessage(sender_appid, sender_id, device_ID, appid, uid, msg)
 }
 
 func (app *App) SendRoomMessage(appid int64, room_id int64, msg *Message, sender *Sender) {
@@ -158,7 +158,7 @@ func (app *App) SendRoomMessage(appid int64, room_id int64, msg *Message, sender
 		sender_id = sender.uid
 		device_ID = sender.deviceID
 	}
-	app.app_route.dispatchMessageToRoom(appid, sender_id, device_ID, room_id, msg)
+	app.app_route.sendRoomMessage(appid, sender_id, device_ID, room_id, msg)
 }
 
 func (app *App) PublishMessage(appid int64, uid int64, msg *Message) {
@@ -227,7 +227,7 @@ func DispatchMessage(app_route *AppRoute, amsg *RouteMessage) {
 		meta := &Metadata{sync_key: amsg.msgid, prev_sync_key: amsg.prev_msgid}
 		msg.meta = meta
 	}
-	app_route.DispatchMessageToPeer(amsg.appid, amsg.receiver, msg)
+	app_route.SendPeerMessage(amsg.appid, amsg.receiver, msg)
 }
 
 func DispatchRoomMessage(app_route *AppRoute, amsg *RouteMessage) {
@@ -241,7 +241,7 @@ func DispatchRoomMessage(app_route *AppRoute, amsg *RouteMessage) {
 	log.Info("dispatch room message", Command(msg.cmd))
 
 	room_id := amsg.receiver
-	app_route.DispatchMessageToRoom(amsg.appid, room_id, msg)
+	app_route.SendRoomMessage(amsg.appid, room_id, msg)
 }
 
 func DispatchGroupMessage(app *App, amsg *RouteMessage) {

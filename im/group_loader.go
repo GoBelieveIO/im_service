@@ -69,7 +69,7 @@ func (storage *GroupLoader) DispatchMessage(msg *Message, group_id int64, appid 
 	//assert(msg.appid > 0)
 	group := storage.group_manager.FindGroup(group_id)
 	if group != nil {
-		storage.app_route.DispatchMessageToGroup(appid, group, msg)
+		storage.app_route.SendGroupMessage(appid, group, msg)
 	} else {
 		select {
 		case storage.dt <- &GroupMessageDispatch{gid: group_id, appid: appid, msg: msg}:
@@ -85,7 +85,7 @@ func (storage *GroupLoader) dispatchMessage(msg *Message, group_id int64, appid 
 		log.Warning("load group nil, can't dispatch group message")
 		return
 	}
-	storage.app_route.DispatchMessageToGroup(appid, group, msg)
+	storage.app_route.SendGroupMessage(appid, group, msg)
 }
 
 func (storage *GroupLoader) loadGroup(gl *GroupLoaderRequest) {
