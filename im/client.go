@@ -49,6 +49,12 @@ type Listener struct {
 	app_route         *AppRoute
 	app               *App
 	config            *Config
+	server            *Server
+}
+
+type ClientObserver interface {
+	onClientMessage(*Client, *Message)
+	onClientClose(*Client)
 }
 
 type Client struct {
@@ -57,7 +63,8 @@ type Client struct {
 	*GroupClient
 	*RoomClient
 	*CustomerClient
-	auth Auth
+	auth     Auth
+	observer ClientObserver
 }
 
 func NewClient(conn Conn,
@@ -72,7 +79,8 @@ func NewClient(conn Conn,
 	group_sync_c chan *storage.SyncGroupHistory,
 	app_route *AppRoute,
 	app *App,
-	config *Config) *Client {
+	config *Config,
+	observer ClientObserver) *Client {
 	client := new(Client)
 
 	//初始化Connection
@@ -89,6 +97,7 @@ func NewClient(conn Conn,
 	client.rpc_storage = rpc_storage
 	client.auth = auth
 	client.config = config
+	client.observer = observer
 
 	atomic.AddInt64(&server_summary.nconnections, 1)
 
@@ -110,7 +119,7 @@ func handle_client(conn Conn, listener *Listener) {
 		listener.server_summary, listener.relationship_pool,
 		listener.auth, listener.rpc_storage, listener.sync_c,
 		listener.group_sync_c, listener.app_route,
-		listener.app, listener.config)
+		listener.app, listener.config, listener.server)
 	client.Run()
 }
 
@@ -175,7 +184,7 @@ func (client *Client) Read() {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {
 			log.Infof("quit read goroutine, client:%d write goroutine blocked", client.uid)
-			client.HandleClientClosed()
+			client.observer.onClientClose(client)
 			break
 		}
 
@@ -186,11 +195,11 @@ func (client *Client) Read() {
 			log.Infof("client:%d socket read timeout:%d %d", client.uid, t1, t2)
 		}
 		if msg == nil {
-			client.HandleClientClosed()
+			client.observer.onClientClose(client)
 			break
 		}
 
-		client.HandleMessage(msg)
+		client.observer.onClientMessage(client, msg)
 		t3 := time.Now().Unix()
 		if t3-t2 > 2 {
 			log.Infof("client:%d handle message is too slow:%d %d", client.uid, t2, t3)
@@ -233,23 +242,6 @@ func (client *Client) HandleClientClosed() {
 	client.PeerClient.Logout()
 }
 
-func (client *Client) HandleMessage(msg *Message) {
-	log.Info("msg cmd:", Command(msg.cmd))
-	switch msg.cmd {
-	case MSG_AUTH_TOKEN:
-		client.HandleAuthToken(msg.body.(*AuthenticationToken), msg.version)
-	case MSG_ACK:
-		client.HandleACK(msg.body.(*MessageACK))
-	case MSG_PING:
-		client.HandlePing()
-	}
-
-	client.PeerClient.HandleMessage(msg)
-	client.GroupClient.HandleMessage(msg)
-	client.RoomClient.HandleMessage(msg)
-	client.CustomerClient.HandleMessage(msg)
-}
-
 func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
 	appid, uid, err := client.auth.LoadUserAccessToken(token)
 
@@ -265,64 +257,6 @@ func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
 	return appid, uid, forbidden, notification_on, nil
 }
 
-func (client *Client) HandleAuthToken(login *AuthenticationToken, version int) {
-	if client.uid > 0 {
-		log.Info("repeat login")
-		return
-	}
-
-	var err error
-	appid, uid, fb, on, err := client.AuthToken(login.token)
-	if err != nil {
-		log.Infof("auth token:%s err:%s", login.token, err)
-		msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{1}}
-		client.EnqueueMessage(msg)
-		return
-	}
-	if uid == 0 {
-		log.Info("auth token uid==0")
-		msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{1}}
-		client.EnqueueMessage(msg)
-		return
-	}
-
-	if login.platform_id != PLATFORM_WEB && len(login.device_id) > 0 {
-		client.device_ID, err = GetDeviceID(client.redis_pool, login.device_id, int(login.platform_id))
-		if err != nil {
-			log.Info("auth token uid==0")
-			msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{1}}
-			client.EnqueueMessage(msg)
-			return
-		}
-	}
-
-	is_mobile := login.platform_id == PLATFORM_IOS || login.platform_id == PLATFORM_ANDROID
-	online := true
-	if on && !is_mobile {
-		online = false
-	}
-
-	client.appid = appid
-	client.uid = uid
-	client.forbidden = int32(fb)
-	client.notification_on = on
-	client.online = online
-	client.version = version
-	client.device_id = login.device_id
-	client.platform_id = login.platform_id
-	client.tm = time.Now()
-	log.Infof("auth token:%s appid:%d uid:%d device id:%s:%d forbidden:%d notification on:%t online:%t",
-		login.token, client.appid, client.uid, client.device_id,
-		client.device_ID, client.forbidden, client.notification_on, client.online)
-
-	msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{0}}
-	client.EnqueueMessage(msg)
-
-	client.AddClient()
-
-	client.PeerClient.Login()
-}
-
 func (client *Client) AddClient() {
 	route := client.app_route.FindOrAddRoute(client.appid)
 	is_new := route.AddClient(client)
@@ -331,19 +265,6 @@ func (client *Client) AddClient() {
 	if is_new {
 		atomic.AddInt64(&client.server_summary.clientset_count, 1)
 	}
-}
-
-func (client *Client) HandlePing() {
-	m := &Message{cmd: MSG_PONG}
-	client.EnqueueMessage(m)
-	if client.uid == 0 {
-		log.Warning("client has't been authenticated")
-		return
-	}
-}
-
-func (client *Client) HandleACK(ack *MessageACK) {
-	log.Info("ack:", ack.seq)
 }
 
 // 发送等待队列中的消息

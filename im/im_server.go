@@ -300,6 +300,7 @@ func main() {
 		app_route:         app_route,
 		app:               app,
 		config:            config,
+		server:            NewServer(),
 	}
 	if len(config.ws_address) > 0 {
 		go StartWSServer(config.ws_address, listener)
