@@ -1,1 +1,1 @@
-../protocol.go
+../protocol/protocol.go

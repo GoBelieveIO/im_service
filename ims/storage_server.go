@@ -19,22 +19,27 @@
 
 package main
 
-import "net"
-import "fmt"
-import "time"
-import "sync"
-import "runtime"
-import "flag"
-import "math/rand"
-import "os"
-import "net/rpc"
-import "net/http"
-import "os/signal"
-import "syscall"
-import "github.com/gomodule/redigo/redis"
-import "gopkg.in/natefinch/lumberjack.v2"
-import log "github.com/sirupsen/logrus"
-import rpc_storage "github.com/GoBelieveIO/im_service/storage"
+import (
+	"flag"
+	"fmt"
+	"math/rand"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+	"os/signal"
+	"runtime"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/gomodule/redigo/redis"
+	"gopkg.in/natefinch/lumberjack.v2"
+
+	log "github.com/sirupsen/logrus"
+
+	rpc_storage "github.com/GoBelieveIO/im_service/storage"
+)
 
 var (
 	VERSION       string

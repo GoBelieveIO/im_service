@@ -1,6 +1,6 @@
 module github.com/GoBelieveIO/im_service
 
-go 1.18
+go 1.22.4
 
 require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
@@ -20,7 +20,3 @@ require (
 	golang.org/x/sys v0.0.0-20210917161153-d61c044b1678 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
-
-replace github.com/GoBelieveIO/im_service/lru => ./lru
-
-replace github.com/GoBelieveIO/im_service/storage => ./storage

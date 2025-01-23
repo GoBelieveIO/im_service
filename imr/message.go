@@ -1,1 +1,1 @@
-../message.go
+../protocol/message.go

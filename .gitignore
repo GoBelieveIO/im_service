@@ -6,7 +6,7 @@ bin
 im/im
 ims/ims
 imr/imr
-benchmark
+benchmark/benchmark
 benchmark_group
 benchmark_connection
 benchmark_sender
@@ -14,5 +14,6 @@ main.test
 benchmark_storage
 benchmark_route
 benchmark_room
+ims/ims_truncate
 *.log
 *.pyc
