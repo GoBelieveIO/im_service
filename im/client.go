@@ -152,7 +152,6 @@ func (client *Client) Write() {
 			}
 		case <-client.lwt:
 			client.SendMessages()
-			break
 		}
 	}
 

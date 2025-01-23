@@ -346,7 +346,7 @@ func (group_manager *GroupManager) getLastEntryID() (string, error) {
 	}
 
 	var entries []interface{}
-	r, err = redis.Scan(r, &entries)
+	_, err = redis.Scan(r, &entries)
 	if err != nil {
 		log.Error("redis scan err:", err)
 		return "", err

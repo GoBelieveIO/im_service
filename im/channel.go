@@ -19,10 +19,13 @@
 
 package main
 
-import "net"
-import "time"
-import "sync"
-import log "github.com/sirupsen/logrus"
+import (
+	"net"
+	"sync"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 type Subscriber struct {
 	uids     map[int64]int
@@ -225,7 +228,7 @@ func (channel *Channel) GetAllRoomSubscriber() []*RouteRoomID {
 
 	subs := make([]*RouteRoomID, 0, 100)
 	for appid, s := range channel.subscribers {
-		for room_id, _ := range s.room_ids {
+		for room_id := range s.room_ids {
 			id := &RouteRoomID{appid: appid, room_id: room_id}
 			subs = append(subs, id)
 		}
@@ -330,7 +333,7 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 
 	for {
 		select {
-		case _ = <-closed_ch:
+		case <-closed_ch:
 			log.Info("channel closed")
 			return
 		case msg := <-channel.wt:

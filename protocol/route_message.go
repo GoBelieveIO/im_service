@@ -19,8 +19,10 @@
 
 package main
 
-import "bytes"
-import "encoding/binary"
+import (
+	"bytes"
+	"encoding/binary"
+)
 
 func init() {
 	message_creators[MSG_SUBSCRIBE] = func() IMessage { return new(SubscribeMessage) }
@@ -61,8 +63,7 @@ func (amsg *BatchPushMessage) ToData() []byte {
 	buffer := new(bytes.Buffer)
 	binary.Write(buffer, binary.BigEndian, amsg.appid)
 
-	var count uint16
-	count = uint16(len(amsg.receivers))
+	count := uint16(len(amsg.receivers))
 	binary.Write(buffer, binary.BigEndian, count)
 
 	for _, receiver := range amsg.receivers {

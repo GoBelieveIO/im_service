@@ -102,7 +102,7 @@ func (app_route *AppRoute) sendGroupMessage(appid int64, sender int64, device_ID
 			continue
 		}
 
-		for c, _ := range clients {
+		for c := range clients {
 			//不再发送给自己
 			if c.device_ID == device_ID && sender == c.uid {
 				continue
@@ -125,7 +125,7 @@ func (app_route *AppRoute) sendPeerMessage(sender_appid int64, sender int64, dev
 		return false
 	}
 
-	for c, _ := range clients {
+	for c := range clients {
 		//不再发送给自己
 		if c.device_ID == device_ID && sender == c.uid && sender_appid == c.appid {
 			continue
@@ -146,7 +146,7 @@ func (app_route *AppRoute) sendRoomMessage(appid int64, sender int64, device_ID 
 	if len(clients) == 0 {
 		return false
 	}
-	for c, _ := range clients {
+	for c := range clients {
 		//不再发送给自己
 		if c.device_ID == device_ID && sender == c.uid {
 			continue

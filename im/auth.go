@@ -86,7 +86,7 @@ func (a *JWTAuth) LoadUserAccessToken(tokenString string) (int64, int64, error) 
 	p := &jwt.Parser{UseJSONNumber: true}
 	token, err := p.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return a.jwt_signing_key, nil
 	})

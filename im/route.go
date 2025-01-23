@@ -59,7 +59,7 @@ func (route *Route) AddRoomClient(room_id int64, client *Client) {
 
 	if ROOM_SINGLE {
 		var old *Client = nil
-		for k, _ := range set {
+		for k := range set {
 			//根据uid去重
 			if k.uid == client.uid {
 				old = k
@@ -71,7 +71,7 @@ func (route *Route) AddRoomClient(room_id int64, client *Client) {
 		}
 	} else if ROOM_DEVICE_SINGLE && client.device_ID > 0 {
 		var old *Client = nil
-		for k, _ := range set {
+		for k := range set {
 			//根据uid&device_id去重
 			if k.uid == client.uid && k.device_ID == client.device_ID {
 				old = k

@@ -117,7 +117,6 @@ func SyncKeyService(redis_pool *redis.Pool,
 				log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
 				SaveSyncKey(redis_pool, s.AppID, s.Uid, s.LastMsgID)
 			}
-			break
 		case s := <-group_sync_c:
 			origin := GetGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID)
 			if s.LastMsgID > origin {
@@ -125,7 +124,6 @@ func SyncKeyService(redis_pool *redis.Pool,
 					s.AppID, s.Uid, s.GroupID, s.LastMsgID)
 				SaveGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID, s.LastMsgID)
 			}
-			break
 		}
 	}
 }

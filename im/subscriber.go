@@ -64,7 +64,7 @@ func HandleForbidden(data string, app_route *AppRoute) {
 
 	log.Infof("forbidden:%d %d %d client count:%d",
 		appid, uid, fb, len(clients))
-	for c, _ := range clients {
+	for c := range clients {
 		atomic.StoreInt32(&c.forbidden, int32(fb))
 	}
 }
@@ -84,7 +84,7 @@ func SubscribeRedis(app_route *AppRoute, config *RedisConfig) bool {
 		}
 	}
 
-	psc := redis.PubSubConn{c}
+	psc := redis.PubSubConn{Conn: c}
 	psc.Subscribe("speak_forbidden")
 
 	for {

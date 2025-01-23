@@ -21,6 +21,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -187,7 +188,7 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request, app *App, r
 	}
 
 	members := set.NewIntSet()
-	marray, err := obj.Get("members").Array()
+	marray, _ := obj.Get("members").Array()
 	for _, m := range marray {
 		if _, ok := m.(json.Number); ok {
 			member, err := m.(json.Number).Int64()
@@ -204,7 +205,7 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request, app *App, r
 	group := loader.LoadGroup(group_id)
 	if group != nil {
 		ms := group.Members()
-		for m, _ := range ms {
+		for m := range ms {
 			members.Add(m)
 		}
 		is_super = group.super
@@ -225,7 +226,7 @@ func PostGroupNotification(w http.ResponseWriter, req *http.Request, app *App, r
 }
 
 func PostPeerMessage(w http.ResponseWriter, req *http.Request, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
 		return
@@ -270,7 +271,7 @@ func PostPeerMessage(w http.ResponseWriter, req *http.Request, app *App, server_
 }
 
 func PostGroupMessage(w http.ResponseWriter, req *http.Request, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
 		return
@@ -425,7 +426,7 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request, rpc_storage *R
 		return
 	}
 
-	ph, err := rpc_storage.SyncMessage(appid, uid, 0, msgid)
+	ph, _ := rpc_storage.SyncMessage(appid, uid, 0, msgid)
 	messages := ph.Messages
 
 	if len(messages) > 0 {
@@ -514,7 +515,7 @@ func GetOfflineCount(w http.ResponseWriter, req *http.Request, redis_pool *redis
 }
 
 func SendNotification(w http.ResponseWriter, req *http.Request, app *App) {
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
 		return
@@ -576,7 +577,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_s
 		WriteHttpError(400, "invalid json format", w)
 		return
 	}
-	for i, _ := range receivers {
+	for i := range receivers {
 		_, err = obj.Get("receivers").GetIndex(i).Int64()
 		if err != nil {
 			log.Warning("receivers contains non int receiver:", err)
@@ -584,7 +585,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_s
 			return
 		}
 	}
-	for i, _ := range receivers {
+	for i := range receivers {
 		uid := obj.Get("receivers").GetIndex(i).MustInt64()
 		sys := &SystemMessage{content}
 		msg := &Message{cmd: MSG_SYSTEM, body: sys}
@@ -607,7 +608,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_s
 }
 
 func SendRoomMessage(w http.ResponseWriter, req *http.Request, app *App) {
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
 		return
@@ -648,7 +649,7 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request, app *App) {
 }
 
 func SendCustomerMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_storage *RPCStorage) {
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		WriteHttpError(400, err.Error(), w)
 		return

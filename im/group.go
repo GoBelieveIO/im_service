@@ -19,11 +19,15 @@
 
 package main
 
-import "time"
-import "sync"
-import "database/sql"
-import mysql "github.com/go-sql-driver/mysql"
-import log "github.com/sirupsen/logrus"
+import (
+	"database/sql"
+	"sync"
+	"time"
+
+	mysql "github.com/go-sql-driver/mysql"
+
+	log "github.com/sirupsen/logrus"
+)
 
 type Group struct {
 	gid   int64
@@ -113,12 +117,12 @@ func (group *Group) IsMember(uid int64) bool {
 }
 
 func (group *Group) GetMemberTimestamp(uid int64) int {
-	ts, _ := group.members[uid]
+	ts := group.members[uid]
 	return int(ts & 0x7FFFFFFF)
 }
 
 func (group *Group) GetMemberMute(uid int64) bool {
-	t, _ := group.members[uid]
+	t := group.members[uid]
 	return int((t>>31)&0x01) != 0
 }
 
@@ -179,7 +183,7 @@ func LoadGroupMember(db *sql.DB, group_id int64) (map[int64]int64, error) {
 
 	defer stmtIns.Close()
 	members := make(map[int64]int64)
-	rows, err := stmtIns.Query(group_id)
+	rows, _ := stmtIns.Query(group_id)
 	for rows.Next() {
 		var uid int64
 		var timestamp int64
