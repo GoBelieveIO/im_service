@@ -19,22 +19,39 @@
 
 package main
 
-import "fmt"
-import "time"
-import "encoding/json"
-import log "github.com/sirupsen/logrus"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/gomodule/redigo/redis"
+	log "github.com/sirupsen/logrus"
+)
 
 const PUSH_QUEUE_TIMEOUT = 300
 
-func (client *Client) IsROMApp(appid int64) bool {
+type PushService struct {
+	pwt        chan *Push
+	redis_pool *redis.Pool
+}
+
+func NewPushService(redis_pool *redis.Pool) *PushService {
+	s := &PushService{}
+	s.pwt = make(chan *Push, 10000)
+	s.redis_pool = redis_pool
+	return s
+}
+
+func (push_service *PushService) Run() {
+	go push_service.Push()
+}
+
+func (push_service *PushService) IsROMApp(appid int64) bool {
 	return false
 }
 
 // 离线消息入apns队列
-func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
+func (push_service *PushService) PublishPeerMessage(appid int64, im *IMMessage) {
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["sender"] = im.sender
@@ -43,19 +60,16 @@ func (client *Client) PublishPeerMessage(appid int64, im *IMMessage) {
 
 	b, _ := json.Marshal(v)
 	var queue_name string
-	if client.IsROMApp(appid) {
+	if push_service.IsROMApp(appid) {
 		queue_name = fmt.Sprintf("push_queue_%d", appid)
 	} else {
 		queue_name = "push_queue"
 	}
 
-	client.PushChan(queue_name, b)
+	push_service.PushChan(queue_name, b)
 }
 
-func (client *Client) PublishCustomerMessageV2(appid int64, im *CustomerMessageV2) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
+func (push_service *PushService) PublishCustomerMessageV2(appid int64, im *CustomerMessageV2) {
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["sender_appid"] = im.sender_appid
@@ -66,19 +80,16 @@ func (client *Client) PublishCustomerMessageV2(appid int64, im *CustomerMessageV
 
 	b, _ := json.Marshal(v)
 	var queue_name string
-	if client.IsROMApp(appid) {
+	if push_service.IsROMApp(appid) {
 		queue_name = fmt.Sprintf("customer_push_queue_v2_%d", appid)
 	} else {
 		queue_name = "customer_push_queue_v2"
 	}
 
-	client.PushChan(queue_name, b)
+	push_service.PushChan(queue_name, b)
 }
 
-func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IMMessage) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
+func (push_service *PushService) PublishGroupMessage(appid int64, receivers []int64, im *IMMessage) {
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["sender"] = im.sender
@@ -88,41 +99,37 @@ func (client *Client) PublishGroupMessage(appid int64, receivers []int64, im *IM
 
 	b, _ := json.Marshal(v)
 	var queue_name string
-	if client.IsROMApp(appid) {
+	if push_service.IsROMApp(appid) {
 		queue_name = fmt.Sprintf("group_push_queue_%d", appid)
 	} else {
 		queue_name = "group_push_queue"
 	}
 
-	client.PushChan(queue_name, b)
+	push_service.PushChan(queue_name, b)
 }
 
-func (client *Client) PublishSystemMessage(appid, receiver int64, content string) {
-	conn := redis_pool.Get()
-	defer conn.Close()
-
+func (push_service *PushService) PublishSystemMessage(appid, receiver int64, content string) {
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["receiver"] = receiver
 	v["content"] = content
 
 	b, _ := json.Marshal(v)
-	var queue_name string
-	queue_name = "system_push_queue"
+	queue_name := "system_push_queue"
 
-	client.PushChan(queue_name, b)
+	push_service.PushChan(queue_name, b)
 }
 
-func (client *Client) PushChan(queue_name string, b []byte) {
+func (push_service *PushService) PushChan(queue_name string, b []byte) {
 	select {
-	case client.pwt <- &Push{queue_name, b}:
+	case push_service.pwt <- &Push{queue_name, b}:
 	default:
 		log.Warning("rpush message timeout")
 	}
 }
 
-func (client *Client) PushQueue(ps []*Push) {
-	conn := redis_pool.Get()
+func (push_service *PushService) PushQueue(ps []*Push) {
+	conn := push_service.redis_pool.Get()
 	defer conn.Close()
 
 	begin := time.Now()
@@ -145,7 +152,7 @@ func (client *Client) PushQueue(ps []*Push) {
 	}
 }
 
-func (client *Client) Push() {
+func (push_service *PushService) Push() {
 	//单次入redis队列消息限制
 	const PUSH_LIMIT = 1000
 	const WAIT_TIMEOUT = 500
@@ -155,7 +162,7 @@ func (client *Client) Push() {
 	for !closed {
 		ps = ps[:0]
 		//blocking for first message
-		p := <-client.pwt
+		p := <-push_service.pwt
 		if p == nil {
 			closed = true
 			break
@@ -166,7 +173,7 @@ func (client *Client) Push() {
 	Loop1:
 		for !closed {
 			select {
-			case p := <-client.pwt:
+			case p := <-push_service.pwt:
 				if p == nil {
 					closed = true
 				} else {
@@ -181,12 +188,12 @@ func (client *Client) Push() {
 		}
 
 		if closed {
-			client.PushQueue(ps)
+			push_service.PushQueue(ps)
 			return
 		}
 
 		if len(ps) >= PUSH_LIMIT {
-			client.PushQueue(ps)
+			push_service.PushQueue(ps)
 			continue
 		}
 
@@ -201,7 +208,7 @@ func (client *Client) Push() {
 			}
 			d := end.Sub(now)
 			select {
-			case p := <-client.pwt:
+			case p := <-push_service.pwt:
 				if p == nil {
 					closed = true
 				} else {
@@ -216,7 +223,7 @@ func (client *Client) Push() {
 		}
 
 		if len(ps) > 0 {
-			client.PushQueue(ps)
+			push_service.PushQueue(ps)
 		}
 	}
 }

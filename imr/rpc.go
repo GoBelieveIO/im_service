@@ -51,7 +51,7 @@ func WriteHttpError(status int, err string, w http.ResponseWriter) {
 
 // 获取当前所有在线的用户
 func GetOnlineClients(w http.ResponseWriter, req *http.Request) {
-	clients := GetClientSet()
+	clients := server.GetClientSet()
 
 	type App struct {
 		AppId int64   `json:"appid"`
@@ -115,7 +115,7 @@ func GetOnlineStatus(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	online := IsUserOnline(appid, uid)
+	online := server.IsUserOnline(appid, uid)
 	resp := make(map[string]interface{})
 	resp["online"] = online
 
