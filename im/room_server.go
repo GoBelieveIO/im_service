@@ -97,7 +97,7 @@ func (server *Server) HandleRoomIM(client *Client, msg *Message) {
 
 	m := &Message{cmd: MSG_ROOM_IM, body: room_im, body_data: room_im.ToData()}
 
-	client.SendRoomMessage(server.app, room_id, m)
+	server.SendRoomMessage(client, room_id, m)
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}}
 	r := client.EnqueueMessage(ack)

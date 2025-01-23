@@ -112,10 +112,10 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 	}
 
 	var rs Relationship = NoneRelationship
-	if server.config.friend_permission || server.config.enable_blacklist {
+	if server.friend_permission || server.enable_blacklist {
 		rs = server.relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
 	}
-	if server.config.friend_permission {
+	if server.friend_permission {
 		if !rs.IsMyFriend() {
 			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_NOT_MY_FRIEND}}
 			client.EnqueueMessage(ack)
@@ -130,7 +130,7 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 			return
 		}
 	}
-	if server.config.enable_blacklist {
+	if server.enable_blacklist {
 		if rs.IsInYourBlacklist() {
 			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_IN_YOUR_BLACKLIST}}
 			client.EnqueueMessage(ack)
@@ -163,16 +163,16 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m1 := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	client.SendMessage(server.app, msg.receiver, m1)
+	server.SendMessage(client, msg.receiver, m1)
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
-	client.SendMessage(server.app, msg.receiver, notify)
+	server.SendMessage(client, msg.receiver, notify)
 
 	//发送给自己的其它登录点
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
 	m2 := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	client.SendMessage(server.app, client.uid, m2)
+	server.SendMessage(client, client.uid, m2)
 	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
-	client.SendMessage(server.app, client.uid, notify)
+	server.SendMessage(client, client.uid, notify)
 
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}, meta: meta}
@@ -198,7 +198,7 @@ func (server *Server) HandleRTMessage(client *Client, msg *Message) {
 	}
 
 	m := &Message{cmd: MSG_RT, body: rt}
-	client.SendMessage(server.app, rt.receiver, m)
+	server.SendMessage(client, rt.receiver, m)
 
 	atomic.AddInt64(&server.server_summary.in_message_count, 1)
 	log.Infof("realtime message sender:%d receiver:%d", rt.sender, rt.receiver)

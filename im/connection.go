@@ -106,13 +106,7 @@ type Connection struct {
 	messages *list.List //待发送的消息队列 FIFO
 	mutex    sync.Mutex
 
-	// filter         *sensitive.Filter
-	// redis_pool     *redis.Pool
-	// app            *App
-	// app_route      *AppRoute
 	server_summary *ServerSummary
-	// rpc_storage    *RPCStorage
-	// config         *Config
 }
 
 func (client *Connection) Client() *Client {
@@ -138,31 +132,6 @@ func (client *Connection) isSender(msg *Message, device_id int64) bool {
 		}
 	}
 	return false
-}
-
-// 发送超级群消息
-func (client *Connection) SendGroupMessage(app *App, group *Group, msg *Message) {
-	appid := client.appid
-	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
-	app.SendGroupMessage(appid, group, msg, sender)
-}
-
-func (client *Connection) SendMessage(app *App, uid int64, msg *Message) bool {
-	appid := client.appid
-	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
-	app.SendMessage(appid, uid, msg, sender)
-	return true
-}
-
-func (client *Connection) SendAppMessage(app *App, appid int64, uid int64, msg *Message) bool {
-	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
-	app.SendMessage(appid, uid, msg, sender)
-	return true
-}
-func (client *Connection) SendRoomMessage(app *App, room_id int64, msg *Message) {
-	appid := client.appid
-	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
-	app.SendRoomMessage(appid, room_id, msg, sender)
 }
 
 func (client *Connection) EnqueueNonBlockContinueMessage(msg *Message, sub_msg *Message) bool {

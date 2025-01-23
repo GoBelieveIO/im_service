@@ -22,7 +22,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 	"path"
 	"runtime"
 	"time"
@@ -157,7 +156,6 @@ func initLog(config *Config) {
 
 func main() {
 	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
-	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 	if len(flag.Args()) == 0 {
@@ -286,20 +284,9 @@ func main() {
 
 	server := NewServer(group_manager, filter, redis_pool, server_summary, relationship_pool, auth, rpc_storage, sync_c, group_sync_c, app_route, app, config)
 	listener := &Listener{
-		group_manager:     group_manager,
-		filter:            filter,
-		redis_pool:        redis_pool,
-		server_summary:    server_summary,
-		relationship_pool: relationship_pool,
-		auth:              auth,
-		rpc_storage:       rpc_storage,
-		sync_c:            sync_c,
-		group_sync_c:      group_sync_c,
-		low_memory:        &low_memory,
-		app_route:         app_route,
-		app:               app,
-		config:            config,
-		server:            server,
+		server_summary: server_summary,
+		low_memory:     &low_memory,
+		server:         server,
 	}
 	if len(config.ws_address) > 0 {
 		go StartWSServer(config.ws_address, listener)

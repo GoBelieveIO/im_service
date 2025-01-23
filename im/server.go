@@ -1,16 +1,30 @@
+/**
+ * Copyright (c) 2014-2015, GoBelieve
+ * All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
 package main
 
 import (
 	"sync/atomic"
 	"time"
 
-	"crypto/tls"
-	"fmt"
-	"net"
-
 	"github.com/GoBelieveIO/im_service/storage"
 	"github.com/gomodule/redigo/redis"
-	"github.com/gorilla/websocket"
 	"github.com/importcjj/sensitive"
 
 	log "github.com/sirupsen/logrus"
@@ -27,7 +41,10 @@ type Server struct {
 	app_route      *AppRoute
 	server_summary *ServerSummary
 	rpc_storage    *RPCStorage
-	config         *Config
+
+	friend_permission bool //验证好友关系
+	enable_blacklist  bool //验证是否在对方的黑名单中
+	kefu_appid        int64
 
 	relationship_pool *RelationshipPool
 	sync_c            chan *storage.SyncHistory
@@ -36,89 +53,6 @@ type Server struct {
 	group_sync_c  chan *storage.SyncGroupHistory
 
 	auth Auth
-}
-
-type Listener struct {
-	group_manager     *GroupManager
-	redis_pool        *redis.Pool
-	filter            *sensitive.Filter
-	server_summary    *ServerSummary
-	relationship_pool *RelationshipPool
-	auth              Auth
-	rpc_storage       *RPCStorage
-	group_sync_c      chan *storage.SyncGroupHistory
-	sync_c            chan *storage.SyncHistory
-	low_memory        *int32
-	app_route         *AppRoute
-	app               *App
-	config            *Config
-	server            *Server
-}
-
-func handle_client(conn Conn, listener *Listener) {
-	low := atomic.LoadInt32(listener.low_memory)
-	if low != 0 {
-		log.Warning("low memory, drop new connection")
-		return
-	}
-	client := NewClient(conn, listener.server_summary, listener.server)
-	client.Run()
-}
-
-func handle_ws_client(conn *websocket.Conn, listener *Listener) {
-	handle_client(&WSConn{Conn: conn}, listener)
-}
-
-func handle_tcp_client(conn net.Conn, listener *Listener) {
-	handle_client(&NetConn{Conn: conn}, listener)
-}
-
-func ListenClient(port int, listener *Listener) {
-	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
-	listen, err := net.Listen("tcp", listen_addr)
-	if err != nil {
-		log.Errorf("listen err:%s", err)
-		return
-	}
-	tcp_listener, ok := listen.(*net.TCPListener)
-	if !ok {
-		log.Error("listen err")
-		return
-	}
-
-	for {
-		conn, err := tcp_listener.AcceptTCP()
-		if err != nil {
-			log.Errorf("accept err:%s", err)
-			return
-		}
-		log.Infoln("handle new connection, remote address:", conn.RemoteAddr())
-		handle_tcp_client(conn, listener)
-	}
-}
-
-func ListenSSL(port int, cert_file, key_file string, listener *Listener) {
-	cert, err := tls.LoadX509KeyPair(cert_file, key_file)
-	if err != nil {
-		log.Fatal("load cert err:", err)
-		return
-	}
-	config := &tls.Config{Certificates: []tls.Certificate{cert}}
-	addr := fmt.Sprintf(":%d", port)
-	listen, err := tls.Listen("tcp", addr, config)
-	if err != nil {
-		log.Fatal("ssl listen err:", err)
-	}
-
-	log.Infof("ssl listen...")
-	for {
-		conn, err := listen.Accept()
-		if err != nil {
-			log.Fatal("ssl accept err:", err)
-		}
-		log.Infoln("handle new ssl connection,  remote address:", conn.RemoteAddr())
-		handle_tcp_client(conn, listener)
-	}
 }
 
 func NewServer(
@@ -167,7 +101,9 @@ func NewServer(
 	s.group_sync_c = group_sync_c
 	s.app_route = app_route
 	s.app = app
-	s.config = config
+	s.enable_blacklist = config.enable_blacklist
+	s.friend_permission = config.friend_permission
+	s.kefu_appid = config.kefu_appid
 
 	return s
 }
@@ -237,6 +173,31 @@ func (server *Server) AddClient(client *Client) {
 	if is_new {
 		atomic.AddInt64(&server.server_summary.clientset_count, 1)
 	}
+}
+
+// 发送超级群消息
+func (server *Server) SendGroupMessage(client *Client, group *Group, msg *Message) {
+	appid := client.appid
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	server.app.SendGroupMessage(appid, group, msg, sender)
+}
+
+func (server *Server) SendMessage(client *Client, uid int64, msg *Message) bool {
+	appid := client.appid
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	server.app.SendMessage(appid, uid, msg, sender)
+	return true
+}
+
+func (server *Server) SendAppMessage(client *Client, appid int64, uid int64, msg *Message) bool {
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	server.app.SendMessage(appid, uid, msg, sender)
+	return true
+}
+func (server *Server) SendRoomMessage(client *Client, room_id int64, msg *Message) {
+	appid := client.appid
+	sender := &Sender{appid: client.appid, uid: client.uid, deviceID: client.device_ID}
+	server.app.SendRoomMessage(appid, room_id, msg, sender)
 }
 
 func (server *Server) Logout(client *Client) {
