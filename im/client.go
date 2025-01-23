@@ -20,37 +20,13 @@
 package main
 
 import (
-	"net"
 	"sync/atomic"
 	"time"
 
 	"container/list"
-	"crypto/tls"
-	"fmt"
 
-	"github.com/GoBelieveIO/im_service/storage"
-	"github.com/gomodule/redigo/redis"
-	"github.com/gorilla/websocket"
-	"github.com/importcjj/sensitive"
 	log "github.com/sirupsen/logrus"
 )
-
-type Listener struct {
-	group_manager     *GroupManager
-	redis_pool        *redis.Pool
-	filter            *sensitive.Filter
-	server_summary    *ServerSummary
-	relationship_pool *RelationshipPool
-	auth              Auth
-	rpc_storage       *RPCStorage
-	group_sync_c      chan *storage.SyncGroupHistory
-	sync_c            chan *storage.SyncHistory
-	low_memory        *int32
-	app_route         *AppRoute
-	app               *App
-	config            *Config
-	server            *Server
-}
 
 type ClientObserver interface {
 	onClientMessage(*Client, *Message)
@@ -59,28 +35,10 @@ type ClientObserver interface {
 
 type Client struct {
 	Connection //必须放在结构体首部
-	*PeerClient
-	*GroupClient
-	*RoomClient
-	*CustomerClient
-	auth     Auth
-	observer ClientObserver
+	observer   ClientObserver
 }
 
-func NewClient(conn Conn,
-	group_manager *GroupManager,
-	filter *sensitive.Filter,
-	redis_pool *redis.Pool,
-	server_summary *ServerSummary,
-	relationship_pool *RelationshipPool,
-	auth Auth,
-	rpc_storage *RPCStorage,
-	sync_c chan *storage.SyncHistory,
-	group_sync_c chan *storage.SyncGroupHistory,
-	app_route *AppRoute,
-	app *App,
-	config *Config,
-	observer ClientObserver) *Client {
+func NewClient(conn Conn, server_summary *ServerSummary, observer ClientObserver) *Client {
 	client := new(Client)
 
 	//初始化Connection
@@ -91,92 +49,12 @@ func NewClient(conn Conn,
 
 	client.lwt = make(chan int, 1) //only need 1
 	client.messages = list.New()
-	client.filter = filter
-	client.redis_pool = redis_pool
 	client.server_summary = server_summary
-	client.rpc_storage = rpc_storage
-	client.auth = auth
-	client.config = config
 	client.observer = observer
 
 	atomic.AddInt64(&server_summary.nconnections, 1)
 
-	client.PeerClient = &PeerClient{&client.Connection, relationship_pool, sync_c}
-	client.GroupClient = &GroupClient{&client.Connection, group_manager, group_sync_c}
-	client.RoomClient = &RoomClient{Connection: &client.Connection}
-	client.CustomerClient = NewCustomerClient(&client.Connection)
 	return client
-}
-
-func handle_client(conn Conn, listener *Listener) {
-	low := atomic.LoadInt32(listener.low_memory)
-	if low != 0 {
-		log.Warning("low memory, drop new connection")
-		return
-	}
-	client := NewClient(conn, listener.group_manager,
-		listener.filter, listener.redis_pool,
-		listener.server_summary, listener.relationship_pool,
-		listener.auth, listener.rpc_storage, listener.sync_c,
-		listener.group_sync_c, listener.app_route,
-		listener.app, listener.config, listener.server)
-	client.Run()
-}
-
-func handle_ws_client(conn *websocket.Conn, listener *Listener) {
-	handle_client(&WSConn{Conn: conn}, listener)
-}
-
-func handle_tcp_client(conn net.Conn, listener *Listener) {
-	handle_client(&NetConn{Conn: conn}, listener)
-}
-
-func ListenClient(port int, listener *Listener) {
-	listen_addr := fmt.Sprintf("0.0.0.0:%d", port)
-	listen, err := net.Listen("tcp", listen_addr)
-	if err != nil {
-		log.Errorf("listen err:%s", err)
-		return
-	}
-	tcp_listener, ok := listen.(*net.TCPListener)
-	if !ok {
-		log.Error("listen err")
-		return
-	}
-
-	for {
-		conn, err := tcp_listener.AcceptTCP()
-		if err != nil {
-			log.Errorf("accept err:%s", err)
-			return
-		}
-		log.Infoln("handle new connection, remote address:", conn.RemoteAddr())
-		handle_tcp_client(conn, listener)
-	}
-}
-
-func ListenSSL(port int, cert_file, key_file string, listener *Listener) {
-	cert, err := tls.LoadX509KeyPair(cert_file, key_file)
-	if err != nil {
-		log.Fatal("load cert err:", err)
-		return
-	}
-	config := &tls.Config{Certificates: []tls.Certificate{cert}}
-	addr := fmt.Sprintf(":%d", port)
-	listen, err := tls.Listen("tcp", addr, config)
-	if err != nil {
-		log.Fatal("ssl listen err:", err)
-	}
-
-	log.Infof("ssl listen...")
-	for {
-		conn, err := listen.Accept()
-		if err != nil {
-			log.Fatal("ssl accept err:", err)
-		}
-		log.Infoln("handle new ssl connection,  remote address:", conn.RemoteAddr())
-		handle_tcp_client(conn, listener)
-	}
 }
 
 func (client *Client) Read() {
@@ -204,66 +82,6 @@ func (client *Client) Read() {
 		if t3-t2 > 2 {
 			log.Infof("client:%d handle message is too slow:%d %d", client.uid, t2, t3)
 		}
-	}
-}
-
-func (client *Client) RemoveClient() {
-	if client.uid == 0 {
-		return
-	}
-	route := client.app_route.FindRoute(client.appid)
-	if route == nil {
-		log.Warning("can't find app route")
-		return
-	}
-	_, is_delete := route.RemoveClient(client)
-
-	if is_delete {
-		atomic.AddInt64(&client.server_summary.clientset_count, -1)
-	}
-	if client.room_id > 0 {
-		route.RemoveRoomClient(client.room_id, client)
-	}
-}
-
-func (client *Client) HandleClientClosed() {
-	atomic.AddInt64(&client.server_summary.nconnections, -1)
-	if client.uid > 0 {
-		atomic.AddInt64(&client.server_summary.nclients, -1)
-	}
-	atomic.StoreInt32(&client.closed, 1)
-
-	client.RemoveClient()
-
-	//quit when write goroutine received
-	client.wt <- nil
-
-	client.RoomClient.Logout()
-	client.PeerClient.Logout()
-}
-
-func (client *Client) AuthToken(token string) (int64, int64, int, bool, error) {
-	appid, uid, err := client.auth.LoadUserAccessToken(token)
-
-	if err != nil {
-		return 0, 0, 0, false, err
-	}
-
-	forbidden, notification_on, err := GetUserPreferences(client.redis_pool, appid, uid)
-	if err != nil {
-		return 0, 0, 0, false, err
-	}
-
-	return appid, uid, forbidden, notification_on, nil
-}
-
-func (client *Client) AddClient() {
-	route := client.app_route.FindOrAddRoute(client.appid)
-	is_new := route.AddClient(client)
-
-	atomic.AddInt64(&client.server_summary.nclients, 1)
-	if is_new {
-		atomic.AddInt64(&client.server_summary.clientset_count, 1)
 	}
 }
 

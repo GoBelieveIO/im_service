@@ -36,12 +36,12 @@ func (server *Server) HandleSync(client *Client, msg *Message) {
 	last_id := sync_key.sync_key
 
 	if last_id == 0 {
-		last_id = GetSyncKey(client.redis_pool, client.appid, client.uid)
+		last_id = GetSyncKey(server.redis_pool, client.appid, client.uid)
 	}
 
 	log.Infof("syncing message:%d %d %d %d", client.appid, client.uid, client.device_ID, last_id)
 
-	ph, err := client.rpc_storage.SyncMessage(client.appid, client.uid, client.device_ID, last_id)
+	ph, err := server.rpc_storage.SyncMessage(client.appid, client.uid, client.device_ID, last_id)
 	if err != nil {
 		log.Warning("sync message err:", err)
 		return
@@ -94,7 +94,7 @@ func (server *Server) HandleSyncKey(client *Client, msg *Message) {
 			Uid:       client.uid,
 			LastMsgID: last_id,
 		}
-		client.sync_c <- s
+		server.sync_c <- s
 	}
 }
 
@@ -112,10 +112,10 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 	}
 
 	var rs Relationship = NoneRelationship
-	if client.config.friend_permission || client.config.enable_blacklist {
-		rs = client.relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
+	if server.config.friend_permission || server.config.enable_blacklist {
+		rs = server.relationship_pool.GetRelationship(client.appid, client.uid, msg.receiver)
 	}
-	if client.config.friend_permission {
+	if server.config.friend_permission {
 		if !rs.IsMyFriend() {
 			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_NOT_MY_FRIEND}}
 			client.EnqueueMessage(ack)
@@ -130,7 +130,7 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 			return
 		}
 	}
-	if client.config.enable_blacklist {
+	if server.config.enable_blacklist {
 		if rs.IsInYourBlacklist() {
 			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_IN_YOUR_BLACKLIST}}
 			client.EnqueueMessage(ack)
@@ -140,39 +140,39 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 	}
 
 	if message.flag&MESSAGE_FLAG_TEXT != 0 {
-		FilterDirtyWord(client.filter, msg)
+		FilterDirtyWord(server.filter, msg)
 	}
 	msg.timestamp = int32(time.Now().Unix())
 	m := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, body: msg}
 
-	msgid, prev_msgid, err := client.rpc_storage.SaveMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := server.rpc_storage.SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:%v", msg.sender, msg.receiver, err)
 		return
 	}
 
 	//保存到自己的消息队列，这样用户的其它登陆点也能接受到自己发出的消息
-	msgid2, prev_msgid2, err := client.rpc_storage.SaveMessage(client.appid, msg.sender, client.device_ID, m)
+	msgid2, prev_msgid2, err := server.rpc_storage.SaveMessage(client.appid, msg.sender, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save peer message:%d %d err:%v", msg.sender, msg.receiver, err)
 		return
 	}
 
 	//推送外部通知
-	client.app.PushMessage(client.appid, msg.receiver, m)
+	server.app.PushMessage(client.appid, msg.receiver, m)
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m1 := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	client.SendMessage(msg.receiver, m1)
+	client.SendMessage(server.app, msg.receiver, m1)
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
-	client.SendMessage(msg.receiver, notify)
+	client.SendMessage(server.app, msg.receiver, notify)
 
 	//发送给自己的其它登录点
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
 	m2 := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	client.SendMessage(client.uid, m2)
+	client.SendMessage(server.app, client.uid, m2)
 	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
-	client.SendMessage(client.uid, notify)
+	client.SendMessage(server.app, client.uid, notify)
 
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}, meta: meta}
@@ -181,13 +181,13 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 		log.Warning("send peer message ack error")
 	}
 
-	atomic.AddInt64(&client.server_summary.in_message_count, 1)
+	atomic.AddInt64(&server.server_summary.in_message_count, 1)
 	log.Infof("peer message sender:%d receiver:%d msgid:%d\n", msg.sender, msg.receiver, msgid)
 }
 
 func (server *Server) HandleUnreadCount(client *Client, msg *Message) {
 	u := msg.body.(*MessageUnreadCount)
-	SetUserUnreadCount(client.redis_pool, client.appid, client.uid, u.count)
+	SetUserUnreadCount(server.redis_pool, client.appid, client.uid, u.count)
 }
 
 func (server *Server) HandleRTMessage(client *Client, msg *Message) {
@@ -198,8 +198,8 @@ func (server *Server) HandleRTMessage(client *Client, msg *Message) {
 	}
 
 	m := &Message{cmd: MSG_RT, body: rt}
-	client.SendMessage(rt.receiver, m)
+	client.SendMessage(server.app, rt.receiver, m)
 
-	atomic.AddInt64(&client.server_summary.in_message_count, 1)
+	atomic.AddInt64(&server.server_summary.in_message_count, 1)
 	log.Infof("realtime message sender:%d receiver:%d", rt.sender, rt.receiver)
 }

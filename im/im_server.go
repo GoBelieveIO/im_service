@@ -286,6 +286,7 @@ func main() {
 
 	go StartHttpServer(config.http_listen_address, app_route, app, redis_pool, server_summary, rpc_storage)
 
+	server := NewServer(group_manager, filter, redis_pool, server_summary, relationship_pool, auth, rpc_storage, sync_c, group_sync_c, app_route, app, config)
 	listener := &Listener{
 		group_manager:     group_manager,
 		filter:            filter,
@@ -300,7 +301,7 @@ func main() {
 		app_route:         app_route,
 		app:               app,
 		config:            config,
-		server:            NewServer(),
+		server:            server,
 	}
 	if len(config.ws_address) > 0 {
 		go StartWSServer(config.ws_address, listener)

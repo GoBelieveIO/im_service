@@ -30,21 +30,21 @@ import (
 
 func (server *Server) HandleSuperGroupMessage(client *Client, msg *IMMessage, group *Group) (int64, int64, error) {
 	m := &Message{cmd: MSG_GROUP_IM, version: DEFAULT_VERSION, body: msg}
-	msgid, prev_msgid, err := client.rpc_storage.SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := server.rpc_storage.SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save group message:%d %d err:%s", msg.sender, msg.receiver, err)
 		return 0, 0, err
 	}
 
 	//推送外部通知
-	client.app.PushGroupMessage(client.appid, group, m)
+	server.app.PushGroupMessage(client.appid, group, m)
 
 	m.meta = &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m.flag = MESSAGE_FLAG_PUSH | MESSAGE_FLAG_SUPER_GROUP
-	client.SendGroupMessage(group, m)
+	client.SendGroupMessage(server.app, group, m)
 
 	notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncKey{group_id: msg.receiver, sync_key: msgid}}
-	client.SendGroupMessage(group, notify)
+	client.SendGroupMessage(server.app, group, notify)
 
 	return msgid, prev_msgid, nil
 }
@@ -66,7 +66,7 @@ func (server *Server) HandleGroupMessage(client *Client, im *IMMessage, group *G
 	}
 
 	gm.content = im.content
-	deliver := client.app.GetGroupMessageDeliver(group.gid)
+	deliver := server.app.GetGroupMessageDeliver(group.gid)
 	m := &Message{cmd: MSG_PENDING_GROUP_MESSAGE, body: gm}
 
 	c := make(chan *Metadata, 1)
@@ -94,12 +94,12 @@ func (server *Server) HandleGroupIMMessage(client *Client, message *Message) {
 		return
 	}
 	if message.flag&MESSAGE_FLAG_TEXT != 0 {
-		FilterDirtyWord(client.filter, msg)
+		FilterDirtyWord(server.filter, msg)
 	}
 
 	msg.timestamp = int32(time.Now().Unix())
 
-	loader := client.app.GetGroupLoader(msg.receiver)
+	loader := server.app.GetGroupLoader(msg.receiver)
 	group := loader.LoadGroup(msg.receiver)
 	if group == nil {
 		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq), status: ACK_GROUP_NONEXIST}}
@@ -141,7 +141,7 @@ func (server *Server) HandleGroupIMMessage(client *Client, message *Message) {
 		log.Warning("send group message ack error")
 	}
 
-	atomic.AddInt64(&client.server_summary.in_message_count, 1)
+	atomic.AddInt64(&server.server_summary.in_message_count, 1)
 	log.Infof("group message sender:%d group id:%d super:%v", msg.sender, msg.receiver, group.super)
 	if meta != nil {
 		log.Info("group message ack meta:", meta.sync_key, meta.prev_sync_key)
@@ -157,7 +157,7 @@ func (server *Server) HandleGroupSync(client *Client, msg *Message) {
 
 	group_id := group_sync_key.group_id
 
-	group := client.group_manager.FindGroup(group_id)
+	group := server.group_manager.FindGroup(group_id)
 	if group == nil {
 		log.Warning("can't find group:", group_id)
 		return
@@ -172,11 +172,11 @@ func (server *Server) HandleGroupSync(client *Client, msg *Message) {
 
 	last_id := group_sync_key.sync_key
 	if last_id == 0 {
-		last_id = GetGroupSyncKey(client.redis_pool, client.appid, client.uid, group_id)
+		last_id = GetGroupSyncKey(server.redis_pool, client.appid, client.uid, group_id)
 	}
 
 	log.Info("sync group message...", group_sync_key.sync_key, last_id)
-	gh, err := client.rpc_storage.SyncGroupMessage(client.appid, client.uid, client.device_ID, group_sync_key.group_id, last_id, int32(ts))
+	gh, err := server.rpc_storage.SyncGroupMessage(client.appid, client.uid, client.device_ID, group_sync_key.group_id, last_id, int32(ts))
 	if err != nil {
 		log.Warning("sync message err:", err)
 		return
@@ -222,6 +222,6 @@ func (server *Server) HandleGroupSyncKey(client *Client, msg *Message) {
 			GroupID:   group_id,
 			LastMsgID: last_id,
 		}
-		client.group_sync_c <- s
+		server.group_sync_c <- s
 	}
 }

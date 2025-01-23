@@ -41,7 +41,7 @@ func (server *Server) HandleCustomerMessageV2(client *Client, message *Message) 
 	}
 
 	//限制在客服app和普通app之间
-	if msg.sender_appid != client.config.kefu_appid && msg.receiver_appid != client.config.kefu_appid {
+	if msg.sender_appid != server.config.kefu_appid && msg.receiver_appid != server.config.kefu_appid {
 		log.Warningf("invalid appid, customer message sender:%d %d receiver:%d %d",
 			msg.sender_appid, msg.sender, msg.receiver_appid, msg.receiver)
 		return
@@ -54,34 +54,34 @@ func (server *Server) HandleCustomerMessageV2(client *Client, message *Message) 
 
 	m := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, body: msg}
 
-	msgid, prev_msgid, err := client.rpc_storage.SaveMessage(msg.receiver_appid, msg.receiver, client.device_ID, m)
+	msgid, prev_msgid, err := server.rpc_storage.SaveMessage(msg.receiver_appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return
 	}
 
-	msgid2, prev_msgid2, err := client.rpc_storage.SaveMessage(msg.sender_appid, msg.sender, client.device_ID, m)
+	msgid2, prev_msgid2, err := server.rpc_storage.SaveMessage(msg.sender_appid, msg.sender, client.device_ID, m)
 	if err != nil {
 		log.Warning("save customer message err:", err)
 		return
 	}
 
-	client.app.PushMessage(msg.receiver_appid, msg.receiver, m)
+	server.app.PushMessage(msg.receiver_appid, msg.receiver, m)
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
 	m1 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	client.SendAppMessage(msg.receiver_appid, msg.receiver, m1)
+	client.SendAppMessage(server.app, msg.receiver_appid, msg.receiver, m1)
 
 	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
-	client.SendAppMessage(msg.receiver_appid, msg.receiver, notify)
+	client.SendAppMessage(server.app, msg.receiver_appid, msg.receiver, notify)
 
 	//发送给自己的其它登录点
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
 	m2 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
-	client.SendMessage(client.uid, m2)
+	client.SendMessage(server.app, client.uid, m2)
 
 	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid2}}
-	client.SendMessage(client.uid, notify)
+	client.SendMessage(server.app, client.uid, notify)
 
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}, meta: meta}

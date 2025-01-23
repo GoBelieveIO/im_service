@@ -38,9 +38,9 @@ func (server *Server) HandleEnterRoom(client *Client, msg *Message) {
 	if room_id == 0 || client.room_id == room_id {
 		return
 	}
-	route := client.app_route.FindOrAddRoute(client.appid)
+	route := server.app_route.FindOrAddRoute(client.appid)
 	if client.room_id > 0 {
-		channel := client.app.GetRoomChannel(client.room_id)
+		channel := server.app.GetRoomChannel(client.room_id)
 		channel.UnsubscribeRoom(client.appid, client.room_id)
 
 		route.RemoveRoomClient(client.room_id, client.Client())
@@ -48,7 +48,7 @@ func (server *Server) HandleEnterRoom(client *Client, msg *Message) {
 
 	client.room_id = room_id
 	route.AddRoomClient(client.room_id, client.Client())
-	channel := client.app.GetRoomChannel(client.room_id)
+	channel := server.app.GetRoomChannel(client.room_id)
 	channel.SubscribeRoom(client.appid, client.room_id)
 }
 
@@ -68,9 +68,9 @@ func (server *Server) HandleLeaveRoom(client *Client, msg *Message) {
 		return
 	}
 
-	route := client.app_route.FindOrAddRoute(client.appid)
+	route := server.app_route.FindOrAddRoute(client.appid)
 	route.RemoveRoomClient(client.room_id, client.Client())
-	channel := client.app.GetRoomChannel(client.room_id)
+	channel := server.app.GetRoomChannel(client.room_id)
 	channel.UnsubscribeRoom(client.appid, client.room_id)
 	client.room_id = 0
 }
@@ -97,7 +97,7 @@ func (server *Server) HandleRoomIM(client *Client, msg *Message) {
 
 	m := &Message{cmd: MSG_ROOM_IM, body: room_im, body_data: room_im.ToData()}
 
-	client.SendRoomMessage(room_id, m)
+	client.SendRoomMessage(server.app, room_id, m)
 
 	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}}
 	r := client.EnqueueMessage(ack)
@@ -105,5 +105,5 @@ func (server *Server) HandleRoomIM(client *Client, msg *Message) {
 		log.Warning("send room message ack error")
 	}
 
-	atomic.AddInt64(&client.server_summary.in_message_count, 1)
+	atomic.AddInt64(&server.server_summary.in_message_count, 1)
 }

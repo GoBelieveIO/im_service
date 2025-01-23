@@ -66,7 +66,6 @@ func Summary(rw http.ResponseWriter, req *http.Request, app_route *AppRoute, ser
 	if err != nil {
 		log.Info("write err:", err)
 	}
-	return
 }
 
 func Stack(rw http.ResponseWriter, req *http.Request) {
