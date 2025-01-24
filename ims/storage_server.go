@@ -29,7 +29,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"sync"
 	"syscall"
 	"time"
 
@@ -37,8 +36,6 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	log "github.com/sirupsen/logrus"
-
-	rpc_storage "github.com/GoBelieveIO/im_service/storage"
 )
 
 var (
@@ -52,7 +49,6 @@ var (
 var storage *Storage
 var config *StorageConfig
 var master *Master
-var mutex sync.Mutex
 var server_summary *ServerSummary
 
 func init() {
@@ -92,7 +88,7 @@ func ListenSyncClient() {
 }
 
 // Signal handler
-func waitSignal() error {
+func waitSignal() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	for {
@@ -104,7 +100,6 @@ func waitSignal() error {
 			storage.SaveIndexFileAndExit()
 		}
 	}
-	return nil // It'll never get here.
 }
 
 // flush storage file
@@ -131,7 +126,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
 			timeout := time.Duration(2) * time.Second
-			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
+			c, err := redis.Dial("tcp", server, redis.DialConnectTimeout(timeout))
 			if err != nil {
 				return nil, err
 			}
@@ -174,8 +169,7 @@ func StartHttpServer(addr string) {
 }
 
 func ListenRPCClient() {
-	var rpc_s rpc_storage.RPCStorage
-	rpc_s = new(RPCStorage)
+	rpc_s := new(RPCStorage)
 	rpc.Register(rpc_s)
 	rpc.HandleHTTP()
 

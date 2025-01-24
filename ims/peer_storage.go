@@ -19,13 +19,16 @@
 
 package main
 
-import "fmt"
-import "io"
-import "os"
-import "time"
-import "bytes"
-import "encoding/binary"
-import log "github.com/sirupsen/logrus"
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"os"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
 
 const BATCH_SIZE = 1000
 const PEER_INDEX_FILE_NAME = "peer_index.v3"
@@ -390,24 +393,6 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 
 func (client *PeerStorage) isGroupMessage(msg *Message) bool {
 	return msg.cmd == MSG_GROUP_IM || msg.flag&MESSAGE_FLAG_GROUP != 0
-}
-
-func (client *PeerStorage) isSender(msg *Message, appid int64, uid int64) bool {
-	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-		m := msg.body.(*IMMessage)
-		if m.sender == uid {
-			return true
-		}
-	}
-
-	if msg.cmd == MSG_CUSTOMER_V2 {
-		m := msg.body.(*CustomerMessageV2)
-		if m.sender_appid == appid && m.sender == uid {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (storage *PeerStorage) GetNewCount(appid int64, uid int64, last_received_id int64) int {
