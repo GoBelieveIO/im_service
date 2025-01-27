@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
 	"bytes"
@@ -259,6 +259,19 @@ type GroupSyncNotify = GroupSyncKey
 type Metadata struct {
 	sync_key      int64
 	prev_sync_key int64
+}
+
+func NewMetadata(sync_key int64, prev_sync_key int64) *Metadata {
+	m := &Metadata{sync_key: sync_key, prev_sync_key: prev_sync_key}
+	return m
+}
+
+func (meta *Metadata) SyncKey() int64 {
+	return meta.sync_key
+}
+
+func (meta *Metadata) PrevSyncKey() int64 {
+	return meta.prev_sync_key
 }
 
 func (sync *Metadata) ToData() []byte {

@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -12,19 +12,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
-
-type ServerSummary struct {
-	nconnections      int64
-	nclients          int64
-	clientset_count   int64 //重复uid的client对象不计数
-	in_message_count  int64
-	out_message_count int64
-}
-
-func NewServerSummary() *ServerSummary {
-	s := new(ServerSummary)
-	return s
-}
 
 func Summary(rw http.ResponseWriter, req *http.Request, app_route *AppRoute, server_summary *ServerSummary) {
 	m, _ := url.ParseQuery(req.URL.RawQuery)

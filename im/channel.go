@@ -27,7 +27,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/GoBelieveIO/im_service/protocol"
 	. "github.com/GoBelieveIO/im_service/protocol"
+	"github.com/GoBelieveIO/im_service/server"
 )
 
 type Subscriber struct {
@@ -49,13 +51,13 @@ type Channel struct {
 	mutex       sync.Mutex
 	subscribers map[int64]*Subscriber
 
-	dispatch       func(*RouteMessage)
-	dispatch_group func(*RouteMessage)
-	dispatch_room  func(*RouteMessage)
+	dispatch       func(appid, uid int64, msg *Message)
+	dispatch_group func(appid, group_id int64, msg *Message)
+	dispatch_room  func(appid, room_id int64, msg *Message)
 }
 
-func NewChannel(addr string, f func(*RouteMessage),
-	f2 func(*RouteMessage), f3 func(*RouteMessage)) *Channel {
+func NewChannel(addr string, f func(appid, uid int64, msg *Message),
+	f2 func(appid, group_id int64, msg *Message), f3 func(appid, room_id int64, msg *Message)) *Channel {
 	channel := new(Channel)
 	channel.subscribers = make(map[int64]*Subscriber)
 	channel.dispatch = f
@@ -187,9 +189,9 @@ func (channel *Channel) PublishMessage(appid int64, uid int64, msg *Message) {
 
 	amsg := &RouteMessage{appid: appid, receiver: uid, timestamp: now, msg: msg_buf}
 	if msg.Meta != nil {
-		meta := msg.Meta.(*Metadata)
-		amsg.msgid = meta.sync_key
-		amsg.prev_msgid = meta.prev_sync_key
+		meta := msg.Meta.(*server.Metadata)
+		amsg.msgid = meta.SyncKey()
+		amsg.prev_msgid = meta.PrevSyncKey()
 	}
 	channel.Publish(amsg)
 }
@@ -203,9 +205,9 @@ func (channel *Channel) PublishGroupMessage(appid int64, group_id int64, msg *Me
 
 	amsg := &RouteMessage{appid: appid, receiver: group_id, timestamp: now, msg: msg_buf}
 	if msg.Meta != nil {
-		meta := msg.Meta.(*Metadata)
-		amsg.msgid = meta.sync_key
-		amsg.prev_msgid = meta.prev_sync_key
+		meta := msg.Meta.(*server.Metadata)
+		amsg.msgid = meta.SyncKey()
+		amsg.prev_msgid = meta.PrevSyncKey()
 	}
 	channel.PublishGroup(amsg)
 }
@@ -341,6 +343,75 @@ func (channel *Channel) ReSubscribeRoom(conn *net.TCPConn, seq int) int {
 	return seq
 }
 
+func (channel *Channel) DispatchMessage(amsg *RouteMessage) {
+	now := time.Now().UnixNano()
+	d := now - amsg.timestamp
+
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := protocol.ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch message")
+		return
+	}
+
+	log.Infof("dispatch app message:%s %d %d", protocol.Command(msg.Cmd), msg.Flag, d)
+	if d > int64(time.Second) {
+		log.Warning("dispatch app message slow...")
+	}
+
+	if amsg.msgid > 0 {
+		if (msg.Flag & protocol.MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
+		}
+		meta := server.NewMetadata(amsg.msgid, amsg.prev_msgid)
+		msg.Meta = meta
+	}
+	channel.dispatch(amsg.appid, amsg.receiver, msg)
+}
+
+func (channel *Channel) DispatchRoomMessage(amsg *RouteMessage) {
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := protocol.ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch room message")
+		return
+	}
+
+	log.Info("dispatch room message", protocol.Command(msg.Cmd))
+
+	room_id := amsg.receiver
+	channel.dispatch_room(amsg.appid, room_id, msg)
+}
+
+func (channel *Channel) DispatchGroupMessage(amsg *RouteMessage) {
+	now := time.Now().UnixNano()
+	d := now - amsg.timestamp
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := protocol.ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch room message")
+		return
+	}
+	log.Infof("dispatch group message:%s %d %d", protocol.Command(msg.Cmd), msg.Flag, d)
+	if d > int64(time.Second) {
+		log.Warning("dispatch group message slow...")
+	}
+
+	if amsg.msgid > 0 {
+		if (msg.Flag & protocol.MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
+		}
+		if (msg.Flag & protocol.MESSAGE_FLAG_SUPER_GROUP) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
+		}
+
+		meta := server.NewMetadata(amsg.msgid, amsg.prev_msgid)
+		msg.Meta = meta
+	}
+
+	channel.dispatch_group(amsg.appid, amsg.receiver, msg)
+}
+
 func (channel *Channel) RunOnce(conn *net.TCPConn) {
 	defer conn.Close()
 
@@ -360,17 +431,17 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 			if msg.Cmd == MSG_PUBLISH {
 				amsg := msg.Body.(*RouteMessage)
 				if channel.dispatch != nil {
-					channel.dispatch(amsg)
+					channel.DispatchMessage(amsg)
 				}
 			} else if msg.Cmd == MSG_PUBLISH_ROOM {
 				amsg := msg.Body.(*RouteMessage)
 				if channel.dispatch_room != nil {
-					channel.dispatch_room(amsg)
+					channel.DispatchRoomMessage(amsg)
 				}
 			} else if msg.Cmd == MSG_PUBLISH_GROUP {
 				amsg := msg.Body.(*RouteMessage)
 				if channel.dispatch_group != nil {
-					channel.dispatch_group(amsg)
+					channel.DispatchGroupMessage(amsg)
 				}
 			} else {
 				log.Error("unknown message cmd:", msg.Cmd)

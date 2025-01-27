@@ -20,6 +20,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"path"
@@ -29,8 +30,9 @@ import (
 	"github.com/gomodule/redigo/redis"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/GoBelieveIO/im_service/protocol"
+	"github.com/GoBelieveIO/im_service/server"
 	"github.com/GoBelieveIO/im_service/storage"
-	"github.com/bitly/go-simplejson"
 	"github.com/importcjj/sensitive"
 	log "github.com/sirupsen/logrus"
 )
@@ -71,62 +73,6 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
-// 过滤敏感词
-func FilterDirtyWord(filter *sensitive.Filter, msg *IMMessage) {
-	if filter == nil {
-		log.Info("filter is null")
-		return
-	}
-
-	obj, err := simplejson.NewJson([]byte(msg.content))
-	if err != nil {
-		log.Info("filter dirty word, can't decode json")
-		return
-	}
-
-	text, err := obj.Get("text").String()
-	if err != nil {
-		log.Info("filter dirty word, can't get text")
-		return
-	}
-
-	if exist, _ := filter.FindIn(text); exist {
-		t := filter.RemoveNoise(text)
-		replacedText := filter.Replace(t, '*')
-
-		obj.Set("text", replacedText)
-		c, err := obj.Encode()
-		if err != nil {
-			log.Errorf("json encode err:%s", err)
-			return
-		}
-		msg.content = string(c)
-		log.Infof("filter dirty word, replace text %s with %s", text, replacedText)
-	}
-}
-
-func SyncKeyService(redis_pool *redis.Pool,
-	sync_c chan *storage.SyncHistory,
-	group_sync_c chan *storage.SyncGroupHistory) {
-	for {
-		select {
-		case s := <-sync_c:
-			origin := GetSyncKey(redis_pool, s.AppID, s.Uid)
-			if s.LastMsgID > origin {
-				log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
-				SaveSyncKey(redis_pool, s.AppID, s.Uid, s.LastMsgID)
-			}
-		case s := <-group_sync_c:
-			origin := GetGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID)
-			if s.LastMsgID > origin {
-				log.Infof("save group sync key:%d %d %d %d",
-					s.AppID, s.Uid, s.GroupID, s.LastMsgID)
-				SaveGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID, s.LastMsgID)
-			}
-		}
-	}
-}
-
 func initLog(config *Config) {
 	if config.log_filename != "" {
 		writer := &lumberjack.Logger{
@@ -152,6 +98,74 @@ func initLog(config *Config) {
 	} else if level == "fatal" {
 		log.SetLevel(log.FatalLevel)
 	}
+}
+
+func DispatchMessage(app_route *server.AppRoute, amsg *RouteMessage) {
+	now := time.Now().UnixNano()
+	d := now - amsg.timestamp
+
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := protocol.ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch message")
+		return
+	}
+
+	log.Infof("dispatch app message:%s %d %d", protocol.Command(msg.Cmd), msg.Flag, d)
+	if d > int64(time.Second) {
+		log.Warning("dispatch app message slow...")
+	}
+
+	if amsg.msgid > 0 {
+		if (msg.Flag & protocol.MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
+		}
+		meta := server.NewMetadata(amsg.msgid, amsg.prev_msgid)
+		msg.Meta = meta
+	}
+	app_route.SendPeerMessage(amsg.appid, amsg.receiver, msg)
+}
+
+func DispatchRoomMessage(app_route *server.AppRoute, amsg *RouteMessage) {
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := protocol.ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch room message")
+		return
+	}
+
+	log.Info("dispatch room message", protocol.Command(msg.Cmd))
+
+	room_id := amsg.receiver
+	app_route.SendRoomMessage(amsg.appid, room_id, msg)
+}
+
+func DispatchGroupMessage(app *server.App, amsg *RouteMessage) {
+	now := time.Now().UnixNano()
+	d := now - amsg.timestamp
+	mbuffer := bytes.NewBuffer(amsg.msg)
+	msg := protocol.ReceiveMessage(mbuffer)
+	if msg == nil {
+		log.Warning("can't dispatch room message")
+		return
+	}
+	log.Infof("dispatch group message:%s %d %d", protocol.Command(msg.Cmd), msg.Flag, d)
+	if d > int64(time.Second) {
+		log.Warning("dispatch group message slow...")
+	}
+
+	if amsg.msgid > 0 {
+		if (msg.Flag & protocol.MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
+		}
+		if (msg.Flag & protocol.MESSAGE_FLAG_SUPER_GROUP) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
+		}
+
+		meta := server.NewMetadata(amsg.msgid, amsg.prev_msgid)
+		msg.Meta = meta
+	}
+
 }
 
 func main() {
@@ -195,42 +209,43 @@ func main() {
 	var low_memory int32 //低内存状态
 	sync_c := make(chan *storage.SyncHistory, 100)
 	group_sync_c := make(chan *storage.SyncGroupHistory, 100)
-	server_summary := NewServerSummary()
+	server_summary := server.NewServerSummary()
 
 	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
 		config.redis_db)
 
 	auth := NewAuth(config.auth_method)
 
-	rpc_storage := NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
+	rpc_storage := server.NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
 
-	var group_service *GroupService
+	var group_service *server.GroupService
 	if len(config.mysqldb_datasource) > 0 {
-		group_service = NewGroupService(redis_pool, config.mysqldb_datasource, config.redis_config())
+		group_service = server.NewGroupService(redis_pool, config.mysqldb_datasource, config.redis_config())
 		group_service.Start()
 	}
 
-	app_route := NewAppRoute()
-	app := &App{}
-	dispatch_app_message := func(m *RouteMessage) {
-		DispatchMessage(app_route, m)
+	app_route := server.NewAppRoute()
+	app := &server.App{}
+	dispatch_app_message := func(appid, uid int64, msg *protocol.Message) {
+		app_route.SendPeerMessage(appid, uid, msg)
 	}
-	dispatch_room_message := func(m *RouteMessage) {
-		DispatchRoomMessage(app_route, m)
+	dispatch_room_message := func(appid, room_id int64, msg *protocol.Message) {
+		app_route.SendRoomMessage(appid, room_id, msg)
 	}
-	dispatch_group_message := func(m *RouteMessage) {
-		DispatchGroupMessage(app, m)
+	dispatch_group_message := func(appid, group_id int64, msg *protocol.Message) {
+		loader := app.GetGroupLoader(group_id)
+		loader.DispatchMessage(msg, group_id, appid)
 	}
-	route_channels := make([]RouteChannel, 0)
+	route_channels := make([]server.RouteChannel, 0)
 	for _, addr := range config.route_addrs {
 		channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
 
-	var group_route_channels []RouteChannel
+	var group_route_channels []server.RouteChannel
 	if len(config.group_route_addrs) > 0 {
-		group_route_channels = make([]RouteChannel, 0)
+		group_route_channels = make([]server.RouteChannel, 0)
 		for _, addr := range config.group_route_addrs {
 			channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 			channel.Start()
@@ -240,26 +255,23 @@ func main() {
 		group_route_channels = route_channels
 	}
 
-	group_message_delivers := make([]*GroupMessageDeliver, config.group_deliver_count)
+	group_message_delivers := make([]*server.GroupMessageDeliver, config.group_deliver_count)
 	for i := 0; i < config.group_deliver_count; i++ {
 		q := fmt.Sprintf("q%d", i)
 		r := path.Join(config.pending_root, q)
-		deliver := NewGroupMessageDeliver(r, group_service.GroupManager, app, rpc_storage)
+		deliver := server.NewGroupMessageDeliver(r, group_service.GroupManager, app, rpc_storage)
 		deliver.Start()
 		group_message_delivers[i] = deliver
 	}
 
-	group_loaders := make([]*GroupLoader, config.group_deliver_count)
+	group_loaders := make([]*server.GroupLoader, config.group_deliver_count)
 	for i := 0; i < config.group_deliver_count; i++ {
-		loader := NewGroupLoader(group_service.GroupManager, app_route)
+		loader := server.NewGroupLoader(group_service.GroupManager, app_route)
 		loader.Start()
 		group_loaders[i] = loader
 	}
 
-	app.route_channels = route_channels
-	app.group_route_channels = group_route_channels
-	app.group_message_delivers = group_message_delivers
-	app.group_loaders = group_loaders
+	app.Init(app_route, route_channels, group_route_channels, group_message_delivers, group_loaders)
 
 	var filter *sensitive.Filter
 	if len(config.word_file) > 0 {
@@ -267,22 +279,25 @@ func main() {
 		filter.LoadWordDict(config.word_file)
 	}
 
-	go ListenRedis(app_route, config.redis_config())
-	go SyncKeyService(redis_pool, sync_c, group_sync_c)
+	go server.ListenRedis(app_route, config.redis_config())
+	go server.SyncKeyService(redis_pool, sync_c, group_sync_c)
 
 	if config.memory_limit > 0 {
 		go MemStatService(&low_memory, config)
 	}
 
-	var relationship_pool *RelationshipPool
+	var relationship_pool *server.RelationshipPool
 	if config.friend_permission || config.enable_blacklist {
-		relationship_pool = NewRelationshipPool(config, redis_pool)
+		relationship_pool = server.NewRelationshipPool(config.mysqldb_datasource, redis_pool)
 		relationship_pool.Start()
 	}
 
 	go StartHttpServer(config.http_listen_address, app_route, app, redis_pool, server_summary, rpc_storage)
 
-	server := NewServer(group_service.GroupManager, filter, redis_pool, server_summary, relationship_pool, auth, rpc_storage, sync_c, group_sync_c, app_route, app, config)
+	server := server.NewServer(group_service.GroupManager, filter, redis_pool,
+		server_summary, relationship_pool, auth,
+		rpc_storage, sync_c, group_sync_c, app_route, app,
+		config.enable_blacklist, config.friend_permission, config.kefu_appid)
 	listener := &Listener{
 		server_summary: server_summary,
 		low_memory:     &low_memory,

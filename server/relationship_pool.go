@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
 	"database/sql"
@@ -77,11 +77,11 @@ type RelationshipPool struct {
 	redis_config  *RedisConfig
 }
 
-func NewRelationshipPool(config *Config, redis_pool *redis.Pool) *RelationshipPool {
+func NewRelationshipPool(mysqldb_datasource string, redis_pool *redis.Pool) *RelationshipPool {
 	rp := &RelationshipPool{}
 	rp.items = &sync.Map{}
 
-	db, err := sql.Open("mysql", config.mysqldb_datasource)
+	db, err := sql.Open("mysql", mysqldb_datasource)
 	if err != nil {
 		log.Fatal("open db:", err)
 	}

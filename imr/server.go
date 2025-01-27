@@ -26,18 +26,19 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	. "github.com/GoBelieveIO/im_service/protocol"
+	srv "github.com/GoBelieveIO/im_service/server"
 )
 
 type Server struct {
 	clients      ClientSet
 	mutex        sync.Mutex
-	push_service *PushService
+	push_service *srv.PushService
 }
 
 func NewServer(redis_pool *redis.Pool) *Server {
 	s := &Server{}
 	s.clients = NewClientSet()
-	s.push_service = NewPushService(redis_pool)
+	s.push_service = srv.NewPushService(redis_pool)
 	return s
 }
 
@@ -116,17 +117,17 @@ func (server *Server) HandlePush(client *Client, pmsg *BatchPushMessage) {
 	cmd := pmsg.msg.Cmd
 	if len(off_members) > 0 {
 		if cmd == MSG_GROUP_IM {
-			server.push_service.PublishGroupMessage(pmsg.appid, off_members, pmsg.msg.Body.(*IMMessage))
+			server.push_service.PublishGroupMessage(pmsg.appid, off_members, pmsg.msg.Body.(*srv.IMMessage))
 		} else if cmd == MSG_IM {
 			//assert len(off_members) == 1
-			server.push_service.PublishPeerMessage(pmsg.appid, pmsg.msg.Body.(*IMMessage))
+			server.push_service.PublishPeerMessage(pmsg.appid, pmsg.msg.Body.(*srv.IMMessage))
 		} else if cmd == MSG_SYSTEM {
 			//assert len(off_members) == 1
 			receiver := off_members[0]
-			sys := pmsg.msg.Body.(*SystemMessage)
-			server.push_service.PublishSystemMessage(pmsg.appid, receiver, sys.notification)
+			sys := pmsg.msg.Body.(*srv.SystemMessage)
+			server.push_service.PublishSystemMessage(pmsg.appid, receiver, sys)
 		} else if cmd == MSG_CUSTOMER_V2 {
-			server.push_service.PublishCustomerMessageV2(pmsg.appid, pmsg.msg.Body.(*CustomerMessageV2))
+			server.push_service.PublishCustomerMessageV2(pmsg.appid, pmsg.msg.Body.(*srv.CustomerMessageV2))
 		}
 	}
 }

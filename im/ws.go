@@ -20,20 +20,11 @@
 package main
 
 import (
-	"bytes"
-	"errors"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-
-	. "github.com/GoBelieveIO/im_service/protocol"
 )
-
-func ReadBinaryMesage(b []byte) (*Message, error) {
-	reader := bytes.NewReader(b)
-	return ReceiveClientMessage(reader)
-}
 
 func CheckOrigin(r *http.Request) bool {
 	// allow all connections by default
@@ -81,32 +72,4 @@ func StartWSServer(address string, listener *Listener) {
 	if err != nil {
 		log.Fatalf("listen err:%s", err)
 	}
-}
-
-func ReadWebsocketMessage(conn *websocket.Conn) (*Message, error) {
-	messageType, p, err := conn.ReadMessage()
-	if err != nil {
-		log.Info("read websocket err:", err)
-		return nil, err
-	}
-	if messageType == websocket.BinaryMessage {
-		return ReadBinaryMesage(p)
-	} else {
-		log.Error("invalid websocket message type:", messageType)
-		return nil, errors.New("invalid message type")
-	}
-}
-
-func SendWebsocketBinaryMessage(conn *websocket.Conn, msg *Message) error {
-	w, err := conn.NextWriter(websocket.BinaryMessage)
-	if err != nil {
-		log.Info("get next writer fail")
-		return err
-	}
-	err = SendMessage(w, msg)
-	if err != nil {
-		return err
-	}
-	err = w.Close()
-	return err
 }

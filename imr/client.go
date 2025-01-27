@@ -27,11 +27,6 @@ import (
 	"github.com/GoBelieveIO/im_service/protocol"
 )
 
-type Push struct {
-	queue_name string
-	content    []byte
-}
-
 type ClientObserver interface {
 	onClientMessage(client *Client, msg *protocol.Message)
 	onClientClose(client *Client)

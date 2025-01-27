@@ -24,13 +24,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/GoBelieveIO/im_service/server"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gomodule/redigo/redis"
 )
-
-type Auth interface {
-	LoadUserAccessToken(token string) (int64, int64, error)
-}
 
 type RedisAuth struct {
 	redis_pool *redis.Pool
@@ -117,15 +114,15 @@ func (a *JWTAuth) LoadUserAccessToken(tokenString string) (int64, int64, error) 
 	}
 }
 
-func NewRedisAuth() Auth {
+func NewRedisAuth() server.Auth {
 	return &RedisAuth{}
 }
 
-func NewJWTAuth() Auth {
+func NewJWTAuth() server.Auth {
 	return &JWTAuth{}
 }
 
-func NewAuth(method string) Auth {
+func NewAuth(method string) server.Auth {
 	if method == "redis" {
 		return NewRedisAuth()
 	} else if method == "jwt" {

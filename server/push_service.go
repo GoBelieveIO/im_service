@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
 	"encoding/json"
@@ -29,6 +29,11 @@ import (
 )
 
 const PUSH_QUEUE_TIMEOUT = 300
+
+type Push struct {
+	queue_name string
+	content    []byte
+}
 
 type PushService struct {
 	pwt        chan *Push
@@ -108,7 +113,8 @@ func (push_service *PushService) PublishGroupMessage(appid int64, receivers []in
 	push_service.pushChan(queue_name, b)
 }
 
-func (push_service *PushService) PublishSystemMessage(appid, receiver int64, content string) {
+func (push_service *PushService) PublishSystemMessage(appid, receiver int64, sys *SystemMessage) {
+	content := sys.notification
 	v := make(map[string]interface{})
 	v["appid"] = appid
 	v["receiver"] = receiver

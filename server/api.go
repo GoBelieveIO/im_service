@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
 	"encoding/json"
@@ -31,6 +31,7 @@ import (
 	"io/ioutil"
 
 	. "github.com/GoBelieveIO/im_service/protocol"
+
 	"github.com/GoBelieveIO/im_service/set"
 	"github.com/bitly/go-simplejson"
 	"github.com/gomodule/redigo/redis"

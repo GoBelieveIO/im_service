@@ -17,14 +17,10 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
-	"bytes"
 	"sync/atomic"
-	"time"
-
-	log "github.com/sirupsen/logrus"
 
 	. "github.com/GoBelieveIO/im_service/protocol"
 )
@@ -53,6 +49,19 @@ type App struct {
 	group_message_delivers []*GroupMessageDeliver
 
 	group_loaders []*GroupLoader
+}
+
+func (app *App) Init(
+	app_route *AppRoute,
+	route_channels []RouteChannel,
+	group_route_channels []RouteChannel,
+	group_message_delivers []*GroupMessageDeliver,
+	group_loaders []*GroupLoader) {
+	app.app_route = app_route
+	app.route_channels = route_channels
+	app.group_route_channels = group_route_channels
+	app.group_message_delivers = group_message_delivers
+	app.group_loaders = group_loaders
 }
 
 func (app *App) GetChannel(uid int64) RouteChannel {
@@ -188,74 +197,4 @@ func (app *App) PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 func (app *App) PublishRoomMessage(appid int64, room_id int64, m *Message) {
 	channel := app.GetRoomChannel(room_id)
 	channel.PublishRoomMessage(appid, room_id, m)
-}
-
-func DispatchMessage(app_route *AppRoute, amsg *RouteMessage) {
-	now := time.Now().UnixNano()
-	d := now - amsg.timestamp
-
-	mbuffer := bytes.NewBuffer(amsg.msg)
-	msg := ReceiveMessage(mbuffer)
-	if msg == nil {
-		log.Warning("can't dispatch message")
-		return
-	}
-
-	log.Infof("dispatch app message:%s %d %d", Command(msg.Cmd), msg.Flag, d)
-	if d > int64(time.Second) {
-		log.Warning("dispatch app message slow...")
-	}
-
-	if amsg.msgid > 0 {
-		if (msg.Flag & MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", msg.Flag)
-		}
-		meta := &Metadata{sync_key: amsg.msgid, prev_sync_key: amsg.prev_msgid}
-		msg.Meta = meta
-	}
-	app_route.SendPeerMessage(amsg.appid, amsg.receiver, msg)
-}
-
-func DispatchRoomMessage(app_route *AppRoute, amsg *RouteMessage) {
-	mbuffer := bytes.NewBuffer(amsg.msg)
-	msg := ReceiveMessage(mbuffer)
-	if msg == nil {
-		log.Warning("can't dispatch room message")
-		return
-	}
-
-	log.Info("dispatch room message", Command(msg.Cmd))
-
-	room_id := amsg.receiver
-	app_route.SendRoomMessage(amsg.appid, room_id, msg)
-}
-
-func DispatchGroupMessage(app *App, amsg *RouteMessage) {
-	now := time.Now().UnixNano()
-	d := now - amsg.timestamp
-	mbuffer := bytes.NewBuffer(amsg.msg)
-	msg := ReceiveMessage(mbuffer)
-	if msg == nil {
-		log.Warning("can't dispatch room message")
-		return
-	}
-	log.Infof("dispatch group message:%s %d %d", Command(msg.Cmd), msg.Flag, d)
-	if d > int64(time.Second) {
-		log.Warning("dispatch group message slow...")
-	}
-
-	if amsg.msgid > 0 {
-		if (msg.Flag & MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", msg.Flag)
-		}
-		if (msg.Flag & MESSAGE_FLAG_SUPER_GROUP) == 0 {
-			log.Fatal("invalid message flag", msg.Flag)
-		}
-
-		meta := &Metadata{sync_key: amsg.msgid, prev_sync_key: amsg.prev_msgid}
-		msg.Meta = meta
-	}
-
-	loader := app.GetGroupLoader(amsg.receiver)
-	loader.DispatchMessage(msg, amsg.receiver, amsg.appid)
 }

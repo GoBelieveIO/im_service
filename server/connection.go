@@ -17,9 +17,11 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
+	"bytes"
+	"errors"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -66,6 +68,39 @@ func (conn *NetConn) WriteMessage(msg *Message) error {
 
 type WSConn struct {
 	*websocket.Conn
+}
+
+func ReadBinaryMesage(b []byte) (*Message, error) {
+	reader := bytes.NewReader(b)
+	return ReceiveClientMessage(reader)
+}
+
+func ReadWebsocketMessage(conn *websocket.Conn) (*Message, error) {
+	messageType, p, err := conn.ReadMessage()
+	if err != nil {
+		log.Info("read websocket err:", err)
+		return nil, err
+	}
+	if messageType == websocket.BinaryMessage {
+		return ReadBinaryMesage(p)
+	} else {
+		log.Error("invalid websocket message type:", messageType)
+		return nil, errors.New("invalid message type")
+	}
+}
+
+func SendWebsocketBinaryMessage(conn *websocket.Conn, msg *Message) error {
+	w, err := conn.NextWriter(websocket.BinaryMessage)
+	if err != nil {
+		log.Info("get next writer fail")
+		return err
+	}
+	err = SendMessage(w, msg)
+	if err != nil {
+		return err
+	}
+	err = w.Close()
+	return err
 }
 
 func (ws *WSConn) ReadMessage() (*Message, error) {

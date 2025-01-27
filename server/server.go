@@ -17,13 +17,14 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
 	"sync/atomic"
 	"time"
 
 	"github.com/GoBelieveIO/im_service/storage"
+	"github.com/bitly/go-simplejson"
 	"github.com/gomodule/redigo/redis"
 	"github.com/importcjj/sensitive"
 
@@ -31,6 +32,10 @@ import (
 
 	. "github.com/GoBelieveIO/im_service/protocol"
 )
+
+type Auth interface {
+	LoadUserAccessToken(token string) (int64, int64, error)
+}
 
 type MessageHandler func(*Client, *Message)
 
@@ -69,7 +74,9 @@ func NewServer(
 	group_sync_c chan *storage.SyncGroupHistory,
 	app_route *AppRoute,
 	app *App,
-	config *Config) *Server {
+	enable_blacklist bool,
+	friend_permission bool,
+	kefu_appid int64) *Server {
 	s := &Server{}
 
 	s.handlers[MSG_AUTH_TOKEN] = s.HandleAuthToken
@@ -103,9 +110,9 @@ func NewServer(
 	s.group_sync_c = group_sync_c
 	s.app_route = app_route
 	s.app = app
-	s.enable_blacklist = config.enable_blacklist
-	s.friend_permission = config.friend_permission
-	s.kefu_appid = config.kefu_appid
+	s.enable_blacklist = enable_blacklist
+	s.friend_permission = friend_permission
+	s.kefu_appid = kefu_appid
 
 	return s
 }
@@ -312,4 +319,60 @@ func (server *Server) HandlePing(client *Client, _ *Message) {
 func (server *Server) HandleACK(client *Client, msg *Message) {
 	ack := msg.Body.(*MessageACK)
 	log.Info("ack:", ack.seq)
+}
+
+// 过滤敏感词
+func FilterDirtyWord(filter *sensitive.Filter, msg *IMMessage) {
+	if filter == nil {
+		log.Info("filter is null")
+		return
+	}
+
+	obj, err := simplejson.NewJson([]byte(msg.content))
+	if err != nil {
+		log.Info("filter dirty word, can't decode json")
+		return
+	}
+
+	text, err := obj.Get("text").String()
+	if err != nil {
+		log.Info("filter dirty word, can't get text")
+		return
+	}
+
+	if exist, _ := filter.FindIn(text); exist {
+		t := filter.RemoveNoise(text)
+		replacedText := filter.Replace(t, '*')
+
+		obj.Set("text", replacedText)
+		c, err := obj.Encode()
+		if err != nil {
+			log.Errorf("json encode err:%s", err)
+			return
+		}
+		msg.content = string(c)
+		log.Infof("filter dirty word, replace text %s with %s", text, replacedText)
+	}
+}
+
+func SyncKeyService(redis_pool *redis.Pool,
+	sync_c chan *storage.SyncHistory,
+	group_sync_c chan *storage.SyncGroupHistory) {
+	for {
+		select {
+		case s := <-sync_c:
+			origin := GetSyncKey(redis_pool, s.AppID, s.Uid)
+			if s.LastMsgID > origin {
+				log.Infof("save sync key:%d %d %d", s.AppID, s.Uid, s.LastMsgID)
+				SaveSyncKey(redis_pool, s.AppID, s.Uid, s.LastMsgID)
+			}
+		case s := <-group_sync_c:
+			origin := GetGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID)
+			if s.LastMsgID > origin {
+				log.Infof("save group sync key:%d %d %d %d",
+					s.AppID, s.Uid, s.GroupID, s.LastMsgID)
+				SaveGroupSyncKey(redis_pool, s.AppID, s.Uid, s.GroupID, s.LastMsgID)
+			}
+		}
+	}
 }

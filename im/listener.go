@@ -27,30 +27,32 @@ import (
 
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/GoBelieveIO/im_service/server"
 )
 
 type Listener struct {
-	server_summary *ServerSummary
+	server_summary *server.ServerSummary
 	low_memory     *int32
-	server         *Server
+	server         *server.Server
 }
 
-func handle_client(conn Conn, listener *Listener) {
+func handle_client(conn server.Conn, listener *Listener) {
 	low := atomic.LoadInt32(listener.low_memory)
 	if low != 0 {
 		log.Warning("low memory, drop new connection")
 		return
 	}
-	client := NewClient(conn, listener.server_summary, listener.server)
+	client := server.NewClient(conn, listener.server_summary, listener.server)
 	client.Run()
 }
 
 func handle_ws_client(conn *websocket.Conn, listener *Listener) {
-	handle_client(&WSConn{Conn: conn}, listener)
+	handle_client(&server.WSConn{Conn: conn}, listener)
 }
 
 func handle_tcp_client(conn net.Conn, listener *Listener) {
-	handle_client(&NetConn{Conn: conn}, listener)
+	handle_client(&server.NetConn{Conn: conn}, listener)
 }
 
 func ListenClient(port int, listener *Listener) {

@@ -4,6 +4,7 @@ import (
 	"log"
 	"testing"
 
+	"github.com/GoBelieveIO/im_service/server"
 	"github.com/gomodule/redigo/redis"
 	"github.com/importcjj/sensitive"
 )
@@ -17,11 +18,12 @@ func TestFilter(t *testing.T) {
 	}
 	filter.AddWord("长者")
 
-	msg := &IMMessage{}
+	msg := &server.IMMessage{}
 
-	msg.content = "{\"text\": \"\\u6211\\u4e3a\\u5171*\\u4ea7\\u515a\\u7eed\\u4e00\\u79d2\"}"
-	FilterDirtyWord(filter, msg)
-	log.Println("msg:", string(msg.content))
+	//TODO
+	//msg.content = "{\"text\": \"\\u6211\\u4e3a\\u5171*\\u4ea7\\u515a\\u7eed\\u4e00\\u79d2\"}"
+	server.FilterDirtyWord(filter, msg)
+	//log.Println("msg:", string(msg.content))
 
 	s := "我为共*产党续一秒"
 	t1 := filter.RemoveNoise(s)
@@ -34,7 +36,7 @@ func Test_Relationship(t *testing.T) {
 	config := read_cfg("../bin/im.cfg")
 	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
 		config.redis_db)
-	relationship_pool := NewRelationshipPool(config, redis_pool)
+	relationship_pool := server.NewRelationshipPool(config.mysqldb_datasource, redis_pool)
 	rs := relationship_pool.GetRelationship(7, 1, 2)
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
 
@@ -101,7 +103,7 @@ func TestStreamRange(t *testing.T) {
 		}
 		log.Println("id:", id)
 
-		event := &GroupEvent{}
+		event := &server.GroupEvent{}
 		event.Id = id
 		err = redis.ScanStruct(fields, event)
 		if err != nil {
@@ -157,7 +159,7 @@ func TestStreamRead(t *testing.T) {
 		}
 		log.Println("id:", id)
 
-		event := &GroupEvent{}
+		event := &server.GroupEvent{}
 		event.Id = id
 		err = redis.ScanStruct(fields, event)
 		if err != nil {

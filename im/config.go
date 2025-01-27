@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/GoBelieveIO/im_service/server"
 	"github.com/richmonkey/cfg"
 )
 
@@ -72,14 +73,8 @@ type Config struct {
 	jwt_signing_key []byte
 }
 
-func (config *Config) redis_config() *RedisConfig {
-	return &RedisConfig{config.redis_address, config.redis_password, config.redis_db}
-}
-
-type RedisConfig struct {
-	redis_address  string
-	redis_password string
-	redis_db       int
+func (config *Config) redis_config() *server.RedisConfig {
+	return server.NewRedisConfig(config.redis_address, config.redis_password, config.redis_db)
 }
 
 func get_int(app_cfg map[string]string, key string) int {

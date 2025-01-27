@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
 import (
 	"context"
@@ -26,9 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	. "github.com/GoBelieveIO/im_service/protocol"
+	log "github.com/sirupsen/logrus"
 )
 
 // 后台发送普通群消息
@@ -159,6 +158,7 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 	}
 
 	for _, mb := range batch_members {
+
 		r, err := storage.rpc_storage.SavePeerGroupMessage(gm.appid, mb, gm.device_ID, m)
 		if err != nil {
 			log.Errorf("save peer group message:%d %d err:%s", gm.sender, gm.gid, err)

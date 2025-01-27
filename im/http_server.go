@@ -24,6 +24,7 @@ import (
 
 	"github.com/gomodule/redigo/redis"
 
+	"github.com/GoBelieveIO/im_service/server"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -36,20 +37,20 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(w, r)
 }
 
-func StartHttpServer(addr string, app_route *AppRoute, app *App, redis_pool *redis.Pool, server_summary *ServerSummary, rpc_storage *RPCStorage) {
-	http.HandleFunc("/stack", Stack)
-	handle_http2("/summary", Summary, app_route, server_summary)
-	handle_http2("/post_group_notification", PostGroupNotification, app, rpc_storage)
-	handle_http3("/post_peer_message", PostPeerMessage, app, server_summary, rpc_storage)
-	handle_http3("/post_group_message", PostGroupMessage, app, server_summary, rpc_storage)
-	handle_http2("/post_system_message", SendSystemMessage, app, rpc_storage)
-	handle_http("/post_notification", SendNotification, app)
-	handle_http("/post_room_message", SendRoomMessage, app)
-	handle_http2("/post_customer_message", SendCustomerMessage, app, rpc_storage)
-	handle_http("/post_realtime_message", SendRealtimeMessage, app)
-	handle_http2("/get_offline_count", GetOfflineCount, redis_pool, rpc_storage)
-	handle_http("/load_latest_message", LoadLatestMessage, rpc_storage)
-	handle_http("/load_history_message", LoadHistoryMessage, rpc_storage)
+func StartHttpServer(addr string, app_route *server.AppRoute, app *server.App, redis_pool *redis.Pool, server_summary *server.ServerSummary, rpc_storage *server.RPCStorage) {
+	http.HandleFunc("/stack", server.Stack)
+	handle_http2("/summary", server.Summary, app_route, server_summary)
+	handle_http2("/post_group_notification", server.PostGroupNotification, app, rpc_storage)
+	handle_http3("/post_peer_message", server.PostPeerMessage, app, server_summary, rpc_storage)
+	handle_http3("/post_group_message", server.PostGroupMessage, app, server_summary, rpc_storage)
+	handle_http2("/post_system_message", server.SendSystemMessage, app, rpc_storage)
+	handle_http("/post_notification", server.SendNotification, app)
+	handle_http("/post_room_message", server.SendRoomMessage, app)
+	handle_http2("/post_customer_message", server.SendCustomerMessage, app, rpc_storage)
+	handle_http("/post_realtime_message", server.SendRealtimeMessage, app)
+	handle_http2("/get_offline_count", server.GetOfflineCount, redis_pool, rpc_storage)
+	handle_http("/load_latest_message", server.LoadLatestMessage, rpc_storage)
+	handle_http("/load_history_message", server.LoadHistoryMessage, rpc_storage)
 
 	handler := loggingHandler{http.DefaultServeMux}
 

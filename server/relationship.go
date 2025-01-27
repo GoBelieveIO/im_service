@@ -17,11 +17,14 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package server
 
-import "database/sql"
-import mysql "github.com/go-sql-driver/mysql"
-import log "github.com/sirupsen/logrus"
+import (
+	"database/sql"
+
+	mysql "github.com/go-sql-driver/mysql"
+	log "github.com/sirupsen/logrus"
+)
 
 const NoneRelationship = 0
 
