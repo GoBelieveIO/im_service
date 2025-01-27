@@ -106,7 +106,7 @@ func checkFile(file_path string) bool {
 		log.Fatal("open file:", err)
 	}
 
-	file_size, err := file.Seek(0, os.SEEK_END)
+	file_size, err := file.Seek(0, io.SeekEnd)
 	if err != nil {
 		log.Fatal("seek file")
 	}
@@ -119,7 +119,7 @@ func checkFile(file_path string) bool {
 		return false
 	}
 
-	_, err = file.Seek(file_size-4, os.SEEK_SET)
+	_, err = file.Seek(file_size-4, io.SeekStart)
 	if err != nil {
 		log.Fatal("seek file")
 	}
@@ -143,7 +143,7 @@ func (storage *StorageFile) openWriteFile(block_NO int) {
 	if err != nil {
 		log.Fatal("open file:", err)
 	}
-	file_size, err := file.Seek(0, os.SEEK_END)
+	file_size, err := file.Seek(0, io.SeekEnd)
 	if err != nil {
 		log.Fatal("seek file")
 	}
@@ -176,7 +176,7 @@ func (storage *StorageFile) openReadFile(block_NO int) *os.File {
 			log.Fatal(err)
 		}
 	}
-	file_size, err := file.Seek(0, os.SEEK_END)
+	file_size, err := file.Seek(0, io.SeekEnd)
 	if err != nil {
 		log.Fatal("seek file")
 	}
@@ -257,7 +257,7 @@ func (storage *StorageFile) LoadMessage(msg_id int64) *Message {
 		return nil
 	}
 
-	_, err := file.Seek(int64(offset), os.SEEK_SET)
+	_, err := file.Seek(int64(offset), io.SeekStart)
 	if err != nil {
 		log.Warning("seek file")
 		return nil
@@ -315,7 +315,7 @@ func (storage *StorageFile) WriteMessage(file io.Writer, msg *Message) {
 
 // save without lock
 func (storage *StorageFile) saveMessage(msg *Message) int64 {
-	msgid, err := storage.file.Seek(0, os.SEEK_END)
+	msgid, err := storage.file.Seek(0, io.SeekEnd)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -333,7 +333,7 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 		}
 		storage.file.Close()
 		storage.openWriteFile(storage.block_NO + 1)
-		msgid, err = storage.file.Seek(0, os.SEEK_END)
+		msgid, err = storage.file.Seek(0, io.SeekEnd)
 		if err != nil {
 			log.Fatalln(err)
 		}
