@@ -26,6 +26,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 func ReadBinaryMesage(b []byte) (*Message, error) {

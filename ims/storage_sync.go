@@ -19,10 +19,15 @@
 
 package main
 
-import "net"
-import "sync"
-import "time"
-import log "github.com/sirupsen/logrus"
+import (
+	"net"
+	"sync"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
+)
 
 type SyncClient struct {
 	conn *net.TCPConn
@@ -42,18 +47,18 @@ func (client *SyncClient) RunLoop() {
 	if msg == nil {
 		return
 	}
-	if msg.cmd != MSG_STORAGE_SYNC_BEGIN {
+	if msg.Cmd != MSG_STORAGE_SYNC_BEGIN {
 		return
 	}
 
-	cursor := msg.body.(*SyncCursor)
+	cursor := msg.Body.(*SyncCursor)
 	log.Info("cursor msgid:", cursor.msgid)
 	c := storage.LoadSyncMessagesInBackground(cursor.msgid)
 
 	for batch := range c {
-		msg := &Message{cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, body: batch}
+		msg := &Message{Cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, Body: batch}
 		seq = seq + 1
-		msg.seq = seq
+		msg.Seq = seq
 		SendMessage(client.conn, msg)
 	}
 
@@ -68,7 +73,7 @@ func (client *SyncClient) RunLoop() {
 		}
 
 		seq = seq + 1
-		msg.seq = seq
+		msg.Seq = seq
 		err := SendMessage(client.conn, msg)
 		if err != nil {
 			break
@@ -127,7 +132,7 @@ func (master *Master) SendBatch(cache []*EMessage) {
 		batch.last_id = em.msgid
 		batch.msgs = append(batch.msgs, em.msg)
 	}
-	m := &Message{cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, body: batch}
+	m := &Message{Cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, Body: batch}
 	clients := master.CloneClientSet()
 	for c := range clients {
 		c.ewt <- m
@@ -192,9 +197,9 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 	cursor := &SyncCursor{msgid}
 	log.Info("cursor msgid:", msgid)
 
-	msg := &Message{cmd: MSG_STORAGE_SYNC_BEGIN, body: cursor}
+	msg := &Message{Cmd: MSG_STORAGE_SYNC_BEGIN, Body: cursor}
 	seq += 1
-	msg.seq = seq
+	msg.Seq = seq
 	SendMessage(conn, msg)
 
 	for {
@@ -203,14 +208,14 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 			return
 		}
 
-		if msg.cmd == MSG_STORAGE_SYNC_MESSAGE {
-			emsg := msg.body.(*EMessage)
+		if msg.Cmd == MSG_STORAGE_SYNC_MESSAGE {
+			emsg := msg.Body.(*EMessage)
 			storage.SaveSyncMessage(emsg)
-		} else if msg.cmd == MSG_STORAGE_SYNC_MESSAGE_BATCH {
-			mb := msg.body.(*MessageBatch)
+		} else if msg.Cmd == MSG_STORAGE_SYNC_MESSAGE_BATCH {
+			mb := msg.Body.(*MessageBatch)
 			storage.SaveSyncMessageBatch(mb)
 		} else {
-			log.Error("unknown message cmd:", Command(msg.cmd))
+			log.Error("unknown message cmd:", Command(msg.Cmd))
 		}
 	}
 }

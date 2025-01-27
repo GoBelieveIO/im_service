@@ -19,10 +19,13 @@
 
 package main
 
-import "os"
-import "bytes"
+import (
+	"bytes"
+	"os"
 
-import log "github.com/sirupsen/logrus"
+	. "github.com/GoBelieveIO/im_service/protocol"
+	log "github.com/sirupsen/logrus"
+)
 
 type Storage struct {
 	*StorageFile

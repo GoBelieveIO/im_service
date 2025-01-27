@@ -28,6 +28,8 @@ import (
 	"github.com/importcjj/sensitive"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 type MessageHandler func(*Client, *Message)
@@ -109,10 +111,10 @@ func NewServer(
 }
 
 func (server *Server) onClientMessage(client *Client, msg *Message) {
-	if h, ok := server.handlers[msg.cmd]; ok {
+	if h, ok := server.handlers[msg.Cmd]; ok {
 		h(client, msg)
 	} else {
-		log.Warning("Can't find message handler, cmd:", msg.cmd)
+		log.Warning("Can't find message handler, cmd:", msg.Cmd)
 	}
 }
 
@@ -239,7 +241,7 @@ func (server *Server) Login(client *Client) {
 }
 
 func (server *Server) HandleAuthToken(client *Client, m *Message) {
-	login, version := m.body.(*AuthenticationToken), m.version
+	login, version := m.Body.(*AuthenticationToken), m.Version
 
 	if client.uid > 0 {
 		log.Info("repeat login")
@@ -250,13 +252,13 @@ func (server *Server) HandleAuthToken(client *Client, m *Message) {
 	appid, uid, fb, on, err := server.AuthToken(client, login.token)
 	if err != nil {
 		log.Infof("auth token:%s err:%s", login.token, err)
-		msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{1}}
+		msg := &Message{Cmd: MSG_AUTH_STATUS, Version: version, Body: &AuthenticationStatus{1}}
 		client.EnqueueMessage(msg)
 		return
 	}
 	if uid == 0 {
 		log.Info("auth token uid==0")
-		msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{1}}
+		msg := &Message{Cmd: MSG_AUTH_STATUS, Version: version, Body: &AuthenticationStatus{1}}
 		client.EnqueueMessage(msg)
 		return
 	}
@@ -265,7 +267,7 @@ func (server *Server) HandleAuthToken(client *Client, m *Message) {
 		client.device_ID, err = GetDeviceID(server.redis_pool, login.device_id, int(login.platform_id))
 		if err != nil {
 			log.Info("auth token uid==0")
-			msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{1}}
+			msg := &Message{Cmd: MSG_AUTH_STATUS, Version: version, Body: &AuthenticationStatus{1}}
 			client.EnqueueMessage(msg)
 			return
 		}
@@ -290,7 +292,7 @@ func (server *Server) HandleAuthToken(client *Client, m *Message) {
 		login.token, client.appid, client.uid, client.device_id,
 		client.device_ID, client.forbidden, client.notification_on, client.online)
 
-	msg := &Message{cmd: MSG_AUTH_STATUS, version: version, body: &AuthenticationStatus{0}}
+	msg := &Message{Cmd: MSG_AUTH_STATUS, Version: version, Body: &AuthenticationStatus{0}}
 	client.EnqueueMessage(msg)
 
 	server.AddClient(client)
@@ -299,7 +301,7 @@ func (server *Server) HandleAuthToken(client *Client, m *Message) {
 }
 
 func (server *Server) HandlePing(client *Client, _ *Message) {
-	m := &Message{cmd: MSG_PONG}
+	m := &Message{Cmd: MSG_PONG}
 	client.EnqueueMessage(m)
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
@@ -308,6 +310,6 @@ func (server *Server) HandlePing(client *Client, _ *Message) {
 }
 
 func (server *Server) HandleACK(client *Client, msg *Message) {
-	ack := msg.body.(*MessageACK)
+	ack := msg.Body.(*MessageACK)
 	log.Info("ack:", ack.seq)
 }

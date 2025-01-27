@@ -19,12 +19,18 @@
 
 package main
 
-import "net/rpc"
-import "context"
-import "time"
-import "github.com/jackc/puddle"
-import log "github.com/sirupsen/logrus"
-import "github.com/GoBelieveIO/im_service/storage"
+import (
+	"context"
+	"net/rpc"
+	"time"
+
+	"github.com/jackc/puddle"
+
+	"github.com/GoBelieveIO/im_service/storage"
+	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
+)
 
 const MAX_STORAGE_RPC_POOL_SIZE = 100
 
@@ -137,7 +143,7 @@ func (rpc_s *RPCStorage) SaveGroupMessage(appid int64, gid int64, device_id int6
 		AppID:    appid,
 		GroupID:  gid,
 		DeviceID: device_id,
-		Cmd:      int32(msg.cmd),
+		Cmd:      int32(msg.Cmd),
 		Raw:      msg.ToData(),
 	}
 
@@ -170,7 +176,7 @@ func (rpc_s *RPCStorage) SavePeerGroupMessage(appid int64, members []int64, devi
 		AppID:    appid,
 		Members:  members,
 		DeviceID: device_id,
-		Cmd:      int32(m.cmd),
+		Cmd:      int32(m.Cmd),
 		Raw:      m.ToData(),
 	}
 
@@ -198,7 +204,7 @@ func (rpc_s *RPCStorage) SaveMessage(appid int64, uid int64, device_id int64, m 
 		AppID:    appid,
 		Uid:      uid,
 		DeviceID: device_id,
-		Cmd:      int32(m.cmd),
+		Cmd:      int32(m.Cmd),
 		Raw:      m.ToData(),
 	}
 

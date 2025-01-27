@@ -28,6 +28,8 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 const HEADER_SIZE = 32
@@ -265,8 +267,8 @@ func (storage *GroupMessageFile) saveMessage(msg *Message) int64 {
 	var msg_len int32 = MSG_HEADER_SIZE + int32(len(body))
 	binary.Write(buffer, binary.BigEndian, msg_len)
 
-	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd),
-		byte(msg.version), byte(msg.flag), buffer)
+	WriteHeader(int32(len(body)), int32(msg.Seq), byte(msg.Cmd),
+		byte(msg.Version), byte(msg.Flag), buffer)
 	buffer.Write(body)
 
 	binary.Write(buffer, binary.BigEndian, msg_len)
@@ -281,7 +283,7 @@ func (storage *GroupMessageFile) saveMessage(msg *Message) int64 {
 		log.Fatal("file write size:", len(buf), " nwrite:", n)
 	}
 
-	log.Info("save message:", Command(msg.cmd), " ", msgid)
+	log.Info("save message:", Command(msg.Cmd), " ", msgid)
 	return msgid
 
 }
@@ -346,11 +348,11 @@ func (storage *GroupMessageFile) readPendingMessages(ctx context.Context) chan *
 				continue
 			}
 
-			if msg.cmd != MSG_PENDING_GROUP_MESSAGE {
+			if msg.Cmd != MSG_PENDING_GROUP_MESSAGE {
 				continue
 			}
 
-			gm := msg.body.(*PendingGroupMessage)
+			gm := msg.Body.(*PendingGroupMessage)
 			done := false
 			select {
 			case <-ctx.Done():

@@ -30,6 +30,7 @@ import (
 
 	"io/ioutil"
 
+	. "github.com/GoBelieveIO/im_service/protocol"
 	"github.com/GoBelieveIO/im_service/set"
 	"github.com/bitly/go-simplejson"
 	"github.com/gomodule/redigo/redis"
@@ -39,7 +40,7 @@ import (
 func SendGroupNotification(appid int64, gid int64,
 	notification string, members set.IntSet, app *App, rpc_storage *RPCStorage) {
 
-	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
+	msg := &Message{Cmd: MSG_GROUP_NOTIFICATION, Body: &GroupNotification{notification}}
 
 	for member := range members {
 		msgid, _, err := rpc_storage.SaveMessage(appid, member, 0, msg)
@@ -48,7 +49,7 @@ func SendGroupNotification(appid int64, gid int64,
 		}
 
 		//发送同步的通知消息
-		notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
+		notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncNotify{sync_key: msgid}}
 		app.SendAnonymousMessage(appid, member, notify)
 	}
 }
@@ -56,7 +57,7 @@ func SendGroupNotification(appid int64, gid int64,
 func SendSuperGroupNotification(appid int64, gid int64,
 	notification string, members set.IntSet, app *App, rpc_storage *RPCStorage) {
 
-	msg := &Message{cmd: MSG_GROUP_NOTIFICATION, body: &GroupNotification{notification}}
+	msg := &Message{Cmd: MSG_GROUP_NOTIFICATION, Body: &GroupNotification{notification}}
 
 	msgid, _, err := rpc_storage.SaveGroupMessage(appid, gid, 0, msg)
 
@@ -67,13 +68,13 @@ func SendSuperGroupNotification(appid int64, gid int64,
 
 	for member := range members {
 		//发送同步的通知消息
-		notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncNotify{gid, msgid}}
+		notify := &Message{Cmd: MSG_SYNC_GROUP_NOTIFY, Body: &GroupSyncNotify{gid, msgid}}
 		app.SendAnonymousMessage(appid, member, notify)
 	}
 }
 
 func SendGroupIMMessage(im *IMMessage, appid int64, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
-	m := &Message{cmd: MSG_GROUP_IM, version: DEFAULT_VERSION, body: im}
+	m := &Message{Cmd: MSG_GROUP_IM, Version: DEFAULT_VERSION, Body: im}
 	loader := app.GetGroupLoader(im.receiver)
 	group := loader.LoadGroup(im.receiver)
 	if group == nil {
@@ -90,7 +91,7 @@ func SendGroupIMMessage(im *IMMessage, appid int64, app *App, server_summary *Se
 		app.PushGroupMessage(appid, group, m)
 
 		//发送同步的通知消息
-		notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncNotify{group_id: im.receiver, sync_key: msgid}}
+		notify := &Message{Cmd: MSG_SYNC_GROUP_NOTIFY, Body: &GroupSyncNotify{group_id: im.receiver, sync_key: msgid}}
 		app.SendAnonymousGroupMessage(appid, group, notify)
 	} else {
 		gm := &PendingGroupMessage{}
@@ -109,14 +110,14 @@ func SendGroupIMMessage(im *IMMessage, appid int64, app *App, server_summary *Se
 
 		gm.content = im.content
 		deliver := app.GetGroupMessageDeliver(group.gid)
-		m := &Message{cmd: MSG_PENDING_GROUP_MESSAGE, body: gm}
+		m := &Message{Cmd: MSG_PENDING_GROUP_MESSAGE, Body: gm}
 		deliver.SaveMessage(m, nil)
 	}
 	atomic.AddInt64(&server_summary.in_message_count, 1)
 }
 
 func SendIMMessage(im *IMMessage, appid int64, app *App, server_summary *ServerSummary, rpc_storage *RPCStorage) {
-	m := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, body: im}
+	m := &Message{Cmd: MSG_IM, Version: DEFAULT_VERSION, Body: im}
 	msgid, _, err := rpc_storage.SaveMessage(appid, im.receiver, 0, m)
 	if err != nil {
 		return
@@ -132,11 +133,11 @@ func SendIMMessage(im *IMMessage, appid int64, app *App, server_summary *ServerS
 	app.PushMessage(appid, im.receiver, m)
 
 	//发送同步的通知消息
-	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
+	notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncNotify{sync_key: msgid}}
 	app.SendAnonymousMessage(appid, im.receiver, notify)
 
 	//发送同步的通知消息
-	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid2}}
+	notify = &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncNotify{sync_key: msgid2}}
 	app.SendAnonymousMessage(appid, im.sender, notify)
 
 	atomic.AddInt64(&server_summary.in_message_count, 1)
@@ -361,24 +362,24 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request, rpc_storage *RP
 	msg_list := make([]map[string]interface{}, 0, len(messages))
 	for _, emsg := range messages {
 
-		msg := &Message{cmd: int(emsg.Cmd), version: DEFAULT_VERSION}
+		msg := &Message{Cmd: int(emsg.Cmd), Version: DEFAULT_VERSION}
 		msg.FromData(emsg.Raw)
 
-		if msg.cmd == MSG_IM ||
-			msg.cmd == MSG_GROUP_IM {
-			im := msg.body.(*IMMessage)
+		if msg.Cmd == MSG_IM ||
+			msg.Cmd == MSG_GROUP_IM {
+			im := msg.Body.(*IMMessage)
 
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
 			obj["timestamp"] = im.timestamp
 			obj["sender"] = im.sender
 			obj["receiver"] = im.receiver
-			obj["command"] = msg.cmd
+			obj["command"] = msg.Cmd
 			obj["id"] = emsg.MsgID
 			msg_list = append(msg_list, obj)
 
-		} else if msg.cmd == MSG_CUSTOMER_V2 {
-			im := msg.body.(*CustomerMessageV2)
+		} else if msg.Cmd == MSG_CUSTOMER_V2 {
+			im := msg.Body.(*CustomerMessageV2)
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
 			obj["timestamp"] = im.timestamp
@@ -386,7 +387,7 @@ func LoadLatestMessage(w http.ResponseWriter, req *http.Request, rpc_storage *RP
 			obj["receiver"] = im.receiver
 			obj["sender_appid"] = im.sender_appid
 			obj["receiver_appid"] = im.receiver_appid
-			obj["command"] = msg.cmd
+			obj["command"] = msg.Cmd
 			obj["id"] = emsg.MsgID
 
 			msg_list = append(msg_list, obj)
@@ -441,11 +442,11 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request, rpc_storage *R
 
 	msg_list := make([]map[string]interface{}, 0, len(messages))
 	for _, emsg := range messages {
-		msg := &Message{cmd: int(emsg.Cmd), version: DEFAULT_VERSION}
+		msg := &Message{Cmd: int(emsg.Cmd), Version: DEFAULT_VERSION}
 		msg.FromData(emsg.Raw)
-		if msg.cmd == MSG_IM ||
-			msg.cmd == MSG_GROUP_IM {
-			im := msg.body.(*IMMessage)
+		if msg.Cmd == MSG_IM ||
+			msg.Cmd == MSG_GROUP_IM {
+			im := msg.Body.(*IMMessage)
 
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
@@ -456,8 +457,8 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request, rpc_storage *R
 			obj["id"] = emsg.MsgID
 
 			msg_list = append(msg_list, obj)
-		} else if msg.cmd == MSG_CUSTOMER_V2 {
-			im := msg.body.(*CustomerMessageV2)
+		} else if msg.Cmd == MSG_CUSTOMER_V2 {
+			im := msg.Body.(*CustomerMessageV2)
 			obj := make(map[string]interface{})
 			obj["content"] = im.content
 			obj["timestamp"] = im.timestamp
@@ -465,7 +466,7 @@ func LoadHistoryMessage(w http.ResponseWriter, req *http.Request, rpc_storage *R
 			obj["receiver"] = im.receiver
 			obj["sender_appid"] = im.sender_appid
 			obj["receiver_appid"] = im.receiver_appid
-			obj["command"] = msg.cmd
+			obj["command"] = msg.Cmd
 			obj["id"] = emsg.MsgID
 
 			msg_list = append(msg_list, obj)
@@ -537,7 +538,7 @@ func SendNotification(w http.ResponseWriter, req *http.Request, app *App) {
 		return
 	}
 	sys := &SystemMessage{string(body)}
-	msg := &Message{cmd: MSG_NOTIFICATION, body: sys}
+	msg := &Message{Cmd: MSG_NOTIFICATION, Body: sys}
 	app.SendAnonymousMessage(appid, uid, msg)
 
 	w.WriteHeader(200)
@@ -588,7 +589,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_s
 	for i := range receivers {
 		uid := obj.Get("receivers").GetIndex(i).MustInt64()
 		sys := &SystemMessage{content}
-		msg := &Message{cmd: MSG_SYSTEM, body: sys}
+		msg := &Message{Cmd: MSG_SYSTEM, Body: sys}
 
 		msgid, _, err := rpc_storage.SaveMessage(appid, uid, 0, msg)
 		if err != nil {
@@ -600,7 +601,7 @@ func SendSystemMessage(w http.ResponseWriter, req *http.Request, app *App, rpc_s
 		app.PushMessage(appid, uid, msg)
 
 		//发送同步的通知消息
-		notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
+		notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncNotify{sync_key: msgid}}
 		app.SendAnonymousMessage(appid, uid, notify)
 	}
 
@@ -641,7 +642,7 @@ func SendRoomMessage(w http.ResponseWriter, req *http.Request, app *App) {
 	room_im.receiver = room_id
 	room_im.content = string(body)
 
-	msg := &Message{cmd: MSG_ROOM_IM, body: room_im}
+	msg := &Message{Cmd: MSG_ROOM_IM, Body: room_im}
 
 	app.SendAnonymousRoomMessage(appid, room_id, msg)
 
@@ -705,7 +706,7 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request, app *App, rpc
 	cm.content = content
 	cm.timestamp = int32(time.Now().Unix())
 
-	m := &Message{cmd: MSG_CUSTOMER_V2, body: cm}
+	m := &Message{Cmd: MSG_CUSTOMER_V2, Body: cm}
 
 	msgid, _, err := rpc_storage.SaveMessage(receiver_appid, receiver, 0, m)
 	if err != nil {
@@ -723,11 +724,11 @@ func SendCustomerMessage(w http.ResponseWriter, req *http.Request, app *App, rpc
 	app.PushMessage(receiver_appid, receiver, m)
 
 	//发送同步的通知消息
-	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid}}
+	notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncNotify{sync_key: msgid}}
 	app.SendAnonymousMessage(receiver_appid, receiver, notify)
 
 	//发送给自己的其它登录点
-	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncNotify{sync_key: msgid2}}
+	notify = &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncNotify{sync_key: msgid2}}
 	app.SendAnonymousMessage(sender_appid, sender, notify)
 
 	resp := make(map[string]interface{})
@@ -768,7 +769,7 @@ func SendRealtimeMessage(w http.ResponseWriter, req *http.Request, app *App) {
 	rt.receiver = receiver
 	rt.content = string(body)
 
-	msg := &Message{cmd: MSG_RT, body: rt}
+	msg := &Message{Cmd: MSG_RT, Body: rt}
 	app.SendAnonymousMessage(appid, receiver, msg)
 	w.WriteHeader(200)
 }

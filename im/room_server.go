@@ -23,10 +23,12 @@ import (
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 func (server *Server) HandleEnterRoom(client *Client, msg *Message) {
-	room := msg.body.(*Room)
+	room := msg.Body.(*Room)
 
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
@@ -53,7 +55,7 @@ func (server *Server) HandleEnterRoom(client *Client, msg *Message) {
 }
 
 func (server *Server) HandleLeaveRoom(client *Client, msg *Message) {
-	room := msg.body.(*Room)
+	room := msg.Body.(*Room)
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -76,8 +78,8 @@ func (server *Server) HandleLeaveRoom(client *Client, msg *Message) {
 }
 
 func (server *Server) HandleRoomIM(client *Client, msg *Message) {
-	room_im := msg.body.(*RoomMessage)
-	seq := msg.seq
+	room_im := msg.Body.(*RoomMessage)
+	seq := msg.Seq
 
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
@@ -95,11 +97,11 @@ func (server *Server) HandleRoomIM(client *Client, msg *Message) {
 		return
 	}
 
-	m := &Message{cmd: MSG_ROOM_IM, body: room_im, body_data: room_im.ToData()}
+	m := &Message{Cmd: MSG_ROOM_IM, Body: room_im, BodyData: room_im.ToData()}
 
 	server.SendRoomMessage(client, room_id, m)
 
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}}
+	ack := &Message{Cmd: MSG_ACK, Body: &MessageACK{seq: int32(seq)}}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send room message ack error")

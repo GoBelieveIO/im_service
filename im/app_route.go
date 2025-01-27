@@ -25,6 +25,8 @@ import (
 	"github.com/GoBelieveIO/im_service/set"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/GoBelieveIO/im_service/protocol"
 )
 
 const INVALID_DEVICE_ID = -1
@@ -80,18 +82,18 @@ func (app_route *AppRoute) GetUsers() map[int64]set.IntSet {
 	return r
 }
 
-func (app_route *AppRoute) SendGroupMessage(appid int64, group *Group, msg *Message) bool {
+func (app_route *AppRoute) SendGroupMessage(appid int64, group *Group, msg *protocol.Message) bool {
 	return app_route.sendGroupMessage(appid, 0, INVALID_DEVICE_ID, group, msg)
 }
 
-func (app_route *AppRoute) sendGroupMessage(appid int64, sender int64, device_ID int64, group *Group, msg *Message) bool {
+func (app_route *AppRoute) sendGroupMessage(appid int64, sender int64, device_ID int64, group *Group, msg *protocol.Message) bool {
 	if group == nil {
 		return false
 	}
 
 	route := app_route.FindRoute(appid)
 	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, group.gid, Command(msg.cmd))
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, group.gid, protocol.Command(msg.Cmd))
 		return false
 	}
 
@@ -114,10 +116,10 @@ func (app_route *AppRoute) sendGroupMessage(appid int64, sender int64, device_ID
 	return true
 }
 
-func (app_route *AppRoute) sendPeerMessage(sender_appid int64, sender int64, device_ID int64, appid int64, uid int64, msg *Message) bool {
+func (app_route *AppRoute) sendPeerMessage(sender_appid int64, sender int64, device_ID int64, appid int64, uid int64, msg *protocol.Message) bool {
 	route := app_route.FindRoute(appid)
 	if route == nil {
-		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, uid, Command(msg.cmd))
+		log.Warningf("can't dispatch app message, appid:%d uid:%d cmd:%s", appid, uid, protocol.Command(msg.Cmd))
 		return false
 	}
 	clients := route.FindClientSet(uid)
@@ -135,11 +137,11 @@ func (app_route *AppRoute) sendPeerMessage(sender_appid int64, sender int64, dev
 	return true
 }
 
-func (app_route *AppRoute) SendPeerMessage(appid int64, uid int64, msg *Message) bool {
+func (app_route *AppRoute) SendPeerMessage(appid int64, uid int64, msg *protocol.Message) bool {
 	return app_route.sendPeerMessage(appid, 0, INVALID_DEVICE_ID, appid, uid, msg)
 }
 
-func (app_route *AppRoute) sendRoomMessage(appid int64, sender int64, device_ID int64, room_id int64, msg *Message) bool {
+func (app_route *AppRoute) sendRoomMessage(appid int64, sender int64, device_ID int64, room_id int64, msg *protocol.Message) bool {
 	route := app_route.FindOrAddRoute(appid)
 	clients := route.FindRoomClientSet(room_id)
 
@@ -156,6 +158,6 @@ func (app_route *AppRoute) sendRoomMessage(appid int64, sender int64, device_ID 
 	return true
 }
 
-func (app_route *AppRoute) SendRoomMessage(appid int64, room_id int64, msg *Message) bool {
+func (app_route *AppRoute) SendRoomMessage(appid int64, room_id int64, msg *protocol.Message) bool {
 	return app_route.sendRoomMessage(appid, 0, INVALID_DEVICE_ID, room_id, msg)
 }

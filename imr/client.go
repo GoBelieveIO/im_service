@@ -23,6 +23,8 @@ import (
 	"net"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/GoBelieveIO/im_service/protocol"
 )
 
 type Push struct {
@@ -31,12 +33,12 @@ type Push struct {
 }
 
 type ClientObserver interface {
-	onClientMessage(client *Client, msg *Message)
+	onClientMessage(client *Client, msg *protocol.Message)
 	onClientClose(client *Client)
 }
 
 type Client struct {
-	wt chan *Message
+	wt chan *protocol.Message
 
 	conn      *net.TCPConn
 	app_route *AppRoute
@@ -47,7 +49,7 @@ type Client struct {
 func NewClient(conn *net.TCPConn, observer ClientObserver) *Client {
 	client := new(Client)
 	client.conn = conn
-	client.wt = make(chan *Message, 10)
+	client.wt = make(chan *protocol.Message, 10)
 	client.app_route = NewAppRoute()
 	client.observer = observer
 	return client
@@ -102,7 +104,7 @@ func (client *Client) Write() {
 			break
 		}
 		seq++
-		msg.seq = seq
+		msg.Seq = seq
 		client.send(msg)
 	}
 }
@@ -112,12 +114,12 @@ func (client *Client) Run() {
 	go client.Read()
 }
 
-func (client *Client) read() *Message {
-	return ReceiveMessage(client.conn)
+func (client *Client) read() *protocol.Message {
+	return protocol.ReceiveMessage(client.conn)
 }
 
-func (client *Client) send(msg *Message) {
-	SendMessage(client.conn, msg)
+func (client *Client) send(msg *protocol.Message) {
+	protocol.SendMessage(client.conn, msg)
 }
 
 func (client *Client) close() {

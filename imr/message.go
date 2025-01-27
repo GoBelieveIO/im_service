@@ -1,1 +1,1 @@
-../protocol/message.go
+../im/message.go

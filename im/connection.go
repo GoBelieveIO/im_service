@@ -30,6 +30,8 @@ import (
 
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 const CLIENT_TIMEOUT = (60 * 6)
@@ -116,15 +118,15 @@ func (client *Connection) Client() *Client {
 
 // 自己是否是发送者
 func (client *Connection) isSender(msg *Message, device_id int64) bool {
-	if msg.cmd == MSG_IM || msg.cmd == MSG_GROUP_IM {
-		m := msg.body.(*IMMessage)
+	if msg.Cmd == MSG_IM || msg.Cmd == MSG_GROUP_IM {
+		m := msg.Body.(*IMMessage)
 		if m.sender == client.uid && device_id == client.device_ID {
 			return true
 		}
 	}
 
-	if msg.cmd == MSG_CUSTOMER_V2 {
-		m := msg.body.(*CustomerMessageV2)
+	if msg.Cmd == MSG_CUSTOMER_V2 {
+		m := msg.Body.(*CustomerMessageV2)
 		if m.sender_appid == client.appid &&
 			m.sender == client.uid &&
 			device_id == client.device_ID {
@@ -247,16 +249,16 @@ func (client *Connection) read() *Message {
 func (client *Connection) send(m *Message) {
 	client.sequence += 1
 	msg := m
-	if msg.version != client.version {
+	if msg.Version != client.version {
 		msg = &Message{
-			cmd:     m.cmd,
-			seq:     m.seq,
-			version: client.version,
-			flag:    m.flag,
-			body:    m.body,
+			Cmd:     m.Cmd,
+			Seq:     m.Seq,
+			Version: client.version,
+			Flag:    m.Flag,
+			Body:    m.Body,
 		}
 	}
-	msg.seq = client.sequence
+	msg.Seq = client.sequence
 
 	complete_c := make(chan int, 1)
 	block := func() {
@@ -276,7 +278,7 @@ func (client *Connection) send(m *Message) {
 	err := client.conn.WriteMessage(msg)
 	if err != nil {
 		atomic.AddInt32(&client.tc, 1)
-		log.Info("send msg:", Command(msg.cmd), " tcp err:", err)
+		log.Info("send msg:", Command(msg.Cmd), " tcp err:", err)
 	}
 
 	r := timer.Stop()

@@ -19,8 +19,12 @@
 
 package main
 
-import "sync/atomic"
-import rpc_storage "github.com/GoBelieveIO/im_service/storage"
+import (
+	"sync/atomic"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
+	rpc_storage "github.com/GoBelieveIO/im_service/storage"
+)
 
 type RPCStorage struct {
 }
@@ -34,9 +38,9 @@ func (rpc *RPCStorage) SyncMessage(sync_key *rpc_storage.SyncHistory, result *rp
 		hm := &rpc_storage.HistoryMessage{}
 		hm.MsgID = emsg.msgid
 		hm.DeviceID = emsg.device_id
-		hm.Cmd = int32(emsg.msg.cmd)
+		hm.Cmd = int32(emsg.msg.Cmd)
 
-		emsg.msg.version = DEFAULT_VERSION
+		emsg.msg.Version = DEFAULT_VERSION
 		hm.Raw = emsg.msg.ToData()
 		historyMessages = append(historyMessages, hm)
 	}
@@ -56,9 +60,9 @@ func (rpc *RPCStorage) SyncGroupMessage(sync_key *rpc_storage.SyncGroupHistory, 
 		hm := &rpc_storage.HistoryMessage{}
 		hm.MsgID = emsg.msgid
 		hm.DeviceID = emsg.device_id
-		hm.Cmd = int32(emsg.msg.cmd)
+		hm.Cmd = int32(emsg.msg.Cmd)
 
-		emsg.msg.version = DEFAULT_VERSION
+		emsg.msg.Version = DEFAULT_VERSION
 		hm.Raw = emsg.msg.ToData()
 		historyMessages = append(historyMessages, hm)
 	}
@@ -72,7 +76,7 @@ func (rpc *RPCStorage) SyncGroupMessage(sync_key *rpc_storage.SyncGroupHistory, 
 func (rpc *RPCStorage) SavePeerMessage(m *rpc_storage.PeerMessage, result *rpc_storage.HistoryMessageID) error {
 	atomic.AddInt64(&server_summary.nrequests, 1)
 	atomic.AddInt64(&server_summary.peer_message_count, 1)
-	msg := &Message{cmd: int(m.Cmd), version: DEFAULT_VERSION}
+	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
 	msgid, prev_msgid := storage.SavePeerMessage(m.AppID, m.Uid, m.DeviceID, msg)
 	result.MsgID = msgid
@@ -83,7 +87,7 @@ func (rpc *RPCStorage) SavePeerMessage(m *rpc_storage.PeerMessage, result *rpc_s
 func (rpc *RPCStorage) SavePeerGroupMessage(m *rpc_storage.PeerGroupMessage, result *rpc_storage.GroupHistoryMessageID) error {
 	atomic.AddInt64(&server_summary.nrequests, 1)
 	atomic.AddInt64(&server_summary.peer_message_count, 1)
-	msg := &Message{cmd: int(m.Cmd), version: DEFAULT_VERSION}
+	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
 	r := storage.SavePeerGroupMessage(m.AppID, m.Members, m.DeviceID, msg)
 
@@ -99,7 +103,7 @@ func (rpc *RPCStorage) SavePeerGroupMessage(m *rpc_storage.PeerGroupMessage, res
 func (rpc *RPCStorage) SaveGroupMessage(m *rpc_storage.GroupMessage, result *rpc_storage.HistoryMessageID) error {
 	atomic.AddInt64(&server_summary.nrequests, 1)
 	atomic.AddInt64(&server_summary.group_message_count, 1)
-	msg := &Message{cmd: int(m.Cmd), version: DEFAULT_VERSION}
+	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
 	msgid, prev_msgid := storage.SaveGroupMessage(m.AppID, m.GroupID, m.DeviceID, msg)
 	result.MsgID = msgid
@@ -123,9 +127,9 @@ func (rpc *RPCStorage) GetLatestMessage(r *rpc_storage.HistoryRequest, l *rpc_st
 		hm := &rpc_storage.HistoryMessage{}
 		hm.MsgID = emsg.msgid
 		hm.DeviceID = emsg.device_id
-		hm.Cmd = int32(emsg.msg.cmd)
+		hm.Cmd = int32(emsg.msg.Cmd)
 
-		emsg.msg.version = DEFAULT_VERSION
+		emsg.msg.Version = DEFAULT_VERSION
 		hm.Raw = emsg.msg.ToData()
 		historyMessages = append(historyMessages, hm)
 	}

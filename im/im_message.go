@@ -19,8 +19,12 @@
 
 package main
 
-import "bytes"
-import "encoding/binary"
+import (
+	"bytes"
+	"encoding/binary"
+
+	"github.com/GoBelieveIO/im_service/protocol"
+)
 
 // 平台号
 const PLATFORM_IOS = 1
@@ -37,79 +41,32 @@ const ACK_GROUP_NONEXIST = 65
 // version1:IMMessage添加时间戳字段
 // version2:MessageACK添加status字段
 func init() {
-	message_creators[MSG_AUTH_TOKEN] = func() IMessage { return new(AuthenticationToken) }
+	protocol.RegisterMessageCreator(protocol.MSG_AUTH_TOKEN, func() protocol.IMessage { return new(AuthenticationToken) })
+	protocol.RegisterMessageCreator(protocol.MSG_RT, func() protocol.IMessage { return new(RTMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_ENTER_ROOM, func() protocol.IMessage { return new(Room) })
+	protocol.RegisterMessageCreator(protocol.MSG_LEAVE_ROOM, func() protocol.IMessage { return new(Room) })
 
-	message_creators[MSG_RT] = func() IMessage { return new(RTMessage) }
-	message_creators[MSG_ENTER_ROOM] = func() IMessage { return new(Room) }
-	message_creators[MSG_LEAVE_ROOM] = func() IMessage { return new(Room) }
-	message_creators[MSG_ROOM_IM] = func() IMessage { return &RoomMessage{new(RTMessage)} }
+	protocol.RegisterMessageCreator(protocol.MSG_ROOM_IM, func() protocol.IMessage { return &RoomMessage{new(RTMessage)} })
 
-	message_creators[MSG_UNREAD_COUNT] = func() IMessage { return new(MessageUnreadCount) }
-	message_creators[MSG_CUSTOMER_SERVICE_] = func() IMessage { return new(IgnoreMessage) }
+	protocol.RegisterMessageCreator(protocol.MSG_UNREAD_COUNT, func() protocol.IMessage { return new(MessageUnreadCount) })
+	protocol.RegisterMessageCreator(protocol.MSG_CUSTOMER_SERVICE_, func() protocol.IMessage { return new(IgnoreMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC, func() protocol.IMessage { return new(SyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_BEGIN, func() protocol.IMessage { return new(SyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_END, func() protocol.IMessage { return new(SyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_KEY, func() protocol.IMessage { return new(SyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_GROUP, func() protocol.IMessage { return new(GroupSyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_GROUP_BEGIN, func() protocol.IMessage { return new(GroupSyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_GROUP_END, func() protocol.IMessage { return new(GroupSyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_GROUP_SYNC_KEY, func() protocol.IMessage { return new(GroupSyncKey) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_NOTIFY, func() protocol.IMessage { return new(SyncNotify) })
+	protocol.RegisterMessageCreator(protocol.MSG_SYNC_GROUP_NOTIFY, func() protocol.IMessage { return new(GroupSyncNotify) })
+	protocol.RegisterMessageCreator(protocol.MSG_NOTIFICATION, func() protocol.IMessage { return new(SystemMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_METADATA, func() protocol.IMessage { return new(Metadata) })
+	protocol.RegisterMessageCreator(protocol.MSG_AUTH_STATUS, func() protocol.IMessage { return new(AuthenticationStatus) })
+	protocol.RegisterMessageCreator(protocol.MSG_PENDING_GROUP_MESSAGE, func() protocol.IMessage { return new(PendingGroupMessage) })
 
-	message_creators[MSG_SYNC] = func() IMessage { return new(SyncKey) }
-	message_creators[MSG_SYNC_BEGIN] = func() IMessage { return new(SyncKey) }
-	message_creators[MSG_SYNC_END] = func() IMessage { return new(SyncKey) }
-	message_creators[MSG_SYNC_KEY] = func() IMessage { return new(SyncKey) }
+	protocol.RegisterMessageCreatorV(protocol.MSG_ACK, func() protocol.IVersionMessage { return new(MessageACK) })
 
-	message_creators[MSG_SYNC_GROUP] = func() IMessage { return new(GroupSyncKey) }
-	message_creators[MSG_SYNC_GROUP_BEGIN] = func() IMessage { return new(GroupSyncKey) }
-	message_creators[MSG_SYNC_GROUP_END] = func() IMessage { return new(GroupSyncKey) }
-	message_creators[MSG_GROUP_SYNC_KEY] = func() IMessage { return new(GroupSyncKey) }
-
-	message_creators[MSG_SYNC_NOTIFY] = func() IMessage { return new(SyncNotify) }
-	message_creators[MSG_SYNC_GROUP_NOTIFY] = func() IMessage { return new(GroupSyncNotify) }
-
-	message_creators[MSG_NOTIFICATION] = func() IMessage { return new(SystemMessage) }
-	message_creators[MSG_METADATA] = func() IMessage { return new(Metadata) }
-
-	message_creators[MSG_AUTH_STATUS] = func() IMessage { return new(AuthenticationStatus) }
-
-	vmessage_creators[MSG_ACK] = func() IVersionMessage { return new(MessageACK) }
-
-	message_creators[MSG_PENDING_GROUP_MESSAGE] = func() IMessage { return new(PendingGroupMessage) }
-
-	message_descriptions[MSG_AUTH_STATUS] = "MSG_AUTH_STATUS"
-	message_descriptions[MSG_ACK] = "MSG_ACK"
-	message_descriptions[MSG_PING] = "MSG_PING"
-	message_descriptions[MSG_PONG] = "MSG_PONG"
-	message_descriptions[MSG_AUTH_TOKEN] = "MSG_AUTH_TOKEN"
-	message_descriptions[MSG_RT] = "MSG_RT"
-	message_descriptions[MSG_ENTER_ROOM] = "MSG_ENTER_ROOM"
-	message_descriptions[MSG_LEAVE_ROOM] = "MSG_LEAVE_ROOM"
-	message_descriptions[MSG_ROOM_IM] = "MSG_ROOM_IM"
-	message_descriptions[MSG_UNREAD_COUNT] = "MSG_UNREAD_COUNT"
-	message_descriptions[MSG_CUSTOMER_SERVICE_] = "MSG_CUSTOMER_SERVICE"
-
-	message_descriptions[MSG_SYNC] = "MSG_SYNC"
-	message_descriptions[MSG_SYNC_BEGIN] = "MSG_SYNC_BEGIN"
-	message_descriptions[MSG_SYNC_END] = "MSG_SYNC_END"
-	message_descriptions[MSG_SYNC_NOTIFY] = "MSG_SYNC_NOTIFY"
-
-	message_descriptions[MSG_SYNC_GROUP] = "MSG_SYNC_GROUP"
-	message_descriptions[MSG_SYNC_GROUP_BEGIN] = "MSG_SYNC_GROUP_BEGIN"
-	message_descriptions[MSG_SYNC_GROUP_END] = "MSG_SYNC_GROUP_END"
-	message_descriptions[MSG_SYNC_GROUP_NOTIFY] = "MSG_SYNC_GROUP_NOTIFY"
-
-	message_descriptions[MSG_NOTIFICATION] = "MSG_NOTIFICATION"
-	message_descriptions[MSG_METADATA] = "MSG_METADATA"
-
-	message_descriptions[MSG_PENDING_GROUP_MESSAGE] = "MSG_PENDING_GROUP_MESSAGE"
-
-	external_messages[MSG_AUTH_TOKEN] = true
-	external_messages[MSG_ACK] = true
-	external_messages[MSG_PING] = true
-	external_messages[MSG_PONG] = true
-	external_messages[MSG_RT] = true
-	external_messages[MSG_ENTER_ROOM] = true
-	external_messages[MSG_LEAVE_ROOM] = true
-	external_messages[MSG_ROOM_IM] = true
-	external_messages[MSG_UNREAD_COUNT] = true
-	external_messages[MSG_SYNC] = true
-	external_messages[MSG_SYNC_GROUP] = true
-	external_messages[MSG_SYNC_KEY] = true
-	external_messages[MSG_GROUP_SYNC_KEY] = true
-	external_messages[MSG_METADATA] = true
 }
 
 type AuthenticationToken struct {

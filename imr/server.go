@@ -24,6 +24,8 @@ import (
 
 	"github.com/gomodule/redigo/redis"
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 type Server struct {
@@ -44,26 +46,26 @@ func (server *Server) onClientClose(client *Client) {
 }
 
 func (server *Server) onClientMessage(client *Client, msg *Message) {
-	log.Info("msg cmd:", Command(msg.cmd))
-	switch msg.cmd {
+	log.Info("msg cmd:", Command(msg.Cmd))
+	switch msg.Cmd {
 	case MSG_SUBSCRIBE:
-		server.HandleSubscribe(client, msg.body.(*SubscribeMessage))
+		server.HandleSubscribe(client, msg.Body.(*SubscribeMessage))
 	case MSG_UNSUBSCRIBE:
-		server.HandleUnsubscribe(client, msg.body.(*RouteUserID))
+		server.HandleUnsubscribe(client, msg.Body.(*RouteUserID))
 	case MSG_PUBLISH:
-		server.HandlePublish(client, msg.body.(*RouteMessage))
+		server.HandlePublish(client, msg.Body.(*RouteMessage))
 	case MSG_PUBLISH_GROUP:
-		server.HandlePublishGroup(client, msg.body.(*RouteMessage))
+		server.HandlePublishGroup(client, msg.Body.(*RouteMessage))
 	case MSG_PUSH:
-		server.HandlePush(client, msg.body.(*BatchPushMessage))
+		server.HandlePush(client, msg.Body.(*BatchPushMessage))
 	case MSG_SUBSCRIBE_ROOM:
-		server.HandleSubscribeRoom(client, msg.body.(*RouteRoomID))
+		server.HandleSubscribeRoom(client, msg.Body.(*RouteRoomID))
 	case MSG_UNSUBSCRIBE_ROOM:
-		server.HandleUnsubscribeRoom(client, msg.body.(*RouteRoomID))
+		server.HandleUnsubscribeRoom(client, msg.Body.(*RouteRoomID))
 	case MSG_PUBLISH_ROOM:
-		server.HandlePublishRoom(client, msg.body.(*RouteMessage))
+		server.HandlePublishRoom(client, msg.Body.(*RouteMessage))
 	default:
-		log.Warning("unknown message cmd:", msg.cmd)
+		log.Warning("unknown message cmd:", msg.Cmd)
 	}
 }
 
@@ -86,7 +88,7 @@ func (server *Server) HandlePublishGroup(client *Client, amsg *RouteMessage) {
 	//群发给所有接入服务器
 	s := server.GetClientSet()
 
-	msg := &Message{cmd: MSG_PUBLISH_GROUP, body: amsg}
+	msg := &Message{Cmd: MSG_PUBLISH_GROUP, Body: amsg}
 	for c := range s {
 		//不发送给自身
 		if client == c {
@@ -101,7 +103,7 @@ func (server *Server) HandlePush(client *Client, pmsg *BatchPushMessage) {
 		return
 	}
 
-	log.Infof("push message appid:%d cmd:%s", pmsg.appid, Command(pmsg.msg.cmd))
+	log.Infof("push message appid:%d cmd:%s", pmsg.appid, Command(pmsg.msg.Cmd))
 
 	off_members := make([]int64, 0)
 
@@ -111,20 +113,20 @@ func (server *Server) HandlePush(client *Client, pmsg *BatchPushMessage) {
 		}
 	}
 
-	cmd := pmsg.msg.cmd
+	cmd := pmsg.msg.Cmd
 	if len(off_members) > 0 {
 		if cmd == MSG_GROUP_IM {
-			server.push_service.PublishGroupMessage(pmsg.appid, off_members, pmsg.msg.body.(*IMMessage))
+			server.push_service.PublishGroupMessage(pmsg.appid, off_members, pmsg.msg.Body.(*IMMessage))
 		} else if cmd == MSG_IM {
 			//assert len(off_members) == 1
-			server.push_service.PublishPeerMessage(pmsg.appid, pmsg.msg.body.(*IMMessage))
+			server.push_service.PublishPeerMessage(pmsg.appid, pmsg.msg.Body.(*IMMessage))
 		} else if cmd == MSG_SYSTEM {
 			//assert len(off_members) == 1
 			receiver := off_members[0]
-			sys := pmsg.msg.body.(*SystemMessage)
+			sys := pmsg.msg.Body.(*SystemMessage)
 			server.push_service.PublishSystemMessage(pmsg.appid, receiver, sys.notification)
 		} else if cmd == MSG_CUSTOMER_V2 {
-			server.push_service.PublishCustomerMessageV2(pmsg.appid, pmsg.msg.body.(*CustomerMessageV2))
+			server.push_service.PublishCustomerMessageV2(pmsg.appid, pmsg.msg.Body.(*CustomerMessageV2))
 		}
 	}
 }
@@ -134,7 +136,7 @@ func (server *Server) HandlePublish(client *Client, amsg *RouteMessage) {
 
 	receiver := &RouteUserID{appid: amsg.appid, uid: amsg.receiver}
 	s := server.FindClientSet(receiver)
-	msg := &Message{cmd: MSG_PUBLISH, body: amsg}
+	msg := &Message{Cmd: MSG_PUBLISH, Body: amsg}
 	for c := range s {
 		//不发送给自身
 		if client == c {
@@ -161,7 +163,7 @@ func (server *Server) HandlePublishRoom(client *Client, amsg *RouteMessage) {
 	receiver := &RouteRoomID{appid: amsg.appid, room_id: amsg.receiver}
 	s := server.FindRoomClientSet(receiver)
 
-	msg := &Message{cmd: MSG_PUBLISH_ROOM, body: amsg}
+	msg := &Message{Cmd: MSG_PUBLISH_ROOM, Body: amsg}
 	for c := range s {
 		//不发送给自身
 		if client == c {

@@ -19,68 +19,40 @@
 
 package main
 
-import "bytes"
-import "encoding/binary"
+import (
+	"bytes"
+	"encoding/binary"
 
-// 主从同步消息
-const MSG_STORAGE_SYNC_BEGIN = 220
-const MSG_STORAGE_SYNC_MESSAGE = 221
-const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
-
-// 内部文件存储使用
-// 超级群消息队列 代替MSG_GROUP_IM_LIST
-const MSG_GROUP_OFFLINE = 247
-
-// 个人消息队列 代替MSG_OFFLINE_V3
-const MSG_OFFLINE_V4 = 248
-
-// 个人消息队列 代替MSG_OFFLINE_V2
-const MSG_OFFLINE_V3_ = 249
-
-// 个人消息队列 代替MSG_OFFLINE
-// deprecated  兼容性
-const MSG_OFFLINE_V2_ = 250
-
-// im实例使用
-const ___MSG_PENDING_GROUP_MESSAGE___ = 251
-
-// 超级群消息队列
-// deprecated 兼容性
-const MSG_GROUP_IM_LIST_ = 252
-
-// deprecated
-const MSG_GROUP_ACK_IN_ = 253
-
-// deprecated 兼容性
-const MSG_OFFLINE_ = 254
-
-// deprecated
-const MSG_ACK_IN_ = 255
+	"github.com/GoBelieveIO/im_service/protocol"
+	. "github.com/GoBelieveIO/im_service/protocol"
+)
 
 func init() {
-	message_creators[MSG_GROUP_OFFLINE] = func() IMessage { return new(OfflineMessage) }
-	message_creators[MSG_OFFLINE_V4] = func() IMessage { return new(OfflineMessage) }
-	message_creators[MSG_OFFLINE_V3_] = func() IMessage { return new(IgnoreMessage) }
-	message_creators[MSG_OFFLINE_V2_] = func() IMessage { return new(IgnoreMessage) }
-	message_creators[MSG_GROUP_IM_LIST_] = func() IMessage { return new(IgnoreMessage) }
-	message_creators[MSG_GROUP_ACK_IN_] = func() IMessage { return new(IgnoreMessage) }
 
-	message_creators[MSG_OFFLINE_] = func() IMessage { return new(IgnoreMessage) }
-	message_creators[MSG_ACK_IN_] = func() IMessage { return new(IgnoreMessage) }
+	protocol.RegisterMessageCreator(protocol.MSG_GROUP_OFFLINE, func() IMessage { return new(OfflineMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V4, func() IMessage { return new(OfflineMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V3_, func() IMessage { return new(IgnoreMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V2_, func() IMessage { return new(IgnoreMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_GROUP_IM_LIST_, func() IMessage { return new(IgnoreMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_GROUP_ACK_IN_, func() IMessage { return new(IgnoreMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_, func() IMessage { return new(IgnoreMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_ACK_IN_, func() IMessage { return new(IgnoreMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_STORAGE_SYNC_BEGIN, func() IMessage { return new(SyncCursor) })
+	protocol.RegisterMessageCreator(protocol.MSG_STORAGE_SYNC_MESSAGE, func() IMessage { return new(EMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_STORAGE_SYNC_MESSAGE_BATCH, func() IMessage { return new(MessageBatch) })
 
-	message_creators[MSG_STORAGE_SYNC_BEGIN] = func() IMessage { return new(SyncCursor) }
-	message_creators[MSG_STORAGE_SYNC_MESSAGE] = func() IMessage { return new(EMessage) }
-	message_creators[MSG_STORAGE_SYNC_MESSAGE_BATCH] = func() IMessage { return new(MessageBatch) }
+}
 
-	message_descriptions[MSG_STORAGE_SYNC_BEGIN] = "MSG_STORAGE_SYNC_BEGIN"
-	message_descriptions[MSG_STORAGE_SYNC_MESSAGE] = "MSG_STORAGE_SYNC_MESSAGE"
-	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
+// 保存在磁盘中但不再需要处理的消息
+type IgnoreMessage struct {
+}
 
-	message_descriptions[MSG_GROUP_OFFLINE] = "MSG_GROUP_OFFLINE"
-	message_descriptions[MSG_OFFLINE_V4] = "MSG_OFFLINE_V4"
-	message_descriptions[MSG_OFFLINE_V3_] = "MSG_OFFLINE_V3"
-	message_descriptions[MSG_OFFLINE_V2_] = "MSG_OFFLINE_V2"
-	message_descriptions[MSG_GROUP_IM_LIST_] = "MSG_GROUP_IM_LIST"
+func (ignore *IgnoreMessage) ToData() []byte {
+	return nil
+}
+
+func (ignore *IgnoreMessage) FromData(buff []byte) bool {
+	return true
 }
 
 type SyncCursor struct {

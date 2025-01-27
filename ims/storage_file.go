@@ -19,17 +19,22 @@
 
 package main
 
-import "os"
-import "fmt"
-import "bytes"
-import "sync"
-import "encoding/binary"
-import "path/filepath"
-import "strings"
-import "strconv"
-import "io"
-import log "github.com/sirupsen/logrus"
-import "github.com/GoBelieveIO/im_service/lru"
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/GoBelieveIO/im_service/lru"
+	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
+)
 
 const HEADER_SIZE = 32
 const MAGIC = 0x494d494d
@@ -345,7 +350,7 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 
 	msgid = int64(storage.block_NO)*BLOCK_SIZE + msgid
 	master.ewt <- &EMessage{msgid: msgid, msg: msg}
-	log.Info("save message:", Command(msg.cmd), " ", msgid)
+	log.Info("save message:", Command(msg.Cmd), " ", msgid)
 	return msgid
 
 }

@@ -19,13 +19,18 @@
 
 package main
 
-import "fmt"
-import "io"
-import "os"
-import "time"
-import "bytes"
-import "encoding/binary"
-import log "github.com/sirupsen/logrus"
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"os"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
+)
 
 const GROUP_INDEX_FILE_NAME = "group_index.v2"
 
@@ -74,7 +79,7 @@ func (storage *GroupStorage) SaveGroupMessage(appid int64, gid int64, device_id 
 	off.prev_peer_msgid = 0
 	off.prev_batch_msgid = last_batch_id
 
-	m := &Message{cmd: MSG_GROUP_OFFLINE, body: off}
+	m := &Message{Cmd: MSG_GROUP_OFFLINE, Body: off}
 	last_id = storage.saveMessage(m)
 
 	last_seq_id += 1
@@ -126,9 +131,9 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 			break
 		}
 
-		off, ok := msg.body.(*OfflineMessage)
+		off, ok := msg.Body.(*OfflineMessage)
 		if !ok {
-			log.Warning("invalid message cmd:", msg.cmd)
+			log.Warning("invalid message cmd:", msg.Cmd)
 			break
 		}
 		if last_msgid == 0 {
@@ -140,10 +145,10 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 		}
 
 		m := storage.LoadMessage(off.msgid)
-		if msgid == 0 && m.cmd == MSG_GROUP_IM {
+		if msgid == 0 && m.Cmd == MSG_GROUP_IM {
 			//不取入群之前的消息
-			im := m.body.(*IMMessage)
-			if im.timestamp < ts {
+			im := m.Body.(MessageTime)
+			if im.Timestamp() < ts {
 				break
 			}
 		}
@@ -368,8 +373,8 @@ func (storage *GroupStorage) saveGroupIndex(message_index map[GroupID]*GroupInde
 }
 
 func (storage *GroupStorage) execMessage(msg *Message, msgid int64) {
-	if msg.cmd == MSG_GROUP_OFFLINE {
-		off := msg.body.(*OfflineMessage)
+	if msg.Cmd == MSG_GROUP_OFFLINE {
+		off := msg.Body.(*OfflineMessage)
 		index := storage.getGroupIndex(off.appid, off.receiver)
 		last_id := msgid
 		last_batch_id := index.last_batch_id

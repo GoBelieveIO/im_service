@@ -20,6 +20,7 @@
 package main
 
 import (
+	. "github.com/GoBelieveIO/im_service/protocol"
 	log "github.com/sirupsen/logrus"
 )
 

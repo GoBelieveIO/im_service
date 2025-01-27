@@ -25,6 +25,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 type Subscriber struct {
@@ -145,12 +147,12 @@ func (channel *Channel) Subscribe(appid int64, uid int64, online bool) {
 			on = 1
 		}
 		id := &SubscribeMessage{appid: appid, uid: uid, online: int8(on)}
-		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+		msg := &Message{Cmd: MSG_SUBSCRIBE, Body: id}
 		channel.wt <- msg
 	} else if online_count == 0 && online {
 		//手机端上线
 		id := &SubscribeMessage{appid: appid, uid: uid, online: 1}
-		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+		msg := &Message{Cmd: MSG_SUBSCRIBE, Body: id}
 		channel.wt <- msg
 	}
 }
@@ -161,29 +163,29 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
 	if count == 1 {
 		//用户断开全部连接
 		id := &RouteUserID{appid: appid, uid: uid}
-		msg := &Message{cmd: MSG_UNSUBSCRIBE, body: id}
+		msg := &Message{Cmd: MSG_UNSUBSCRIBE, Body: id}
 		channel.wt <- msg
 	} else if count > 1 && online_count == 1 && online {
 		//手机端断开连接,pc/web端还未断开连接
 		id := &SubscribeMessage{appid: appid, uid: uid, online: 0}
-		msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+		msg := &Message{Cmd: MSG_SUBSCRIBE, Body: id}
 		channel.wt <- msg
 	}
 }
 
 func (channel *Channel) Publish(amsg *RouteMessage) {
-	msg := &Message{cmd: MSG_PUBLISH, body: amsg}
+	msg := &Message{Cmd: MSG_PUBLISH, Body: amsg}
 	channel.wt <- msg
 }
 
 func (channel *Channel) PublishGroup(amsg *RouteMessage) {
-	msg := &Message{cmd: MSG_PUBLISH_GROUP, body: amsg}
+	msg := &Message{Cmd: MSG_PUBLISH_GROUP, Body: amsg}
 	channel.wt <- msg
 }
 
 func (channel *Channel) Push(appid int64, receivers []int64, msg *Message) {
 	p := &BatchPushMessage{appid: appid, receivers: receivers, msg: msg}
-	m := &Message{cmd: MSG_PUSH, body: p}
+	m := &Message{Cmd: MSG_PUSH, Body: p}
 	channel.wt <- m
 }
 
@@ -241,7 +243,7 @@ func (channel *Channel) SubscribeRoom(appid int64, room_id int64) {
 	log.Info("sub room count:", count)
 	if count == 0 {
 		id := &RouteRoomID{appid: appid, room_id: room_id}
-		msg := &Message{cmd: MSG_SUBSCRIBE_ROOM, body: id}
+		msg := &Message{Cmd: MSG_SUBSCRIBE_ROOM, Body: id}
 		channel.wt <- msg
 	}
 }
@@ -251,13 +253,13 @@ func (channel *Channel) UnsubscribeRoom(appid int64, room_id int64) {
 	log.Info("unsub room count:", count)
 	if count == 1 {
 		id := &RouteRoomID{appid: appid, room_id: room_id}
-		msg := &Message{cmd: MSG_UNSUBSCRIBE_ROOM, body: id}
+		msg := &Message{Cmd: MSG_UNSUBSCRIBE_ROOM, Body: id}
 		channel.wt <- msg
 	}
 }
 
 func (channel *Channel) PublishRoom(amsg *RouteMessage) {
-	msg := &Message{cmd: MSG_PUBLISH_ROOM, body: amsg}
+	msg := &Message{Cmd: MSG_PUBLISH_ROOM, Body: amsg}
 	channel.wt <- msg
 }
 
@@ -273,10 +275,10 @@ func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 			}
 
 			id := &SubscribeMessage{appid: appid, uid: uid, online: int8(on)}
-			msg := &Message{cmd: MSG_SUBSCRIBE, body: id}
+			msg := &Message{Cmd: MSG_SUBSCRIBE, Body: id}
 
 			seq = seq + 1
-			msg.seq = seq
+			msg.Seq = seq
 			SendMessage(conn, msg)
 		}
 	}
@@ -286,9 +288,9 @@ func (channel *Channel) ReSubscribe(conn *net.TCPConn, seq int) int {
 func (channel *Channel) ReSubscribeRoom(conn *net.TCPConn, seq int) int {
 	subs := channel.GetAllRoomSubscriber()
 	for _, id := range subs {
-		msg := &Message{cmd: MSG_SUBSCRIBE_ROOM, body: id}
+		msg := &Message{Cmd: MSG_SUBSCRIBE_ROOM, Body: id}
 		seq = seq + 1
-		msg.seq = seq
+		msg.Seq = seq
 		SendMessage(conn, msg)
 	}
 	return seq
@@ -309,24 +311,24 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 				close(closed_ch)
 				return
 			}
-			log.Info("channel recv message:", Command(msg.cmd))
-			if msg.cmd == MSG_PUBLISH {
-				amsg := msg.body.(*RouteMessage)
+			log.Info("channel recv message:", Command(msg.Cmd))
+			if msg.Cmd == MSG_PUBLISH {
+				amsg := msg.Body.(*RouteMessage)
 				if channel.dispatch != nil {
 					channel.dispatch(amsg)
 				}
-			} else if msg.cmd == MSG_PUBLISH_ROOM {
-				amsg := msg.body.(*RouteMessage)
+			} else if msg.Cmd == MSG_PUBLISH_ROOM {
+				amsg := msg.Body.(*RouteMessage)
 				if channel.dispatch_room != nil {
 					channel.dispatch_room(amsg)
 				}
-			} else if msg.cmd == MSG_PUBLISH_GROUP {
-				amsg := msg.body.(*RouteMessage)
+			} else if msg.Cmd == MSG_PUBLISH_GROUP {
+				amsg := msg.Body.(*RouteMessage)
 				if channel.dispatch_group != nil {
 					channel.dispatch_group(amsg)
 				}
 			} else {
-				log.Error("unknown message cmd:", msg.cmd)
+				log.Error("unknown message cmd:", msg.Cmd)
 			}
 		}
 	}()
@@ -338,7 +340,7 @@ func (channel *Channel) RunOnce(conn *net.TCPConn) {
 			return
 		case msg := <-channel.wt:
 			seq = seq + 1
-			msg.seq = seq
+			msg.Seq = seq
 			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			err := SendMessage(conn, msg)
 			if err != nil {

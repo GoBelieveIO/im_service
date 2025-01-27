@@ -26,10 +26,12 @@ import (
 
 	"github.com/GoBelieveIO/im_service/storage"
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 func (server *Server) HandleSuperGroupMessage(client *Client, msg *IMMessage, group *Group) (int64, int64, error) {
-	m := &Message{cmd: MSG_GROUP_IM, version: DEFAULT_VERSION, body: msg}
+	m := &Message{Cmd: MSG_GROUP_IM, Version: DEFAULT_VERSION, Body: msg}
 	msgid, prev_msgid, err := server.rpc_storage.SaveGroupMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
 		log.Errorf("save group message:%d %d err:%s", msg.sender, msg.receiver, err)
@@ -39,11 +41,11 @@ func (server *Server) HandleSuperGroupMessage(client *Client, msg *IMMessage, gr
 	//推送外部通知
 	server.app.PushGroupMessage(client.appid, group, m)
 
-	m.meta = &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
-	m.flag = MESSAGE_FLAG_PUSH | MESSAGE_FLAG_SUPER_GROUP
+	m.Meta = &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
+	m.Flag = MESSAGE_FLAG_PUSH | MESSAGE_FLAG_SUPER_GROUP
 	server.SendGroupMessage(client, group, m)
 
-	notify := &Message{cmd: MSG_SYNC_GROUP_NOTIFY, body: &GroupSyncKey{group_id: msg.receiver, sync_key: msgid}}
+	notify := &Message{Cmd: MSG_SYNC_GROUP_NOTIFY, Body: &GroupSyncKey{group_id: msg.receiver, sync_key: msgid}}
 	server.SendGroupMessage(client, group, notify)
 
 	return msgid, prev_msgid, nil
@@ -67,7 +69,7 @@ func (server *Server) HandleGroupMessage(client *Client, im *IMMessage, group *G
 
 	gm.content = im.content
 	deliver := server.app.GetGroupMessageDeliver(group.gid)
-	m := &Message{cmd: MSG_PENDING_GROUP_MESSAGE, body: gm}
+	m := &Message{Cmd: MSG_PENDING_GROUP_MESSAGE, Body: gm}
 
 	c := make(chan *Metadata, 1)
 	callback_id := deliver.SaveMessage(m, c)
@@ -82,8 +84,8 @@ func (server *Server) HandleGroupMessage(client *Client, im *IMMessage, group *G
 }
 
 func (server *Server) HandleGroupIMMessage(client *Client, message *Message) {
-	msg := message.body.(*IMMessage)
-	seq := message.seq
+	msg := message.Body.(*IMMessage)
+	seq := message.Seq
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -93,7 +95,7 @@ func (server *Server) HandleGroupIMMessage(client *Client, message *Message) {
 		log.Warningf("im message sender:%d client uid:%d\n", msg.sender, client.uid)
 		return
 	}
-	if message.flag&MESSAGE_FLAG_TEXT != 0 {
+	if message.Flag&MESSAGE_FLAG_TEXT != 0 {
 		FilterDirtyWord(server.filter, msg)
 	}
 
@@ -102,14 +104,14 @@ func (server *Server) HandleGroupIMMessage(client *Client, message *Message) {
 	loader := server.app.GetGroupLoader(msg.receiver)
 	group := loader.LoadGroup(msg.receiver)
 	if group == nil {
-		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq), status: ACK_GROUP_NONEXIST}}
+		ack := &Message{Cmd: MSG_ACK, Body: &MessageACK{seq: int32(seq), status: ACK_GROUP_NONEXIST}}
 		client.EnqueueMessage(ack)
 		log.Warning("can't find group:", msg.receiver)
 		return
 	}
 
 	if !group.IsMember(msg.sender) {
-		ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq), status: ACK_NOT_GROUP_MEMBER}}
+		ack := &Message{Cmd: MSG_ACK, Body: &MessageACK{seq: int32(seq), status: ACK_NOT_GROUP_MEMBER}}
 		client.EnqueueMessage(ack)
 		log.Warningf("sender:%d is not group member", msg.sender)
 		return
@@ -135,7 +137,7 @@ func (server *Server) HandleGroupIMMessage(client *Client, message *Message) {
 		}
 	}
 
-	ack := &Message{cmd: MSG_ACK, flag: flag, body: &MessageACK{seq: int32(seq)}, meta: meta}
+	ack := &Message{Cmd: MSG_ACK, Flag: flag, Body: &MessageACK{seq: int32(seq)}, Meta: meta}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send group message ack error")
@@ -149,7 +151,7 @@ func (server *Server) HandleGroupIMMessage(client *Client, message *Message) {
 }
 
 func (server *Server) HandleGroupSync(client *Client, msg *Message) {
-	group_sync_key := msg.body.(*GroupSyncKey)
+	group_sync_key := msg.Body.(*GroupSyncKey)
 
 	if client.uid == 0 {
 		return
@@ -184,15 +186,15 @@ func (server *Server) HandleGroupSync(client *Client, msg *Message) {
 	messages := gh.Messages
 
 	sk := &GroupSyncKey{sync_key: last_id, group_id: group_id}
-	client.EnqueueMessage(&Message{cmd: MSG_SYNC_GROUP_BEGIN, body: sk})
+	client.EnqueueMessage(&Message{Cmd: MSG_SYNC_GROUP_BEGIN, Body: sk})
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		log.Info("message:", msg.MsgID, Command(msg.Cmd))
-		m := &Message{cmd: int(msg.Cmd), version: DEFAULT_VERSION}
+		m := &Message{Cmd: int(msg.Cmd), Version: DEFAULT_VERSION}
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
 		if client.isSender(m, msg.DeviceID) {
-			m.flag |= MESSAGE_FLAG_SELF
+			m.Flag |= MESSAGE_FLAG_SELF
 		}
 		client.EnqueueMessage(m)
 	}
@@ -201,11 +203,11 @@ func (server *Server) HandleGroupSync(client *Client, msg *Message) {
 		sk.sync_key = gh.LastMsgID
 		log.Warningf("group:%d client last id:%d server last id:%d", group_id, last_id, gh.LastMsgID)
 	}
-	client.EnqueueMessage(&Message{cmd: MSG_SYNC_GROUP_END, body: sk})
+	client.EnqueueMessage(&Message{Cmd: MSG_SYNC_GROUP_END, Body: sk})
 }
 
 func (server *Server) HandleGroupSyncKey(client *Client, msg *Message) {
-	group_sync_key := msg.body.(*GroupSyncKey)
+	group_sync_key := msg.Body.(*GroupSyncKey)
 
 	if client.uid == 0 {
 		return

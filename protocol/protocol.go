@@ -17,130 +17,18 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package protocol
 
-import "io"
-import "bytes"
-import "encoding/binary"
-import log "github.com/sirupsen/logrus"
-import "errors"
-import "encoding/hex"
-import "fmt"
+import (
+	"bytes"
+	"encoding/binary"
+	"io"
 
-const DEFAULT_VERSION = 2
+	"encoding/hex"
+	"errors"
 
-// 消息标志
-// 文本消息 c <-> s
-const MESSAGE_FLAG_TEXT = 0x01
-
-// 消息不持久化 c <-> s
-const MESSAGE_FLAG_UNPERSISTENT = 0x02
-
-// 群组消息 c -> s
-const MESSAGE_FLAG_GROUP = 0x04
-
-// 离线消息由当前登录的用户在当前设备发出 c <- s
-const MESSAGE_FLAG_SELF = 0x08
-
-// 消息由服务器主动推到客户端 c <- s
-const MESSAGE_FLAG_PUSH = 0x10
-
-// 超级群消息 c <- s
-const MESSAGE_FLAG_SUPER_GROUP = 0x20
-
-const MSG_HEADER_SIZE = 12
-
-var message_descriptions map[int]string = make(map[int]string)
-
-type MessageCreator func() IMessage
-
-var message_creators map[int]MessageCreator = make(map[int]MessageCreator)
-
-type VersionMessageCreator func() IVersionMessage
-
-var vmessage_creators map[int]VersionMessageCreator = make(map[int]VersionMessageCreator)
-
-// true client->server
-var external_messages [256]bool
-
-type Command int
-
-func (cmd Command) String() string {
-	c := int(cmd)
-	if desc, ok := message_descriptions[c]; ok {
-		return desc
-	} else {
-		return fmt.Sprintf("%d", c)
-	}
-}
-
-type IMessage interface {
-	ToData() []byte
-	FromData(buff []byte) bool
-}
-
-type IVersionMessage interface {
-	ToData(version int) []byte
-	FromData(version int, buff []byte) bool
-}
-
-type Message struct {
-	cmd     int
-	seq     int
-	version int
-	flag    int
-
-	body      interface{}
-	body_data []byte
-
-	meta interface{} //non searialize
-}
-
-func (message *Message) ToData() []byte {
-	if message.body_data != nil {
-		return message.body_data
-	} else if message.body != nil {
-		if m, ok := message.body.(IMessage); ok {
-			return m.ToData()
-		}
-		if m, ok := message.body.(IVersionMessage); ok {
-			return m.ToData(message.version)
-		}
-		return nil
-	} else {
-		return nil
-	}
-}
-
-func (message *Message) FromData(buff []byte) bool {
-	cmd := message.cmd
-	if creator, ok := message_creators[cmd]; ok {
-		c := creator()
-		r := c.FromData(buff)
-		message.body = c
-		return r
-	}
-	if creator, ok := vmessage_creators[cmd]; ok {
-		c := creator()
-		r := c.FromData(message.version, buff)
-		message.body = c
-		return r
-	}
-
-	return len(buff) == 0
-}
-
-// 保存在磁盘中但不再需要处理的消息
-type IgnoreMessage struct {
-}
-
-func (ignore *IgnoreMessage) ToData() []byte {
-	return nil
-}
-
-func (ignore *IgnoreMessage) FromData(buff []byte) bool {
-	return true
-}
+	log "github.com/sirupsen/logrus"
+)
 
 func WriteHeader(len int32, seq int32, cmd byte, version byte, flag byte, buffer io.Writer) {
 	binary.Write(buffer, binary.BigEndian, len)
@@ -163,7 +51,7 @@ func ReadHeader(buff []byte) (int, int, int, int, int) {
 
 func WriteMessage(w *bytes.Buffer, msg *Message) {
 	body := msg.ToData()
-	WriteHeader(int32(len(body)), int32(msg.seq), byte(msg.cmd), byte(msg.version), byte(msg.flag), w)
+	WriteHeader(int32(len(body)), int32(msg.Seq), byte(msg.Cmd), byte(msg.Version), byte(msg.Flag), w)
 	w.Write(body)
 }
 
@@ -212,10 +100,10 @@ func ReceiveLimitMessage(conn io.Reader, limit_size int, external bool) (*Messag
 	}
 
 	message := new(Message)
-	message.cmd = cmd
-	message.seq = seq
-	message.version = version
-	message.flag = flag
+	message.Cmd = cmd
+	message.Seq = seq
+	message.Version = version
+	message.Flag = flag
 	if !message.FromData(buff) {
 		log.Warningf("parse error:%d, %d %d %d %s", cmd, seq, version,
 			flag, hex.EncodeToString(buff))

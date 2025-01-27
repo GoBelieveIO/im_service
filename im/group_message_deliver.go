@@ -27,6 +27,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 // 后台发送普通群消息
@@ -140,7 +142,7 @@ func (storage *GroupMessageDeliver) sendMessage(appid int64, uid int64, sender i
 
 func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*Metadata, bool) {
 	msg := &IMMessage{sender: gm.sender, receiver: gm.gid, timestamp: gm.timestamp, content: gm.content}
-	m := &Message{cmd: MSG_GROUP_IM, version: DEFAULT_VERSION, body: msg}
+	m := &Message{Cmd: MSG_GROUP_IM, Version: DEFAULT_VERSION, Body: msg}
 
 	metadata := &Metadata{}
 
@@ -171,11 +173,11 @@ func (storage *GroupMessageDeliver) sendGroupMessage(gm *PendingGroupMessage) (*
 			msgid, prev_msgid := r[i].MsgID, r[i].PrevMsgID
 			member := mb[i]
 			meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
-			mm := &Message{cmd: MSG_GROUP_IM, version: DEFAULT_VERSION,
-				flag: MESSAGE_FLAG_PUSH, body: msg, meta: meta}
+			mm := &Message{Cmd: MSG_GROUP_IM, Version: DEFAULT_VERSION,
+				Flag: MESSAGE_FLAG_PUSH, Body: msg, Meta: meta}
 			storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, mm)
 
-			notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
+			notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncKey{msgid}}
 			storage.sendMessage(gm.appid, member, gm.sender, gm.device_ID, notify)
 
 			if member == gm.sender {

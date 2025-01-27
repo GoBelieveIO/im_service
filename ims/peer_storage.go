@@ -28,6 +28,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 const BATCH_SIZE = 1000
@@ -87,7 +89,7 @@ func (storage *PeerStorage) SavePeerMessage(appid int64, uid int64, device_id in
 	if storage.isGroupMessage(msg) {
 		flag = MESSAGE_FLAG_GROUP
 	}
-	m := &Message{cmd: MSG_OFFLINE_V4, flag: flag, body: off}
+	m := &Message{Cmd: MSG_OFFLINE_V4, Flag: flag, Body: off}
 	last_id = storage.saveMessage(m)
 
 	if !storage.isGroupMessage(msg) {
@@ -174,9 +176,9 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 			break
 		}
 
-		off, ok := msg.body.(*OfflineMessage)
+		off, ok := msg.Body.(*OfflineMessage)
 		if !ok {
-			log.Warning("invalid message cmd:", msg.cmd)
+			log.Warning("invalid message cmd:", msg.Cmd)
 			break
 		}
 
@@ -191,11 +193,11 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 		if msg == nil {
 			break
 		}
-		if msg.cmd == MSG_GROUP_IM ||
-			msg.cmd == MSG_GROUP_NOTIFICATION ||
-			msg.cmd == MSG_IM ||
-			msg.cmd == MSG_CUSTOMER_V2 ||
-			msg.cmd == MSG_SYSTEM {
+		if msg.Cmd == MSG_GROUP_IM ||
+			msg.Cmd == MSG_GROUP_NOTIFICATION ||
+			msg.Cmd == MSG_IM ||
+			msg.Cmd == MSG_CUSTOMER_V2 ||
+			msg.Cmd == MSG_SYSTEM {
 			emsg := &EMessage{msgid: off.msgid, device_id: off.device_id, msg: msg}
 			messages = append(messages, emsg)
 			if limit > 0 && len(messages) >= limit {
@@ -254,9 +256,9 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 			break
 		}
 
-		off, ok := msg.body.(*OfflineMessage)
+		off, ok := msg.Body.(*OfflineMessage)
 		if !ok {
-			log.Warning("invalid message cmd:", msg.cmd)
+			log.Warning("invalid message cmd:", msg.Cmd)
 			break
 		}
 
@@ -295,9 +297,9 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 			break
 		}
 
-		off, ok := msg.body.(*OfflineMessage)
+		off, ok := msg.Body.(*OfflineMessage)
 		if !ok {
-			log.Warning("invalid message cmd:", msg.cmd)
+			log.Warning("invalid message cmd:", msg.Cmd)
 			break
 		}
 
@@ -313,11 +315,11 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 		if msg == nil {
 			break
 		}
-		if msg.cmd == MSG_GROUP_IM ||
-			msg.cmd == MSG_GROUP_NOTIFICATION ||
-			msg.cmd == MSG_IM ||
-			msg.cmd == MSG_CUSTOMER_V2 ||
-			msg.cmd == MSG_SYSTEM {
+		if msg.Cmd == MSG_GROUP_IM ||
+			msg.Cmd == MSG_GROUP_NOTIFICATION ||
+			msg.Cmd == MSG_IM ||
+			msg.Cmd == MSG_CUSTOMER_V2 ||
+			msg.Cmd == MSG_SYSTEM {
 
 			emsg := &EMessage{msgid: off.msgid, device_id: off.device_id, msg: msg}
 			messages = append(messages, emsg)
@@ -366,9 +368,9 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 			break
 		}
 
-		off, ok := msg.body.(*OfflineMessage)
+		off, ok := msg.Body.(*OfflineMessage)
 		if !ok {
-			log.Warning("invalid message cmd:", msg.cmd)
+			log.Warning("invalid message cmd:", msg.Cmd)
 			break
 		}
 
@@ -376,10 +378,10 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 		if msg == nil {
 			break
 		}
-		if msg.cmd == MSG_GROUP_IM ||
-			msg.cmd == MSG_GROUP_NOTIFICATION ||
-			msg.cmd == MSG_IM ||
-			msg.cmd == MSG_CUSTOMER_V2 {
+		if msg.Cmd == MSG_GROUP_IM ||
+			msg.Cmd == MSG_GROUP_NOTIFICATION ||
+			msg.Cmd == MSG_IM ||
+			msg.Cmd == MSG_CUSTOMER_V2 {
 			emsg := &EMessage{msgid: off.msgid, device_id: off.device_id, msg: msg}
 			messages = append(messages, emsg)
 			if len(messages) >= limit {
@@ -392,7 +394,7 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 }
 
 func (client *PeerStorage) isGroupMessage(msg *Message) bool {
-	return msg.cmd == MSG_GROUP_IM || msg.flag&MESSAGE_FLAG_GROUP != 0
+	return msg.Cmd == MSG_GROUP_IM || msg.Flag&MESSAGE_FLAG_GROUP != 0
 }
 
 func (storage *PeerStorage) GetNewCount(appid int64, uid int64, last_received_id int64) int {
@@ -448,9 +450,9 @@ func (storage *PeerStorage) GetNewCount(appid int64, uid int64, last_received_id
 		}
 	}
 
-	off, ok := off_m.body.(*OfflineMessage)
+	off, ok := off_m.Body.(*OfflineMessage)
 	if !ok {
-		log.Warning("invalid message cmd:", off_m.cmd)
+		log.Warning("invalid message cmd:", off_m.Cmd)
 		return 0
 	}
 
@@ -680,12 +682,12 @@ func (storage *PeerStorage) savePeerIndex(message_index map[UserID]*UserIndex) {
 }
 
 func (storage *PeerStorage) execMessage(msg *Message, msgid int64) {
-	if msg.cmd == MSG_OFFLINE_V4 {
-		off := msg.body.(*OfflineMessage)
+	if msg.Cmd == MSG_OFFLINE_V4 {
+		off := msg.Body.(*OfflineMessage)
 		last_peer_id := msgid
 
 		index := storage.getPeerIndex(off.appid, off.receiver)
-		if (msg.flag & MESSAGE_FLAG_GROUP) != 0 {
+		if (msg.Flag & MESSAGE_FLAG_GROUP) != 0 {
 			last_peer_id = index.last_peer_id
 		}
 		last_batch_id := index.last_batch_id

@@ -25,10 +25,12 @@ import (
 
 	"github.com/GoBelieveIO/im_service/storage"
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 func (server *Server) HandleSync(client *Client, msg *Message) {
-	sync_key := msg.body.(*SyncKey)
+	sync_key := msg.Body.(*SyncKey)
 
 	if client.uid == 0 {
 		return
@@ -50,16 +52,16 @@ func (server *Server) HandleSync(client *Client, msg *Message) {
 	msgs := make([]*Message, 0, len(messages)+2)
 
 	sk := &SyncKey{last_id}
-	msgs = append(msgs, &Message{cmd: MSG_SYNC_BEGIN, body: sk})
+	msgs = append(msgs, &Message{Cmd: MSG_SYNC_BEGIN, Body: sk})
 
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
 		log.Info("message:", msg.MsgID, Command(msg.Cmd))
-		m := &Message{cmd: int(msg.Cmd), version: DEFAULT_VERSION}
+		m := &Message{Cmd: int(msg.Cmd), Version: DEFAULT_VERSION}
 		m.FromData(msg.Raw)
 		sk.sync_key = msg.MsgID
 		if client.isSender(m, msg.DeviceID) {
-			m.flag |= MESSAGE_FLAG_SELF
+			m.Flag |= MESSAGE_FLAG_SELF
 		}
 		msgs = append(msgs, m)
 	}
@@ -69,18 +71,18 @@ func (server *Server) HandleSync(client *Client, msg *Message) {
 		log.Warningf("client last id:%d server last id:%d", last_id, ph.LastMsgID)
 	}
 
-	msgs = append(msgs, &Message{cmd: MSG_SYNC_END, body: sk})
+	msgs = append(msgs, &Message{Cmd: MSG_SYNC_END, Body: sk})
 
 	client.EnqueueMessages(msgs)
 
 	if ph.HasMore {
-		notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{ph.LastMsgID + 1}}
+		notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncKey{ph.LastMsgID + 1}}
 		client.EnqueueMessage(notify)
 	}
 }
 
 func (server *Server) HandleSyncKey(client *Client, msg *Message) {
-	sync_key := msg.body.(*SyncKey)
+	sync_key := msg.Body.(*SyncKey)
 
 	if client.uid == 0 {
 		return
@@ -99,8 +101,8 @@ func (server *Server) HandleSyncKey(client *Client, msg *Message) {
 }
 
 func (server *Server) HandleIMMessage(client *Client, message *Message) {
-	msg := message.body.(*IMMessage)
-	seq := message.seq
+	msg := message.Body.(*IMMessage)
+	seq := message.Seq
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
 		return
@@ -117,14 +119,14 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 	}
 	if server.friend_permission {
 		if !rs.IsMyFriend() {
-			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_NOT_MY_FRIEND}}
+			ack := &Message{Cmd: MSG_ACK, Version: client.version, Body: &MessageACK{seq: int32(seq), status: ACK_NOT_MY_FRIEND}}
 			client.EnqueueMessage(ack)
 			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
 			return
 		}
 
 		if !rs.IsYourFriend() {
-			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_NOT_YOUR_FRIEND}}
+			ack := &Message{Cmd: MSG_ACK, Version: client.version, Body: &MessageACK{seq: int32(seq), status: ACK_NOT_YOUR_FRIEND}}
 			client.EnqueueMessage(ack)
 			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
 			return
@@ -132,18 +134,18 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 	}
 	if server.enable_blacklist {
 		if rs.IsInYourBlacklist() {
-			ack := &Message{cmd: MSG_ACK, version: client.version, body: &MessageACK{seq: int32(seq), status: ACK_IN_YOUR_BLACKLIST}}
+			ack := &Message{Cmd: MSG_ACK, Version: client.version, Body: &MessageACK{seq: int32(seq), status: ACK_IN_YOUR_BLACKLIST}}
 			client.EnqueueMessage(ack)
 			log.Infof("relationship%d-%d:%d invalid, can't send message", msg.sender, msg.receiver, rs)
 			return
 		}
 	}
 
-	if message.flag&MESSAGE_FLAG_TEXT != 0 {
+	if message.Flag&MESSAGE_FLAG_TEXT != 0 {
 		FilterDirtyWord(server.filter, msg)
 	}
 	msg.timestamp = int32(time.Now().Unix())
-	m := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, body: msg}
+	m := &Message{Cmd: MSG_IM, Version: DEFAULT_VERSION, Body: msg}
 
 	msgid, prev_msgid, err := server.rpc_storage.SaveMessage(client.appid, msg.receiver, client.device_ID, m)
 	if err != nil {
@@ -162,20 +164,20 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 	server.app.PushMessage(client.appid, msg.receiver, m)
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
-	m1 := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
+	m1 := &Message{Cmd: MSG_IM, Version: DEFAULT_VERSION, Flag: message.Flag | MESSAGE_FLAG_PUSH, Body: msg, Meta: meta}
 	server.SendMessage(client, msg.receiver, m1)
-	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
+	notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncKey{msgid}}
 	server.SendMessage(client, msg.receiver, notify)
 
 	//发送给自己的其它登录点
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
-	m2 := &Message{cmd: MSG_IM, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
+	m2 := &Message{Cmd: MSG_IM, Version: DEFAULT_VERSION, Flag: message.Flag | MESSAGE_FLAG_PUSH, Body: msg, Meta: meta}
 	server.SendMessage(client, client.uid, m2)
-	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
+	notify = &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncKey{msgid}}
 	server.SendMessage(client, client.uid, notify)
 
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}, meta: meta}
+	ack := &Message{Cmd: MSG_ACK, Body: &MessageACK{seq: int32(seq)}, Meta: meta}
 	r := client.EnqueueMessage(ack)
 	if !r {
 		log.Warning("send peer message ack error")
@@ -186,18 +188,18 @@ func (server *Server) HandleIMMessage(client *Client, message *Message) {
 }
 
 func (server *Server) HandleUnreadCount(client *Client, msg *Message) {
-	u := msg.body.(*MessageUnreadCount)
+	u := msg.Body.(*MessageUnreadCount)
 	SetUserUnreadCount(server.redis_pool, client.appid, client.uid, u.count)
 }
 
 func (server *Server) HandleRTMessage(client *Client, msg *Message) {
-	rt := msg.body.(*RTMessage)
+	rt := msg.Body.(*RTMessage)
 	if rt.sender != client.uid {
 		log.Warningf("rt message sender:%d client uid:%d\n", rt.sender, client.uid)
 		return
 	}
 
-	m := &Message{cmd: MSG_RT, body: rt}
+	m := &Message{Cmd: MSG_RT, Body: rt}
 	server.SendMessage(client, rt.receiver, m)
 
 	atomic.AddInt64(&server.server_summary.in_message_count, 1)

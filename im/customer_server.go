@@ -22,12 +22,13 @@ package main
 import (
 	"time"
 
+	. "github.com/GoBelieveIO/im_service/protocol"
 	log "github.com/sirupsen/logrus"
 )
 
 func (server *Server) HandleCustomerMessageV2(client *Client, message *Message) {
-	msg := message.body.(*CustomerMessageV2)
-	seq := message.seq
+	msg := message.Body.(*CustomerMessageV2)
+	seq := message.Seq
 
 	if client.uid == 0 {
 		log.Warning("client has't been authenticated")
@@ -52,7 +53,7 @@ func (server *Server) HandleCustomerMessageV2(client *Client, message *Message) 
 
 	msg.timestamp = int32(time.Now().Unix())
 
-	m := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, body: msg}
+	m := &Message{Cmd: MSG_CUSTOMER_V2, Version: DEFAULT_VERSION, Body: msg}
 
 	msgid, prev_msgid, err := server.rpc_storage.SaveMessage(msg.receiver_appid, msg.receiver, client.device_ID, m)
 	if err != nil {
@@ -69,21 +70,21 @@ func (server *Server) HandleCustomerMessageV2(client *Client, message *Message) 
 	server.app.PushMessage(msg.receiver_appid, msg.receiver, m)
 
 	meta := &Metadata{sync_key: msgid, prev_sync_key: prev_msgid}
-	m1 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
+	m1 := &Message{Cmd: MSG_CUSTOMER_V2, Version: DEFAULT_VERSION, Flag: message.Flag | MESSAGE_FLAG_PUSH, Body: msg, Meta: meta}
 	server.SendAppMessage(client, msg.receiver_appid, msg.receiver, m1)
 
-	notify := &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid}}
+	notify := &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncKey{msgid}}
 	server.SendAppMessage(client, msg.receiver_appid, msg.receiver, notify)
 
 	//发送给自己的其它登录点
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
-	m2 := &Message{cmd: MSG_CUSTOMER_V2, version: DEFAULT_VERSION, flag: message.flag | MESSAGE_FLAG_PUSH, body: msg, meta: meta}
+	m2 := &Message{Cmd: MSG_CUSTOMER_V2, Version: DEFAULT_VERSION, Flag: message.Flag | MESSAGE_FLAG_PUSH, Body: msg, Meta: meta}
 	server.SendMessage(client, client.uid, m2)
 
-	notify = &Message{cmd: MSG_SYNC_NOTIFY, body: &SyncKey{msgid2}}
+	notify = &Message{Cmd: MSG_SYNC_NOTIFY, Body: &SyncKey{msgid2}}
 	server.SendMessage(client, client.uid, notify)
 
 	meta = &Metadata{sync_key: msgid2, prev_sync_key: prev_msgid2}
-	ack := &Message{cmd: MSG_ACK, body: &MessageACK{seq: int32(seq)}, meta: meta}
+	ack := &Message{Cmd: MSG_ACK, Body: &MessageACK{seq: int32(seq)}, Meta: meta}
 	client.EnqueueMessage(ack)
 }

@@ -26,6 +26,8 @@ import (
 	"container/list"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 type ClientObserver interface {
@@ -100,13 +102,13 @@ func (client *Client) SendMessages() {
 	e := messages.Front()
 	for e != nil {
 		msg := e.Value.(*Message)
-		if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
-			msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
+		if msg.Cmd == MSG_RT || msg.Cmd == MSG_IM ||
+			msg.Cmd == MSG_GROUP_IM || msg.Cmd == MSG_ROOM_IM {
 			atomic.AddInt64(&client.server_summary.out_message_count, 1)
 		}
 
-		if msg.meta != nil {
-			meta_msg := &Message{cmd: MSG_METADATA, version: client.version, body: msg.meta}
+		if msg.Meta != nil {
+			meta_msg := &Message{Cmd: MSG_METADATA, Version: client.version, Body: msg.Meta}
 			client.send(meta_msg)
 		}
 		client.send(msg)
@@ -127,25 +129,25 @@ func (client *Client) Write() {
 				log.Infof("client:%d socket closed", client.uid)
 				break
 			}
-			if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
-				msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
+			if msg.Cmd == MSG_RT || msg.Cmd == MSG_IM ||
+				msg.Cmd == MSG_GROUP_IM || msg.Cmd == MSG_ROOM_IM {
 				atomic.AddInt64(&client.server_summary.out_message_count, 1)
 			}
 
-			if msg.meta != nil {
-				meta_msg := &Message{cmd: MSG_METADATA, version: client.version, body: msg.meta}
+			if msg.Meta != nil {
+				meta_msg := &Message{Cmd: MSG_METADATA, Version: client.version, Body: msg.Meta}
 				client.send(meta_msg)
 			}
 			client.send(msg)
 		case messages := <-client.pwt:
 			for _, msg := range messages {
-				if msg.cmd == MSG_RT || msg.cmd == MSG_IM ||
-					msg.cmd == MSG_GROUP_IM || msg.cmd == MSG_ROOM_IM {
+				if msg.Cmd == MSG_RT || msg.Cmd == MSG_IM ||
+					msg.Cmd == MSG_GROUP_IM || msg.Cmd == MSG_ROOM_IM {
 					atomic.AddInt64(&client.server_summary.out_message_count, 1)
 				}
 
-				if msg.meta != nil {
-					meta_msg := &Message{cmd: MSG_METADATA, version: client.version, body: msg.meta}
+				if msg.Meta != nil {
+					meta_msg := &Message{Cmd: MSG_METADATA, Version: client.version, Body: msg.Meta}
 					client.send(meta_msg)
 				}
 				client.send(msg)

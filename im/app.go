@@ -25,6 +25,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
 type App struct {
@@ -86,7 +88,7 @@ func (app *App) PushGroupMessage(appid int64, group *Group, m *Message) {
 	members := group.Members()
 	for member := range members {
 		//不对自身推送
-		if im, ok := m.body.(*IMMessage); ok {
+		if im, ok := m.Body.(*IMMessage); ok {
 			if im.sender == member {
 				continue
 			}
@@ -169,8 +171,8 @@ func (app *App) PublishMessage(appid int64, uid int64, msg *Message) {
 	msg_buf := mbuffer.Bytes()
 
 	amsg := &RouteMessage{appid: appid, receiver: uid, timestamp: now, msg: msg_buf}
-	if msg.meta != nil {
-		meta := msg.meta.(*Metadata)
+	if msg.Meta != nil {
+		meta := msg.Meta.(*Metadata)
 		amsg.msgid = meta.sync_key
 		amsg.prev_msgid = meta.prev_sync_key
 	}
@@ -186,8 +188,8 @@ func (app *App) PublishGroupMessage(appid int64, group_id int64, msg *Message) {
 	msg_buf := mbuffer.Bytes()
 
 	amsg := &RouteMessage{appid: appid, receiver: group_id, timestamp: now, msg: msg_buf}
-	if msg.meta != nil {
-		meta := msg.meta.(*Metadata)
+	if msg.Meta != nil {
+		meta := msg.Meta.(*Metadata)
 		amsg.msgid = meta.sync_key
 		amsg.prev_msgid = meta.prev_sync_key
 	}
@@ -215,17 +217,17 @@ func DispatchMessage(app_route *AppRoute, amsg *RouteMessage) {
 		return
 	}
 
-	log.Infof("dispatch app message:%s %d %d", Command(msg.cmd), msg.flag, d)
+	log.Infof("dispatch app message:%s %d %d", Command(msg.Cmd), msg.Flag, d)
 	if d > int64(time.Second) {
 		log.Warning("dispatch app message slow...")
 	}
 
 	if amsg.msgid > 0 {
-		if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", msg.flag)
+		if (msg.Flag & MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
 		}
 		meta := &Metadata{sync_key: amsg.msgid, prev_sync_key: amsg.prev_msgid}
-		msg.meta = meta
+		msg.Meta = meta
 	}
 	app_route.SendPeerMessage(amsg.appid, amsg.receiver, msg)
 }
@@ -238,7 +240,7 @@ func DispatchRoomMessage(app_route *AppRoute, amsg *RouteMessage) {
 		return
 	}
 
-	log.Info("dispatch room message", Command(msg.cmd))
+	log.Info("dispatch room message", Command(msg.Cmd))
 
 	room_id := amsg.receiver
 	app_route.SendRoomMessage(amsg.appid, room_id, msg)
@@ -253,21 +255,21 @@ func DispatchGroupMessage(app *App, amsg *RouteMessage) {
 		log.Warning("can't dispatch room message")
 		return
 	}
-	log.Infof("dispatch group message:%s %d %d", Command(msg.cmd), msg.flag, d)
+	log.Infof("dispatch group message:%s %d %d", Command(msg.Cmd), msg.Flag, d)
 	if d > int64(time.Second) {
 		log.Warning("dispatch group message slow...")
 	}
 
 	if amsg.msgid > 0 {
-		if (msg.flag & MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", msg.flag)
+		if (msg.Flag & MESSAGE_FLAG_PUSH) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
 		}
-		if (msg.flag & MESSAGE_FLAG_SUPER_GROUP) == 0 {
-			log.Fatal("invalid message flag", msg.flag)
+		if (msg.Flag & MESSAGE_FLAG_SUPER_GROUP) == 0 {
+			log.Fatal("invalid message flag", msg.Flag)
 		}
 
 		meta := &Metadata{sync_key: amsg.msgid, prev_sync_key: amsg.prev_msgid}
-		msg.meta = meta
+		msg.Meta = meta
 	}
 
 	loader := app.GetGroupLoader(amsg.receiver)
