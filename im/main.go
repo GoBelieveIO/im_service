@@ -197,7 +197,7 @@ func main() {
 	log.Infof("cert file:%s key file:%s", config.cert_file, config.key_file)
 
 	log.Info("group deliver count:", config.group_deliver_count)
-	log.Infof("friend permission:%t enable blacklist:%t", config.friend_permission, config.enable_blacklist)
+	log.Infof("enable friendship:%t enable blacklist:%t", config.enable_friendship, config.enable_blacklist)
 	log.Infof("memory limit:%d", config.memory_limit)
 
 	log.Infof("auth method:%s", config.auth_method)
@@ -287,7 +287,7 @@ func main() {
 	}
 
 	var relationship_pool *server.RelationshipPool
-	if config.friend_permission || config.enable_blacklist {
+	if config.enable_friendship || config.enable_blacklist {
 		relationship_pool = server.NewRelationshipPool(config.mysqldb_datasource, redis_pool)
 		relationship_pool.Start()
 	}
@@ -297,7 +297,7 @@ func main() {
 	server := server.NewServer(group_service.GroupManager, filter, redis_pool,
 		server_summary, relationship_pool, auth,
 		rpc_storage, sync_c, group_sync_c, app_route, app,
-		config.enable_blacklist, config.friend_permission, config.kefu_appid)
+		config.enable_blacklist, config.enable_friendship, config.kefu_appid)
 	listener := &Listener{
 		server_summary: server_summary,
 		low_memory:     &low_memory,
