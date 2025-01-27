@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package router
 
 import (
 	"sync"
@@ -30,16 +30,22 @@ import (
 )
 
 type Server struct {
-	clients      ClientSet
-	mutex        sync.Mutex
-	push_service *srv.PushService
+	clients       ClientSet
+	mutex         sync.Mutex
+	push_service  *srv.PushService
+	push_disabled bool
 }
 
-func NewServer(redis_pool *redis.Pool) *Server {
+func NewServer(redis_pool *redis.Pool, push_disabled bool) *Server {
 	s := &Server{}
 	s.clients = NewClientSet()
 	s.push_service = srv.NewPushService(redis_pool)
+	s.push_disabled = push_disabled
 	return s
+}
+
+func (server *Server) RunPushService() {
+	server.push_service.Run()
 }
 
 func (server *Server) onClientClose(client *Client) {
@@ -100,7 +106,7 @@ func (server *Server) HandlePublishGroup(client *Client, amsg *RouteMessage) {
 }
 
 func (server *Server) HandlePush(client *Client, pmsg *BatchPushMessage) {
-	if config.push_disabled {
+	if server.push_disabled {
 		return
 	}
 

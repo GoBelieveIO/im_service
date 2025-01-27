@@ -20,7 +20,6 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"path"
@@ -31,6 +30,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/GoBelieveIO/im_service/protocol"
+	"github.com/GoBelieveIO/im_service/router"
 	"github.com/GoBelieveIO/im_service/server"
 	"github.com/GoBelieveIO/im_service/storage"
 	"github.com/importcjj/sensitive"
@@ -98,74 +98,6 @@ func initLog(config *Config) {
 	} else if level == "fatal" {
 		log.SetLevel(log.FatalLevel)
 	}
-}
-
-func DispatchMessage(app_route *server.AppRoute, amsg *RouteMessage) {
-	now := time.Now().UnixNano()
-	d := now - amsg.timestamp
-
-	mbuffer := bytes.NewBuffer(amsg.msg)
-	msg := protocol.ReceiveMessage(mbuffer)
-	if msg == nil {
-		log.Warning("can't dispatch message")
-		return
-	}
-
-	log.Infof("dispatch app message:%s %d %d", protocol.Command(msg.Cmd), msg.Flag, d)
-	if d > int64(time.Second) {
-		log.Warning("dispatch app message slow...")
-	}
-
-	if amsg.msgid > 0 {
-		if (msg.Flag & protocol.MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", msg.Flag)
-		}
-		meta := server.NewMetadata(amsg.msgid, amsg.prev_msgid)
-		msg.Meta = meta
-	}
-	app_route.SendPeerMessage(amsg.appid, amsg.receiver, msg)
-}
-
-func DispatchRoomMessage(app_route *server.AppRoute, amsg *RouteMessage) {
-	mbuffer := bytes.NewBuffer(amsg.msg)
-	msg := protocol.ReceiveMessage(mbuffer)
-	if msg == nil {
-		log.Warning("can't dispatch room message")
-		return
-	}
-
-	log.Info("dispatch room message", protocol.Command(msg.Cmd))
-
-	room_id := amsg.receiver
-	app_route.SendRoomMessage(amsg.appid, room_id, msg)
-}
-
-func DispatchGroupMessage(app *server.App, amsg *RouteMessage) {
-	now := time.Now().UnixNano()
-	d := now - amsg.timestamp
-	mbuffer := bytes.NewBuffer(amsg.msg)
-	msg := protocol.ReceiveMessage(mbuffer)
-	if msg == nil {
-		log.Warning("can't dispatch room message")
-		return
-	}
-	log.Infof("dispatch group message:%s %d %d", protocol.Command(msg.Cmd), msg.Flag, d)
-	if d > int64(time.Second) {
-		log.Warning("dispatch group message slow...")
-	}
-
-	if amsg.msgid > 0 {
-		if (msg.Flag & protocol.MESSAGE_FLAG_PUSH) == 0 {
-			log.Fatal("invalid message flag", msg.Flag)
-		}
-		if (msg.Flag & protocol.MESSAGE_FLAG_SUPER_GROUP) == 0 {
-			log.Fatal("invalid message flag", msg.Flag)
-		}
-
-		meta := server.NewMetadata(amsg.msgid, amsg.prev_msgid)
-		msg.Meta = meta
-	}
-
 }
 
 func main() {
@@ -238,7 +170,7 @@ func main() {
 	}
 	route_channels := make([]server.RouteChannel, 0)
 	for _, addr := range config.route_addrs {
-		channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
+		channel := router.NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
@@ -247,7 +179,7 @@ func main() {
 	if len(config.group_route_addrs) > 0 {
 		group_route_channels = make([]server.RouteChannel, 0)
 		for _, addr := range config.group_route_addrs {
-			channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
+			channel := router.NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 			channel.Start()
 			group_route_channels = append(group_route_channels, channel)
 		}

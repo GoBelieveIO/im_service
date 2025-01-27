@@ -29,6 +29,7 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/GoBelieveIO/im_service/router"
 	"github.com/gomodule/redigo/redis"
 	log "github.com/sirupsen/logrus"
 )
@@ -42,18 +43,18 @@ var (
 )
 
 var config *RouteConfig
-var server *Server
+var server *router.Server
 
-func handle_client(conn *net.TCPConn, server *Server) {
+func handle_client(conn *net.TCPConn, server *router.Server) {
 	conn.SetKeepAlive(true)
 	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
-	client := NewClient(conn, server)
+	client := router.NewClient(conn, server)
 	log.Info("new client:", conn.RemoteAddr())
 	server.AddClient(client)
 	client.Run()
 }
 
-func Listen(f func(*net.TCPConn, *Server), listen_addr string, server *Server) {
+func Listen(f func(*net.TCPConn, *router.Server), listen_addr string, server *router.Server) {
 	listen, err := net.Listen("tcp", listen_addr)
 	if err != nil {
 		fmt.Println("初始化失败", err.Error())
@@ -74,7 +75,7 @@ func Listen(f func(*net.TCPConn, *Server), listen_addr string, server *Server) {
 	}
 }
 
-func ListenClient(server *Server) {
+func ListenClient(server *router.Server) {
 	Listen(handle_client, config.listen, server)
 }
 
@@ -116,8 +117,12 @@ func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func StartHttpServer(addr string) {
-	http.HandleFunc("/online", GetOnlineStatus)
-	http.HandleFunc("/all_online", GetOnlineClients)
+	http.HandleFunc("/online", func(w http.ResponseWriter, r *http.Request) {
+		router.GetOnlineStatus(w, r, server)
+	})
+	http.HandleFunc("/all_online", func(w http.ResponseWriter, r *http.Request) {
+		router.GetOnlineClients(w, r, server)
+	})
 
 	handler := loggingHandler{http.DefaultServeMux}
 
@@ -186,7 +191,7 @@ func main() {
 	if len(config.http_listen_address) > 0 {
 		go StartHttpServer(config.http_listen_address)
 	}
-	server = NewServer(redis_pool)
-	server.push_service.Run()
+	server = router.NewServer(redis_pool, config.push_disabled)
+	server.RunPushService()
 	ListenClient(server)
 }

@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package router
 
 import (
 	"encoding/json"
@@ -50,7 +50,7 @@ func WriteHttpError(status int, err string, w http.ResponseWriter) {
 }
 
 // 获取当前所有在线的用户
-func GetOnlineClients(w http.ResponseWriter, req *http.Request) {
+func GetOnlineClients(w http.ResponseWriter, req *http.Request, server *Server) {
 	clients := server.GetClientSet()
 
 	type App struct {
@@ -97,7 +97,7 @@ func GetOnlineClients(w http.ResponseWriter, req *http.Request) {
 }
 
 // 获取单个用户在线状态
-func GetOnlineStatus(w http.ResponseWriter, req *http.Request) {
+func GetOnlineStatus(w http.ResponseWriter, req *http.Request, server *Server) {
 	log.Info("get user online status")
 	m, _ := url.ParseQuery(req.URL.RawQuery)
 
