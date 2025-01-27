@@ -20,74 +20,11 @@
 package storage
 
 import (
-	"net"
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	. "github.com/GoBelieveIO/im_service/protocol"
 )
-
-type SyncClient struct {
-	conn    *net.TCPConn
-	ewt     chan *Message
-	storage *Storage
-	master  *Master
-}
-
-func NewSyncClient(conn *net.TCPConn, storage *Storage, master *Master) *SyncClient {
-	c := new(SyncClient)
-	c.conn = conn
-	c.ewt = make(chan *Message, 10)
-	c.storage = storage
-	c.master = master
-	return c
-}
-
-func (client *SyncClient) RunLoop() {
-	seq := 0
-	msg := ReceiveMessage(client.conn)
-	if msg == nil {
-		return
-	}
-	if msg.Cmd != MSG_STORAGE_SYNC_BEGIN {
-		return
-	}
-
-	cursor := msg.Body.(*SyncCursor)
-	log.Info("cursor msgid:", cursor.msgid)
-	c := client.storage.LoadSyncMessagesInBackground(cursor.msgid)
-
-	for batch := range c {
-		msg := &Message{Cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, Body: batch}
-		seq = seq + 1
-		msg.Seq = seq
-		SendMessage(client.conn, msg)
-	}
-
-	client.master.AddClient(client)
-	defer client.master.RemoveClient(client)
-
-	for {
-		msg := <-client.ewt
-		if msg == nil {
-			log.Warning("chan closed")
-			break
-		}
-
-		seq = seq + 1
-		msg.Seq = seq
-		err := SendMessage(client.conn, msg)
-		if err != nil {
-			break
-		}
-	}
-}
-
-func (client *SyncClient) Run() {
-	go client.RunLoop()
-}
 
 type Master struct {
 	ewt chan *EMessage
@@ -184,75 +121,4 @@ func (master *Master) Run() {
 
 func (master *Master) Start() {
 	go master.Run()
-}
-
-type Slaver struct {
-	addr    string
-	storage *Storage
-}
-
-func NewSlaver(addr string, storage *Storage) *Slaver {
-	s := new(Slaver)
-	s.addr = addr
-	s.storage = storage
-	return s
-}
-
-func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
-	defer conn.Close()
-
-	seq := 0
-
-	msgid := slaver.storage.NextMessageID()
-	cursor := &SyncCursor{msgid}
-	log.Info("cursor msgid:", msgid)
-
-	msg := &Message{Cmd: MSG_STORAGE_SYNC_BEGIN, Body: cursor}
-	seq += 1
-	msg.Seq = seq
-	SendMessage(conn, msg)
-
-	for {
-		msg := ReceiveStorageSyncMessage(conn)
-		if msg == nil {
-			return
-		}
-
-		if msg.Cmd == MSG_STORAGE_SYNC_MESSAGE {
-			emsg := msg.Body.(*EMessage)
-			slaver.storage.SaveSyncMessage(emsg)
-		} else if msg.Cmd == MSG_STORAGE_SYNC_MESSAGE_BATCH {
-			mb := msg.Body.(*MessageBatch)
-			slaver.storage.SaveSyncMessageBatch(mb)
-		} else {
-			log.Error("unknown message cmd:", Command(msg.Cmd))
-		}
-	}
-}
-
-func (slaver *Slaver) Run() {
-	nsleep := 100
-	for {
-		conn, err := net.Dial("tcp", slaver.addr)
-		if err != nil {
-			log.Info("connect master server error:", err)
-			nsleep *= 2
-			if nsleep > 60*1000 {
-				nsleep = 60 * 1000
-			}
-			log.Info("slaver sleep:", nsleep)
-			time.Sleep(time.Duration(nsleep) * time.Millisecond)
-			continue
-		}
-		tconn := conn.(*net.TCPConn)
-		tconn.SetKeepAlive(true)
-		tconn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
-		log.Info("slaver connected with master")
-		nsleep = 100
-		slaver.RunOnce(tconn)
-	}
-}
-
-func (slaver *Slaver) Start() {
-	go slaver.Run()
 }
