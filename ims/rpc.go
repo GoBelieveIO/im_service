@@ -36,12 +36,12 @@ func (rpc *RPCStorage) SyncMessage(sync_key *rpc_storage.SyncHistory, result *rp
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
 		hm := &rpc_storage.HistoryMessage{}
-		hm.MsgID = emsg.msgid
-		hm.DeviceID = emsg.device_id
-		hm.Cmd = int32(emsg.msg.Cmd)
+		hm.MsgID = emsg.MsgId
+		hm.DeviceID = emsg.DeviceId
+		hm.Cmd = int32(emsg.Msg.Cmd)
 
-		emsg.msg.Version = DEFAULT_VERSION
-		hm.Raw = emsg.msg.ToData()
+		emsg.Msg.Version = DEFAULT_VERSION
+		hm.Raw = emsg.Msg.ToData()
 		historyMessages = append(historyMessages, hm)
 	}
 
@@ -58,12 +58,12 @@ func (rpc *RPCStorage) SyncGroupMessage(sync_key *rpc_storage.SyncGroupHistory, 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
 		hm := &rpc_storage.HistoryMessage{}
-		hm.MsgID = emsg.msgid
-		hm.DeviceID = emsg.device_id
-		hm.Cmd = int32(emsg.msg.Cmd)
+		hm.MsgID = emsg.MsgId
+		hm.DeviceID = emsg.DeviceId
+		hm.Cmd = int32(emsg.Msg.Cmd)
 
-		emsg.msg.Version = DEFAULT_VERSION
-		hm.Raw = emsg.msg.ToData()
+		emsg.Msg.Version = DEFAULT_VERSION
+		hm.Raw = emsg.Msg.ToData()
 		historyMessages = append(historyMessages, hm)
 	}
 
@@ -125,12 +125,12 @@ func (rpc *RPCStorage) GetLatestMessage(r *rpc_storage.HistoryRequest, l *rpc_st
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
 		hm := &rpc_storage.HistoryMessage{}
-		hm.MsgID = emsg.msgid
-		hm.DeviceID = emsg.device_id
-		hm.Cmd = int32(emsg.msg.Cmd)
+		hm.MsgID = emsg.MsgId
+		hm.DeviceID = emsg.DeviceId
+		hm.Cmd = int32(emsg.Msg.Cmd)
 
-		emsg.msg.Version = DEFAULT_VERSION
-		hm.Raw = emsg.msg.ToData()
+		emsg.Msg.Version = DEFAULT_VERSION
+		hm.Raw = emsg.Msg.ToData()
 		historyMessages = append(historyMessages, hm)
 	}
 	l.Messages = historyMessages

@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package storage
 
 import (
 	"bytes"
@@ -33,8 +33,8 @@ type Storage struct {
 	*GroupStorage
 }
 
-func NewStorage(root string) *Storage {
-	f := NewStorageFile(root)
+func NewStorage(root string, ewt chan *EMessage) *Storage {
+	f := NewStorageFile(root, ewt)
 	ps := NewPeerStorage(f)
 	gs := NewGroupStorage(f)
 
@@ -103,11 +103,11 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 
-	n := storage.getBlockNO(emsg.msgid)
-	o := storage.getBlockOffset(emsg.msgid)
+	n := storage.getBlockNO(emsg.MsgId)
+	o := storage.getBlockOffset(emsg.MsgId)
 
 	if n < storage.block_NO || (n-storage.block_NO) > 1 {
-		log.Warning("skip msg:", emsg.msgid)
+		log.Warning("skip msg:", emsg.MsgId)
 		return nil
 	}
 
@@ -122,7 +122,7 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 	}
 
 	if o < int(offset) {
-		log.Warning("skip msg:", emsg.msgid)
+		log.Warning("skip msg:", emsg.MsgId)
 		return nil
 	} else if o > int(offset) {
 		log.Warning("write padding:", o-int(offset))
@@ -133,9 +133,9 @@ func (storage *Storage) SaveSyncMessage(emsg *EMessage) error {
 		}
 	}
 
-	storage.WriteMessage(storage.file, emsg.msg)
-	storage.execMessage(emsg.msg, emsg.msgid)
-	log.Info("save sync message:", emsg.msgid)
+	storage.WriteMessage(storage.file, emsg.Msg)
+	storage.execMessage(emsg.Msg, emsg.MsgId)
+	log.Info("save sync message:", emsg.MsgId)
 	return nil
 }
 

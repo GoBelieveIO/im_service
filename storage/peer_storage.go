@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package storage
 
 import (
 	"bytes"
@@ -198,7 +198,7 @@ func (storage *PeerStorage) LoadHistoryMessages(appid int64, receiver int64, syn
 			msg.Cmd == MSG_IM ||
 			msg.Cmd == MSG_CUSTOMER_V2 ||
 			msg.Cmd == MSG_SYSTEM {
-			emsg := &EMessage{msgid: off.msgid, device_id: off.device_id, msg: msg}
+			emsg := &EMessage{MsgId: off.msgid, DeviceId: off.device_id, Msg: msg}
 			messages = append(messages, emsg)
 			if limit > 0 && len(messages) >= limit {
 				break
@@ -321,7 +321,7 @@ func (storage *PeerStorage) LoadHistoryMessagesV3(appid int64, receiver int64, s
 			msg.Cmd == MSG_CUSTOMER_V2 ||
 			msg.Cmd == MSG_SYSTEM {
 
-			emsg := &EMessage{msgid: off.msgid, device_id: off.device_id, msg: msg}
+			emsg := &EMessage{MsgId: off.msgid, DeviceId: off.device_id, Msg: msg}
 			messages = append(messages, emsg)
 
 			if limit > 0 && len(messages) >= limit {
@@ -382,7 +382,7 @@ func (storage *PeerStorage) LoadLatestMessages(appid int64, receiver int64, limi
 			msg.Cmd == MSG_GROUP_NOTIFICATION ||
 			msg.Cmd == MSG_IM ||
 			msg.Cmd == MSG_CUSTOMER_V2 {
-			emsg := &EMessage{msgid: off.msgid, device_id: off.device_id, msg: msg}
+			emsg := &EMessage{MsgId: off.msgid, DeviceId: off.device_id, Msg: msg}
 			messages = append(messages, emsg)
 			if len(messages) >= limit {
 				break

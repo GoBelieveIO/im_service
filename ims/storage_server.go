@@ -22,7 +22,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -35,6 +34,7 @@ import (
 	"github.com/gomodule/redigo/redis"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	st "github.com/GoBelieveIO/im_service/storage"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,9 +46,9 @@ var (
 	GIT_BRANCH    string
 )
 
-var storage *Storage
+var storage *st.Storage
 var config *StorageConfig
-var master *Master
+var master *st.Master
 var server_summary *ServerSummary
 
 func init() {
@@ -79,7 +79,7 @@ func Listen(f func(*net.TCPConn), listen_addr string) {
 func handle_sync_client(conn *net.TCPConn) {
 	conn.SetKeepAlive(true)
 	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
-	client := NewSyncClient(conn)
+	client := st.NewSyncClient(conn, storage, master)
 	client.Run()
 }
 
@@ -212,7 +212,6 @@ func initLog() {
 func main() {
 	fmt.Printf("Version:     %s\nBuilt:       %s\nGo version:  %s\nGit branch:  %s\nGit commit:  %s\n", VERSION, BUILD_TIME, GO_VERSION, GIT_BRANCH, GIT_COMMIT_ID)
 
-	rand.Seed(time.Now().UnixNano())
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 	if len(flag.Args()) == 0 {
@@ -244,12 +243,12 @@ func main() {
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
 
-	storage = NewStorage(config.storage_root)
+	storage = st.NewStorage(config.storage_root, master.Channel())
 
-	master = NewMaster()
+	master = st.NewMaster()
 	master.Start()
 	if len(config.master_address) > 0 {
-		slaver := NewSlaver(config.master_address)
+		slaver := st.NewSlaver(config.master_address, storage)
 		slaver.Start()
 	}
 

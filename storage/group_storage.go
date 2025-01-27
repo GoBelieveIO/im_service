@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package storage
 
 import (
 	"bytes"
@@ -152,7 +152,7 @@ func (storage *GroupStorage) LoadGroupHistoryMessages(appid int64, uid int64, gi
 				break
 			}
 		}
-		c = append(c, &EMessage{msgid: off.msgid, device_id: off.device_id, msg: m})
+		c = append(c, &EMessage{MsgId: off.msgid, DeviceId: off.device_id, Msg: m})
 
 		last_id = off.prev_msgid
 

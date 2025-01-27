@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package storage
 
 import (
 	"net"
@@ -30,14 +30,18 @@ import (
 )
 
 type SyncClient struct {
-	conn *net.TCPConn
-	ewt  chan *Message
+	conn    *net.TCPConn
+	ewt     chan *Message
+	storage *Storage
+	master  *Master
 }
 
-func NewSyncClient(conn *net.TCPConn) *SyncClient {
+func NewSyncClient(conn *net.TCPConn, storage *Storage, master *Master) *SyncClient {
 	c := new(SyncClient)
 	c.conn = conn
 	c.ewt = make(chan *Message, 10)
+	c.storage = storage
+	c.master = master
 	return c
 }
 
@@ -53,7 +57,7 @@ func (client *SyncClient) RunLoop() {
 
 	cursor := msg.Body.(*SyncCursor)
 	log.Info("cursor msgid:", cursor.msgid)
-	c := storage.LoadSyncMessagesInBackground(cursor.msgid)
+	c := client.storage.LoadSyncMessagesInBackground(cursor.msgid)
 
 	for batch := range c {
 		msg := &Message{Cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, Body: batch}
@@ -62,8 +66,8 @@ func (client *SyncClient) RunLoop() {
 		SendMessage(client.conn, msg)
 	}
 
-	master.AddClient(client)
-	defer master.RemoveClient(client)
+	client.master.AddClient(client)
+	defer client.master.RemoveClient(client)
 
 	for {
 		msg := <-client.ewt
@@ -99,6 +103,10 @@ func NewMaster() *Master {
 	return master
 }
 
+func (master *Master) Channel() chan *EMessage {
+	return master.ewt
+}
+
 func (master *Master) AddClient(client *SyncClient) {
 	master.mutex.Lock()
 	defer master.mutex.Unlock()
@@ -127,10 +135,10 @@ func (master *Master) SendBatch(cache []*EMessage) {
 	}
 
 	batch := &MessageBatch{msgs: make([]*Message, 0, 1000)}
-	batch.first_id = cache[0].msgid
+	batch.first_id = cache[0].MsgId
 	for _, em := range cache {
-		batch.last_id = em.msgid
-		batch.msgs = append(batch.msgs, em.msg)
+		batch.last_id = em.MsgId
+		batch.msgs = append(batch.msgs, em.Msg)
 	}
 	m := &Message{Cmd: MSG_STORAGE_SYNC_MESSAGE_BATCH, Body: batch}
 	clients := master.CloneClientSet()
@@ -179,12 +187,14 @@ func (master *Master) Start() {
 }
 
 type Slaver struct {
-	addr string
+	addr    string
+	storage *Storage
 }
 
-func NewSlaver(addr string) *Slaver {
+func NewSlaver(addr string, storage *Storage) *Slaver {
 	s := new(Slaver)
 	s.addr = addr
+	s.storage = storage
 	return s
 }
 
@@ -193,7 +203,7 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 
 	seq := 0
 
-	msgid := storage.NextMessageID()
+	msgid := slaver.storage.NextMessageID()
 	cursor := &SyncCursor{msgid}
 	log.Info("cursor msgid:", msgid)
 
@@ -210,10 +220,10 @@ func (slaver *Slaver) RunOnce(conn *net.TCPConn) {
 
 		if msg.Cmd == MSG_STORAGE_SYNC_MESSAGE {
 			emsg := msg.Body.(*EMessage)
-			storage.SaveSyncMessage(emsg)
+			slaver.storage.SaveSyncMessage(emsg)
 		} else if msg.Cmd == MSG_STORAGE_SYNC_MESSAGE_BATCH {
 			mb := msg.Body.(*MessageBatch)
-			storage.SaveSyncMessageBatch(mb)
+			slaver.storage.SaveSyncMessageBatch(mb)
 		} else {
 			log.Error("unknown message cmd:", Command(msg.Cmd))
 		}

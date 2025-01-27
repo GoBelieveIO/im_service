@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package storage
 
 import (
 	"bytes"
@@ -54,6 +54,8 @@ type StorageFile struct {
 
 	last_id       int64 //peer&group message_index记录的最大消息id
 	last_saved_id int64 //索引文件中最大的消息id
+
+	ewt chan<- *EMessage
 }
 
 func onFileEvicted(key lru.Key, value interface{}) {
@@ -61,9 +63,10 @@ func onFileEvicted(key lru.Key, value interface{}) {
 	f.Close()
 }
 
-func NewStorageFile(root string) *StorageFile {
+func NewStorageFile(root string, ewt chan *EMessage) *StorageFile {
 	storage := new(StorageFile)
 
+	storage.ewt = ewt
 	storage.root = root
 	storage.files = lru.New(LRU_SIZE)
 	storage.files.OnEvicted = onFileEvicted
@@ -349,7 +352,7 @@ func (storage *StorageFile) saveMessage(msg *Message) int64 {
 	storage.dirty = true
 
 	msgid = int64(storage.block_NO)*BLOCK_SIZE + msgid
-	master.ewt <- &EMessage{msgid: msgid, msg: msg}
+	storage.ewt <- &EMessage{MsgId: msgid, Msg: msg}
 	log.Info("save message:", Command(msg.Cmd), " ", msgid)
 	return msgid
 

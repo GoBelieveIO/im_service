@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package storage
 
 import (
 	"bytes"
@@ -55,6 +55,57 @@ func (ignore *IgnoreMessage) FromData(buff []byte) bool {
 	return true
 }
 
+type EMessage struct {
+	MsgId    int64
+	DeviceId int64
+	Msg      *Message
+}
+
+func (emsg *EMessage) ToData() []byte {
+	if emsg.Msg == nil {
+		return nil
+	}
+
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, emsg.MsgId)
+	binary.Write(buffer, binary.BigEndian, emsg.DeviceId)
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, emsg.Msg)
+	msg_buf := mbuffer.Bytes()
+	var l int16 = int16(len(msg_buf))
+	binary.Write(buffer, binary.BigEndian, l)
+	buffer.Write(msg_buf)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (emsg *EMessage) FromData(buff []byte) bool {
+	if len(buff) < 18 {
+		return false
+	}
+
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &emsg.MsgId)
+	binary.Read(buffer, binary.BigEndian, &emsg.DeviceId)
+	var l int16
+	binary.Read(buffer, binary.BigEndian, &l)
+	if int(l) > buffer.Len() {
+		return false
+	}
+
+	msg_buf := make([]byte, l)
+	buffer.Read(msg_buf)
+	mbuffer := bytes.NewBuffer(msg_buf)
+	//recusive
+	msg := ReceiveMessage(mbuffer)
+	if msg == nil {
+		return false
+	}
+	emsg.Msg = msg
+
+	return true
+}
+
 type SyncCursor struct {
 	msgid int64
 }
@@ -71,57 +122,6 @@ func (cursor *SyncCursor) FromData(buff []byte) bool {
 	}
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &cursor.msgid)
-	return true
-}
-
-type EMessage struct {
-	msgid     int64
-	device_id int64
-	msg       *Message
-}
-
-func (emsg *EMessage) ToData() []byte {
-	if emsg.msg == nil {
-		return nil
-	}
-
-	buffer := new(bytes.Buffer)
-	binary.Write(buffer, binary.BigEndian, emsg.msgid)
-	binary.Write(buffer, binary.BigEndian, emsg.device_id)
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, emsg.msg)
-	msg_buf := mbuffer.Bytes()
-	var l int16 = int16(len(msg_buf))
-	binary.Write(buffer, binary.BigEndian, l)
-	buffer.Write(msg_buf)
-	buf := buffer.Bytes()
-	return buf
-}
-
-func (emsg *EMessage) FromData(buff []byte) bool {
-	if len(buff) < 18 {
-		return false
-	}
-
-	buffer := bytes.NewBuffer(buff)
-	binary.Read(buffer, binary.BigEndian, &emsg.msgid)
-	binary.Read(buffer, binary.BigEndian, &emsg.device_id)
-	var l int16
-	binary.Read(buffer, binary.BigEndian, &l)
-	if int(l) > buffer.Len() {
-		return false
-	}
-
-	msg_buf := make([]byte, l)
-	buffer.Read(msg_buf)
-	mbuffer := bytes.NewBuffer(msg_buf)
-	//recusive
-	msg := ReceiveMessage(mbuffer)
-	if msg == nil {
-		return false
-	}
-	emsg.msg = msg
-
 	return true
 }
 
