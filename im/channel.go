@@ -20,6 +20,7 @@
 package main
 
 import (
+	"bytes"
 	"net"
 	"sync"
 	"time"
@@ -63,6 +64,10 @@ func NewChannel(addr string, f func(*RouteMessage),
 	channel.addr = addr
 	channel.wt = make(chan *Message, 10)
 	return channel
+}
+
+func (channel *Channel) Address() string {
+	return channel.addr
 }
 
 // 返回添加前的计数
@@ -171,6 +176,46 @@ func (channel *Channel) Unsubscribe(appid int64, uid int64, online bool) {
 		msg := &Message{Cmd: MSG_SUBSCRIBE, Body: id}
 		channel.wt <- msg
 	}
+}
+
+func (channel *Channel) PublishMessage(appid int64, uid int64, msg *Message) {
+	now := time.Now().UnixNano()
+
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+
+	amsg := &RouteMessage{appid: appid, receiver: uid, timestamp: now, msg: msg_buf}
+	if msg.Meta != nil {
+		meta := msg.Meta.(*Metadata)
+		amsg.msgid = meta.sync_key
+		amsg.prev_msgid = meta.prev_sync_key
+	}
+	channel.Publish(amsg)
+}
+
+func (channel *Channel) PublishGroupMessage(appid int64, group_id int64, msg *Message) {
+	now := time.Now().UnixNano()
+
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, msg)
+	msg_buf := mbuffer.Bytes()
+
+	amsg := &RouteMessage{appid: appid, receiver: group_id, timestamp: now, msg: msg_buf}
+	if msg.Meta != nil {
+		meta := msg.Meta.(*Metadata)
+		amsg.msgid = meta.sync_key
+		amsg.prev_msgid = meta.prev_sync_key
+	}
+	channel.PublishGroup(amsg)
+}
+
+func (channel *Channel) PublishRoomMessage(appid int64, room_id int64, m *Message) {
+	mbuffer := new(bytes.Buffer)
+	WriteMessage(mbuffer, m)
+	msg_buf := mbuffer.Bytes()
+	amsg := &RouteMessage{appid: appid, receiver: room_id, msg: msg_buf}
+	channel.PublishRoom(amsg)
 }
 
 func (channel *Channel) Publish(amsg *RouteMessage) {

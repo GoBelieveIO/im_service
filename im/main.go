@@ -204,10 +204,10 @@ func main() {
 
 	rpc_storage := NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
 
-	var group_manager *GroupManager
+	var group_service *GroupService
 	if len(config.mysqldb_datasource) > 0 {
-		group_manager = NewGroupManager(redis_pool, config.mysqldb_datasource, config.redis_config())
-		group_manager.Start()
+		group_service = NewGroupService(redis_pool, config.mysqldb_datasource, config.redis_config())
+		group_service.Start()
 	}
 
 	app_route := NewAppRoute()
@@ -221,16 +221,16 @@ func main() {
 	dispatch_group_message := func(m *RouteMessage) {
 		DispatchGroupMessage(app, m)
 	}
-	route_channels := make([]*Channel, 0)
+	route_channels := make([]RouteChannel, 0)
 	for _, addr := range config.route_addrs {
 		channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
 
-	var group_route_channels []*Channel
+	var group_route_channels []RouteChannel
 	if len(config.group_route_addrs) > 0 {
-		group_route_channels = make([]*Channel, 0)
+		group_route_channels = make([]RouteChannel, 0)
 		for _, addr := range config.group_route_addrs {
 			channel := NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 			channel.Start()
@@ -244,14 +244,14 @@ func main() {
 	for i := 0; i < config.group_deliver_count; i++ {
 		q := fmt.Sprintf("q%d", i)
 		r := path.Join(config.pending_root, q)
-		deliver := NewGroupMessageDeliver(r, group_manager, app, rpc_storage)
+		deliver := NewGroupMessageDeliver(r, group_service.GroupManager, app, rpc_storage)
 		deliver.Start()
 		group_message_delivers[i] = deliver
 	}
 
 	group_loaders := make([]*GroupLoader, config.group_deliver_count)
 	for i := 0; i < config.group_deliver_count; i++ {
-		loader := NewGroupLoader(group_manager, app_route)
+		loader := NewGroupLoader(group_service.GroupManager, app_route)
 		loader.Start()
 		group_loaders[i] = loader
 	}
@@ -282,7 +282,7 @@ func main() {
 
 	go StartHttpServer(config.http_listen_address, app_route, app, redis_pool, server_summary, rpc_storage)
 
-	server := NewServer(group_manager, filter, redis_pool, server_summary, relationship_pool, auth, rpc_storage, sync_c, group_sync_c, app_route, app, config)
+	server := NewServer(group_service.GroupManager, filter, redis_pool, server_summary, relationship_pool, auth, rpc_storage, sync_c, group_sync_c, app_route, app, config)
 	listener := &Listener{
 		server_summary: server_summary,
 		low_memory:     &low_memory,

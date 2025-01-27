@@ -66,7 +66,7 @@ func (push_service *PushService) PublishPeerMessage(appid int64, im *IMMessage) 
 		queue_name = "push_queue"
 	}
 
-	push_service.PushChan(queue_name, b)
+	push_service.pushChan(queue_name, b)
 }
 
 func (push_service *PushService) PublishCustomerMessageV2(appid int64, im *CustomerMessageV2) {
@@ -86,7 +86,7 @@ func (push_service *PushService) PublishCustomerMessageV2(appid int64, im *Custo
 		queue_name = "customer_push_queue_v2"
 	}
 
-	push_service.PushChan(queue_name, b)
+	push_service.pushChan(queue_name, b)
 }
 
 func (push_service *PushService) PublishGroupMessage(appid int64, receivers []int64, im *IMMessage) {
@@ -105,7 +105,7 @@ func (push_service *PushService) PublishGroupMessage(appid int64, receivers []in
 		queue_name = "group_push_queue"
 	}
 
-	push_service.PushChan(queue_name, b)
+	push_service.pushChan(queue_name, b)
 }
 
 func (push_service *PushService) PublishSystemMessage(appid, receiver int64, content string) {
@@ -117,10 +117,10 @@ func (push_service *PushService) PublishSystemMessage(appid, receiver int64, con
 	b, _ := json.Marshal(v)
 	queue_name := "system_push_queue"
 
-	push_service.PushChan(queue_name, b)
+	push_service.pushChan(queue_name, b)
 }
 
-func (push_service *PushService) PushChan(queue_name string, b []byte) {
+func (push_service *PushService) pushChan(queue_name string, b []byte) {
 	select {
 	case push_service.pwt <- &Push{queue_name, b}:
 	default:

@@ -29,13 +29,25 @@ import (
 	. "github.com/GoBelieveIO/im_service/protocol"
 )
 
+type RouteChannel interface {
+	Address() string
+	Subscribe(appid int64, uid int64, online bool)
+	Unsubscribe(appid int64, uid int64, online bool)
+	PublishMessage(appid int64, uid int64, msg *Message)
+	PublishGroupMessage(appid int64, group_id int64, msg *Message)
+	PublishRoomMessage(appid int64, room_id int64, m *Message)
+	Push(appid int64, receivers []int64, msg *Message)
+	SubscribeRoom(appid int64, room_id int64)
+	UnsubscribeRoom(appid int64, room_id int64)
+}
+
 type App struct {
 	app_route *AppRoute
 
 	// route server
-	route_channels []*Channel
+	route_channels []RouteChannel
 	// super group route server
-	group_route_channels []*Channel
+	group_route_channels []RouteChannel
 
 	current_deliver_index  uint64
 	group_message_delivers []*GroupMessageDeliver
@@ -43,7 +55,7 @@ type App struct {
 	group_loaders []*GroupLoader
 }
 
-func (app *App) GetChannel(uid int64) *Channel {
+func (app *App) GetChannel(uid int64) RouteChannel {
 	if uid < 0 {
 		uid = -uid
 	}
@@ -51,7 +63,7 @@ func (app *App) GetChannel(uid int64) *Channel {
 	return app.route_channels[index]
 }
 
-func (app *App) GetGroupChannel(group_id int64) *Channel {
+func (app *App) GetGroupChannel(group_id int64) RouteChannel {
 	if group_id < 0 {
 		group_id = -group_id
 	}
@@ -59,7 +71,7 @@ func (app *App) GetGroupChannel(group_id int64) *Channel {
 	return app.group_route_channels[index]
 }
 
-func (app *App) GetRoomChannel(room_id int64) *Channel {
+func (app *App) GetRoomChannel(room_id int64) RouteChannel {
 	if room_id < 0 {
 		room_id = -room_id
 	}
@@ -84,7 +96,7 @@ func (app *App) GetGroupMessageDeliver(group_id int64) *GroupMessageDeliver {
 
 // 群消息通知(apns, gcm...)
 func (app *App) PushGroupMessage(appid int64, group *Group, m *Message) {
-	channels := make(map[*Channel][]int64)
+	channels := make(map[RouteChannel][]int64)
 	members := group.Members()
 	for member := range members {
 		//不对自身推送
@@ -164,46 +176,18 @@ func (app *App) SendRoomMessage(appid int64, room_id int64, msg *Message, sender
 }
 
 func (app *App) PublishMessage(appid int64, uid int64, msg *Message) {
-	now := time.Now().UnixNano()
-
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, msg)
-	msg_buf := mbuffer.Bytes()
-
-	amsg := &RouteMessage{appid: appid, receiver: uid, timestamp: now, msg: msg_buf}
-	if msg.Meta != nil {
-		meta := msg.Meta.(*Metadata)
-		amsg.msgid = meta.sync_key
-		amsg.prev_msgid = meta.prev_sync_key
-	}
 	channel := app.GetChannel(uid)
-	channel.Publish(amsg)
+	channel.PublishMessage(appid, uid, msg)
 }
 
 func (app *App) PublishGroupMessage(appid int64, group_id int64, msg *Message) {
-	now := time.Now().UnixNano()
-
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, msg)
-	msg_buf := mbuffer.Bytes()
-
-	amsg := &RouteMessage{appid: appid, receiver: group_id, timestamp: now, msg: msg_buf}
-	if msg.Meta != nil {
-		meta := msg.Meta.(*Metadata)
-		amsg.msgid = meta.sync_key
-		amsg.prev_msgid = meta.prev_sync_key
-	}
 	channel := app.GetGroupChannel(group_id)
-	channel.PublishGroup(amsg)
+	channel.PublishGroupMessage(appid, group_id, msg)
 }
 
 func (app *App) PublishRoomMessage(appid int64, room_id int64, m *Message) {
-	mbuffer := new(bytes.Buffer)
-	WriteMessage(mbuffer, m)
-	msg_buf := mbuffer.Bytes()
-	amsg := &RouteMessage{appid: appid, receiver: room_id, msg: msg_buf}
 	channel := app.GetRoomChannel(room_id)
-	channel.PublishRoom(amsg)
+	channel.PublishRoomMessage(appid, room_id, m)
 }
 
 func DispatchMessage(app_route *AppRoute, amsg *RouteMessage) {
