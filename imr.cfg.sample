@@ -1,10 +1,10 @@
 #监听地址 ip:port ip一般使用内网网卡地址
-listen=:4444
+listen=":4444"
 
 #redis服务器地址  服务器地址:服务器端口
-redis_address=127.0.0.1:6379
-redis_password=
-redis_db=0
+[redis]
+address="127.0.0.1:6379"
+password=""
+db=0
 
-#是否推送系统消息
-is_push_system=1
+

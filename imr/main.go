@@ -76,7 +76,7 @@ func Listen(f func(*net.TCPConn, *router.Server), listen_addr string, server *ro
 }
 
 func ListenClient(server *router.Server) {
-	Listen(handle_client, config.listen, server)
+	Listen(handle_client, config.Listen, server)
 }
 
 func NewRedisPool(server, password string, db int) *redis.Pool {
@@ -86,7 +86,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
 			timeout := time.Duration(2) * time.Second
-			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
+			c, err := redis.Dial("tcp", server, redis.DialConnectTimeout(timeout))
 			if err != nil {
 				return nil, err
 			}
@@ -133,21 +133,21 @@ func StartHttpServer(addr string) {
 }
 
 func initLog() {
-	if config.log_filename != "" {
+	if config.Log.Filename != "" {
 		writer := &lumberjack.Logger{
-			Filename:   config.log_filename,
+			Filename:   config.Log.Filename,
 			MaxSize:    1024, // megabytes
-			MaxBackups: config.log_backup,
-			MaxAge:     config.log_age, //days
+			MaxBackups: config.Log.Backup,
+			MaxAge:     config.Log.Age, //days
 			Compress:   false,
 		}
 		log.SetOutput(writer)
 		log.StandardLogger().SetNoLock()
 	}
 
-	log.SetReportCaller(config.log_caller)
+	log.SetReportCaller(config.Log.Caller)
 
-	level := config.log_level
+	level := config.Log.Level
 	if level == "debug" {
 		log.SetLevel(log.DebugLevel)
 	} else if level == "info" {
@@ -175,23 +175,23 @@ func main() {
 
 	log.Info("startup...")
 
-	log.Infof("listen:%s\n", config.listen)
+	log.Infof("listen:%s\n", config.Listen)
 
 	log.Infof("redis address:%s password:%s db:%d\n",
-		config.redis_address, config.redis_password, config.redis_db)
+		config.Redis.Address, config.Redis.Password, config.Redis.Db)
 
-	log.Infof("push disabled:%t", config.push_disabled)
+	log.Infof("push disabled:%t", config.PushDisabled)
 
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
-		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
+		config.Log.Filename, config.Log.Level, config.Log.Backup, config.Log.Age, config.Log.Caller)
 
-	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
-		config.redis_db)
+	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
+		config.Redis.Db)
 
-	if len(config.http_listen_address) > 0 {
-		go StartHttpServer(config.http_listen_address)
+	if config.HttpListenAddress != "" {
+		go StartHttpServer(config.HttpListenAddress)
 	}
-	server = router.NewServer(redis_pool, config.push_disabled)
+	server = router.NewServer(redis_pool, config.PushDisabled)
 	server.RunPushService()
 	ListenClient(server)
 }

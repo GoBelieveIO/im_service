@@ -84,7 +84,7 @@ func handle_sync_client(conn *net.TCPConn) {
 }
 
 func ListenSyncClient() {
-	Listen(handle_sync_client, config.sync_listen)
+	Listen(handle_sync_client, config.SyncListen)
 }
 
 // Signal handler
@@ -173,7 +173,7 @@ func ListenRPCClient() {
 	rpc.Register(rpc_s)
 	rpc.HandleHTTP()
 
-	l, err := net.Listen("tcp", config.rpc_listen)
+	l, err := net.Listen("tcp", config.RpcListen)
 	if err != nil {
 		log.Fatalf("can't start rpc server:%s", err)
 	}
@@ -183,21 +183,21 @@ func ListenRPCClient() {
 }
 
 func initLog() {
-	if config.log_filename != "" {
+	if config.Log.Filename != "" {
 		writer := &lumberjack.Logger{
-			Filename:   config.log_filename,
+			Filename:   config.Log.Filename,
 			MaxSize:    1024, // megabytes
-			MaxBackups: config.log_backup,
-			MaxAge:     config.log_age, //days
+			MaxBackups: config.Log.Backup,
+			MaxAge:     config.Log.Age, //days
 			Compress:   false,
 		}
 		log.SetOutput(writer)
 		log.StandardLogger().SetNoLock()
 	}
 
-	log.SetReportCaller(config.log_caller)
+	log.SetReportCaller(config.Log.Caller)
 
-	level := config.log_level
+	level := config.Log.Level
 	if level == "debug" {
 		log.SetLevel(log.DebugLevel)
 	} else if level == "info" {
@@ -225,30 +225,30 @@ func main() {
 
 	log.Info("startup...")
 
-	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s is push system:%t group limit:%d offline message limit:%d hard limit:%d\n",
-		config.rpc_listen, config.storage_root, config.sync_listen,
-		config.master_address, config.is_push_system, config.group_limit,
-		config.limit, config.hard_limit)
-	log.Infof("http listen address:%s", config.http_listen_address)
+	log.Infof("rpc listen:%s storage root:%s sync listen:%s master address:%s group limit:%d offline message limit:%d hard limit:%d\n",
+		config.RpcListen, config.StorageRoot, config.SyncListen,
+		config.MasterAddress, config.GroupLimit,
+		config.Limit, config.HardLimit)
+	log.Infof("http listen address:%s", config.HttpListenAddress)
 
-	if config.limit == 0 {
+	if config.Limit == 0 {
 		log.Error("config limit is 0")
 		return
 	}
-	if config.hard_limit > 0 && config.hard_limit/config.limit < 2 {
-		log.Errorf("config limit:%d, hard limit:%d invalid, hard limit/limit must gte 2", config.limit, config.hard_limit)
+	if config.HardLimit > 0 && config.HardLimit/config.Limit < 2 {
+		log.Errorf("config limit:%d, hard limit:%d invalid, hard limit/limit must gte 2", config.Limit, config.HardLimit)
 		return
 	}
 
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
-		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
+		config.Log.Filename, config.Log.Level, config.Log.Backup, config.Log.Age, config.Log.Caller)
 
-	storage = st.NewStorage(config.storage_root, master.Channel())
+	storage = st.NewStorage(config.StorageRoot, master.Channel())
 
 	master = st.NewMaster()
 	master.Start()
-	if len(config.master_address) > 0 {
-		slaver := st.NewSlaver(config.master_address, storage)
+	if config.MasterAddress != "" {
+		slaver := st.NewSlaver(config.MasterAddress, storage)
 		slaver.Start()
 	}
 
@@ -257,8 +257,8 @@ func main() {
 	go FlushIndexLoop()
 	go waitSignal()
 
-	if len(config.http_listen_address) > 0 {
-		go StartHttpServer(config.http_listen_address)
+	if len(config.HttpListenAddress) > 0 {
+		go StartHttpServer(config.HttpListenAddress)
 	}
 
 	go ListenSyncClient()

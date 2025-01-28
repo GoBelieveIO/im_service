@@ -1,12 +1,12 @@
 #监听地址 ip:port ip一般选择内网网卡的地址
-rpc_listen=:13333
+rpc_listen=":13333"
 #消息存储路径，必须存在
-storage_root=/tmp/im
+storage_root="/tmp/im"
 #备份监听地址 ip:port, ip一般选择内网网卡的地址
-sync_listen=:3334
+sync_listen=":3334"
 
 #主机监听地址，备机需要此配置
-#master_address=:3334
+#master_address=":3334"
 
 #客服的appid
 kefu_appid=0

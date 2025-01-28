@@ -31,7 +31,7 @@ type RPCStorage struct {
 
 func (rpc *RPCStorage) SyncMessage(sync_key *rpc_storage.SyncHistory, result *rpc_storage.PeerHistoryMessage) error {
 	atomic.AddInt64(&server_summary.nrequests, 1)
-	messages, last_msgid, hasMore := storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, config.limit, config.hard_limit)
+	messages, last_msgid, hasMore := storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, config.Limit, config.HardLimit)
 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
