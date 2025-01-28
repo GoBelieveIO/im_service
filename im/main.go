@@ -52,7 +52,7 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 		IdleTimeout: 480 * time.Second,
 		Dial: func() (redis.Conn, error) {
 			timeout := time.Duration(2) * time.Second
-			c, err := redis.DialTimeout("tcp", server, timeout, 0, 0)
+			c, err := redis.Dial("tcp", server, redis.DialConnectTimeout(timeout))
 			if err != nil {
 				return nil, err
 			}
@@ -74,21 +74,21 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 }
 
 func initLog(config *Config) {
-	if config.log_filename != "" {
+	if config.Log.Filename != "" {
 		writer := &lumberjack.Logger{
-			Filename:   config.log_filename,
+			Filename:   config.Log.Filename,
 			MaxSize:    1024, // megabytes
-			MaxBackups: config.log_backup,
-			MaxAge:     config.log_age, //days
+			MaxBackups: config.Log.Backup,
+			MaxAge:     config.Log.Age, //days
 			Compress:   false,
 		}
 		log.SetOutput(writer)
 		log.StandardLogger().SetNoLock()
 	}
 
-	log.SetReportCaller(config.log_caller)
+	log.SetReportCaller(config.Log.Caller)
 
-	level := config.log_level
+	level := config.Log.Level
 	if level == "debug" {
 		log.SetLevel(log.DebugLevel)
 	} else if level == "info" {
@@ -98,6 +98,33 @@ func initLog(config *Config) {
 	} else if level == "fatal" {
 		log.SetLevel(log.FatalLevel)
 	}
+}
+
+func print_config(config *Config) {
+	log.Info("startup...")
+	log.Infof("port:%d\n", config.Port)
+
+	log.Infof("redis address:%s password:%s db:%d\n",
+		config.Redis.Address, config.Redis.Password, config.Redis.Db)
+
+	log.Info("storage addresses:", config.StorageRpcAddrs)
+	log.Info("route addressed:", config.RouteAddrs)
+	log.Info("group route addressed:", config.GroupRouteAddrs)
+	log.Info("kefu appid:", config.KefuAppId)
+	log.Info("pending root:", config.PendingRoot)
+
+	log.Infof("ws address:%s wss address:%s", config.WsAddress, config.WssAddress)
+	log.Infof("cert file:%s key file:%s", config.CertFile, config.KeyFile)
+
+	log.Info("group deliver count:", config.GroupDeliverCount)
+	log.Infof("enable friendship:%t enable blacklist:%t", config.EnableFriendship, config.EnableBlacklist)
+	log.Infof("memory limit:%d", config.memory_limit)
+
+	log.Infof("auth method:%s", config.AuthMethod)
+	log.Infof("jwt sign key:%s", string(config.jwt_signing_key))
+
+	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
+		config.Log.Filename, config.Log.Level, config.Log.Backup, config.Log.Age, config.Log.Caller)
 }
 
 func main() {
@@ -112,47 +139,23 @@ func main() {
 	config := read_cfg(flag.Args()[0])
 
 	initLog(config)
-
-	log.Info("startup...")
-	log.Infof("port:%d\n", config.port)
-
-	log.Infof("redis address:%s password:%s db:%d\n",
-		config.redis_address, config.redis_password, config.redis_db)
-
-	log.Info("storage addresses:", config.storage_rpc_addrs)
-	log.Info("route addressed:", config.route_addrs)
-	log.Info("group route addressed:", config.group_route_addrs)
-	log.Info("kefu appid:", config.kefu_appid)
-	log.Info("pending root:", config.pending_root)
-
-	log.Infof("ws address:%s wss address:%s", config.ws_address, config.wss_address)
-	log.Infof("cert file:%s key file:%s", config.cert_file, config.key_file)
-
-	log.Info("group deliver count:", config.group_deliver_count)
-	log.Infof("enable friendship:%t enable blacklist:%t", config.enable_friendship, config.enable_blacklist)
-	log.Infof("memory limit:%d", config.memory_limit)
-
-	log.Infof("auth method:%s", config.auth_method)
-	log.Infof("jwt sign key:%s", string(config.jwt_signing_key))
-
-	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
-		config.log_filename, config.log_level, config.log_backup, config.log_age, config.log_caller)
+	print_config(config)
 
 	var low_memory int32 //低内存状态
 	sync_c := make(chan *storage.SyncHistory, 100)
 	group_sync_c := make(chan *storage.SyncGroupHistory, 100)
 	server_summary := server.NewServerSummary()
 
-	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
-		config.redis_db)
+	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
+		config.Redis.Db)
 
-	auth := NewAuth(config.auth_method)
+	auth := NewAuth(config.AuthMethod)
 
-	rpc_storage := server.NewRPCStorage(config.storage_rpc_addrs, config.group_storage_rpc_addrs)
+	rpc_storage := server.NewRPCStorage(config.StorageRpcAddrs, config.GroupStorageRpcAdrs)
 
 	var group_service *server.GroupService
-	if len(config.mysqldb_datasource) > 0 {
-		group_service = server.NewGroupService(redis_pool, config.mysqldb_datasource, config.redis_config())
+	if len(config.MySqlDataSource) > 0 {
+		group_service = server.NewGroupService(redis_pool, config.MySqlDataSource, config.redis_config())
 		group_service.Start()
 	}
 
@@ -169,16 +172,16 @@ func main() {
 		loader.DispatchMessage(msg, group_id, appid)
 	}
 	route_channels := make([]server.RouteChannel, 0)
-	for _, addr := range config.route_addrs {
+	for _, addr := range config.RouteAddrs {
 		channel := router.NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 		channel.Start()
 		route_channels = append(route_channels, channel)
 	}
 
 	var group_route_channels []server.RouteChannel
-	if len(config.group_route_addrs) > 0 {
+	if len(config.GroupRouteAddrs) > 0 {
 		group_route_channels = make([]server.RouteChannel, 0)
-		for _, addr := range config.group_route_addrs {
+		for _, addr := range config.GroupRouteAddrs {
 			channel := router.NewChannel(addr, dispatch_app_message, dispatch_group_message, dispatch_room_message)
 			channel.Start()
 			group_route_channels = append(group_route_channels, channel)
@@ -187,17 +190,17 @@ func main() {
 		group_route_channels = route_channels
 	}
 
-	group_message_delivers := make([]*server.GroupMessageDeliver, config.group_deliver_count)
-	for i := 0; i < config.group_deliver_count; i++ {
+	group_message_delivers := make([]*server.GroupMessageDeliver, config.GroupDeliverCount)
+	for i := 0; i < config.GroupDeliverCount; i++ {
 		q := fmt.Sprintf("q%d", i)
-		r := path.Join(config.pending_root, q)
+		r := path.Join(config.PendingRoot, q)
 		deliver := server.NewGroupMessageDeliver(r, group_service.GroupManager, app, rpc_storage)
 		deliver.Start()
 		group_message_delivers[i] = deliver
 	}
 
-	group_loaders := make([]*server.GroupLoader, config.group_deliver_count)
-	for i := 0; i < config.group_deliver_count; i++ {
+	group_loaders := make([]*server.GroupLoader, config.GroupDeliverCount)
+	for i := 0; i < config.GroupDeliverCount; i++ {
 		loader := server.NewGroupLoader(group_service.GroupManager, app_route)
 		loader.Start()
 		group_loaders[i] = loader
@@ -206,9 +209,9 @@ func main() {
 	app.Init(app_route, route_channels, group_route_channels, group_message_delivers, group_loaders)
 
 	var filter *sensitive.Filter
-	if len(config.word_file) > 0 {
+	if len(config.WordFile) > 0 {
 		filter = sensitive.New()
-		filter.LoadWordDict(config.word_file)
+		filter.LoadWordDict(config.WordFile)
 	}
 
 	go server.ListenRedis(app_route, config.redis_config())
@@ -219,32 +222,32 @@ func main() {
 	}
 
 	var relationship_pool *server.RelationshipPool
-	if config.enable_friendship || config.enable_blacklist {
-		relationship_pool = server.NewRelationshipPool(config.mysqldb_datasource, redis_pool)
+	if config.EnableFriendship || config.EnableBlacklist {
+		relationship_pool = server.NewRelationshipPool(config.MySqlDataSource, redis_pool)
 		relationship_pool.Start()
 	}
 
-	go StartHttpServer(config.http_listen_address, app_route, app, redis_pool, server_summary, rpc_storage)
+	go StartHttpServer(config.HttpListenAddress, app_route, app, redis_pool, server_summary, rpc_storage)
 
 	server := server.NewServer(group_service.GroupManager, filter, redis_pool,
 		server_summary, relationship_pool, auth,
 		rpc_storage, sync_c, group_sync_c, app_route, app,
-		config.enable_blacklist, config.enable_friendship, config.kefu_appid)
+		config.EnableBlacklist, config.EnableFriendship, config.KefuAppId)
 	listener := &Listener{
 		server_summary: server_summary,
 		low_memory:     &low_memory,
 		server:         server,
 	}
-	if len(config.ws_address) > 0 {
-		go StartWSServer(config.ws_address, listener)
+	if len(config.WsAddress) > 0 {
+		go StartWSServer(config.WsAddress, listener)
 	}
-	if len(config.wss_address) > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
-		go StartWSSServer(config.wss_address, config.cert_file, config.key_file, listener)
+	if len(config.WssAddress) > 0 && len(config.CertFile) > 0 && len(config.KeyFile) > 0 {
+		go StartWSSServer(config.WssAddress, config.CertFile, config.KeyFile, listener)
 	}
 
-	if config.ssl_port > 0 && len(config.cert_file) > 0 && len(config.key_file) > 0 {
-		go ListenSSL(config.ssl_port, config.cert_file, config.key_file, listener)
+	if config.SslPort > 0 && len(config.CertFile) > 0 && len(config.KeyFile) > 0 {
+		go ListenSSL(config.SslPort, config.CertFile, config.KeyFile, listener)
 	}
-	ListenClient(config.port, listener)
+	ListenClient(config.Port, listener)
 	log.Infof("exit")
 }

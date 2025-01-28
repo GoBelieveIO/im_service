@@ -24,99 +24,100 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/GoBelieveIO/im_service/server"
-	"github.com/richmonkey/cfg"
 )
 
 const DEFAULT_GROUP_DELIVER_COUNT = 4
 
+type RedisConfig struct {
+	Address  string `toml:"host"`
+	Password string `toml:"password"`
+	Db       int    `toml:"db"`
+}
+
+type LogConfig struct {
+	Filename string `toml:"filename"`
+	Level    string `toml:"level"`
+	Backup   int    `toml:"backup"` //log files
+	Age      int    `toml:"age"`    //days
+	Caller   bool   `toml:"caller"`
+}
+
 type Config struct {
-	port               int
-	ssl_port           int
-	mysqldb_datasource string
-	pending_root       string
+	Port            int    `toml:"port"`
+	SslPort         int    `toml:"ssl_port"`
+	MySqlDataSource string `toml:"mysqldb_datasource"`
+	PendingRoot     string `toml:"pending_root"`
 
-	kefu_appid int64
+	KefuAppId int64 `toml:"kefu_appid"`
 
-	redis_address  string
-	redis_password string
-	redis_db       int
+	Redis RedisConfig `toml:"redis"`
 
-	http_listen_address string
+	HttpListenAddress string `toml:"http_listen_address"`
 
 	//websocket listen address
-	ws_address string
+	WsAddress string `toml:"ws_address"`
 
-	wss_address string
-	cert_file   string
-	key_file    string
+	WssAddress string `toml:"wss_address"`
+	CertFile   string `toml:"cert_file"`
+	KeyFile    string `toml:"key_file"`
 
-	storage_rpc_addrs       []string
-	group_storage_rpc_addrs []string
-	route_addrs             []string
-	group_route_addrs       []string //可选配置项， 超群群的route server
+	StorageRpcAddrs     []string `toml:"storage_rpc_addrs"`
+	GroupStorageRpcAdrs []string `toml:"group_storage_rpc_addrs"`
+	RouteAddrs          []string `toml:"route_addrs"`
+	GroupRouteAddrs     []string `toml:"group_route_addrs"` //可选配置项， 超群群的route server
 
-	group_deliver_count int    //群组消息投递并发数量,默认4
-	word_file           string //关键词字典文件
-	enable_friendship   bool   //验证好友关系
-	enable_blacklist    bool   //验证是否在对方的黑名单中
+	GroupDeliverCount int    `toml:"group_deliver_count"` //群组消息投递并发数量,默认4
+	WordFile          string `toml:"word_file"`           //关键词字典文件
+	EnableFriendship  bool   `toml:"enable_friendship"`   //验证好友关系
+	EnableBlacklist   bool   `toml:"enable_blacklist"`    //验证是否在对方的黑名单中
 
-	memory_limit int64 //rss超过limit，不接受新的链接
+	MemoryLimit string `toml:"memory_limit"` //rss超过limit，不接受新的链接
 
-	log_filename string
-	log_level    string
-	log_backup   int //log files
-	log_age      int //days
-	log_caller   bool
+	memory_limit int64
 
-	auth_method     string //jwt or redis
+	Log LogConfig `toml:"log"`
+
+	AuthMethod    string `toml:"auth_method"` //jwt or redis
+	JwtSigningKey string `toml:"jwt_signing_key"`
+
 	jwt_signing_key []byte
 }
 
 func (config *Config) redis_config() *server.RedisConfig {
-	return server.NewRedisConfig(config.redis_address, config.redis_password, config.redis_db)
+	return server.NewRedisConfig(config.Redis.Address, config.Redis.Password, config.Redis.Db)
 }
 
-func get_int(app_cfg map[string]string, key string) int {
-	concurrency, present := app_cfg[key]
-	if !present {
-		log.Fatalf("key:%s non exist", key)
+func read_cfg(cfg_path string) *Config {
+	var conf Config
+	if _, err := toml.DecodeFile(cfg_path, &conf); err != nil {
+		// handle error
+		log.Fatal("Decode cfg file fail:", err)
 	}
-	n, err := strconv.ParseInt(concurrency, 10, 64)
-	if err != nil {
-		log.Fatalf("key:%s is't integer", key)
+
+	mem_limit := strings.TrimSpace(conf.MemoryLimit)
+	if mem_limit != "" {
+		if strings.HasSuffix(mem_limit, "M") {
+			mem_limit = mem_limit[0 : len(mem_limit)-1]
+			n, _ := strconv.ParseInt(mem_limit, 10, 64)
+			conf.memory_limit = n * 1024 * 1024
+		} else if strings.HasSuffix(mem_limit, "G") {
+			mem_limit = mem_limit[0 : len(mem_limit)-1]
+			n, _ := strconv.ParseInt(mem_limit, 10, 64)
+			conf.memory_limit = n * 1024 * 1024 * 1024
+		}
 	}
-	return int(n)
+
+	if conf.AuthMethod == "" {
+		conf.AuthMethod = "redis"
+	}
+
+	conf.jwt_signing_key = []byte(conf.JwtSigningKey)
+	return &conf
 }
 
-func get_opt_int(app_cfg map[string]string, key string) int64 {
-	concurrency, present := app_cfg[key]
-	if !present {
-		return 0
-	}
-	n, err := strconv.ParseInt(concurrency, 10, 64)
-	if err != nil {
-		log.Fatalf("key:%s is't integer", key)
-	}
-	return n
-}
-
-func get_string(app_cfg map[string]string, key string) string {
-	concurrency, present := app_cfg[key]
-	if !present {
-		log.Fatalf("key:%s non exist", key)
-	}
-	return concurrency
-}
-
-func get_opt_string(app_cfg map[string]string, key string) string {
-	concurrency, present := app_cfg[key]
-	if !present {
-		return ""
-	}
-	return concurrency
-}
-
+/*
 func read_cfg(cfg_path string) *Config {
 	config := new(Config)
 	app_cfg := make(map[string]string)
@@ -227,3 +228,4 @@ func read_cfg(cfg_path string) *Config {
 	}
 	return config
 }
+*/

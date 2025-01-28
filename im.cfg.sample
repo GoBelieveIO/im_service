@@ -5,7 +5,7 @@ port=23000
 ssl_port=24430
 
 #存储服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
-storage_rpc_pool=127.0.0.1:13333
+storage_rpc_pool=["127.0.0.1:13333"]
 
 #可选项 超级群的存储服务器, 格式和storage_rpc_pool一样
 #不配置的情况下，使用storage_rpc_pool
@@ -13,7 +13,7 @@ storage_rpc_pool=127.0.0.1:13333
 #group_storage_rpc_pool=
 
 #路由服务器地址 "服务器1的ip:port 服务器2的ip:port ..." 多个存储服务器之间用空格隔开，顺序要保证一致
-route_pool=127.0.0.1:4444
+route_pool=["127.0.0.1:4444"]
 
 #可选项 超级群的路由服务器地址，格式和route_pool一样
 #不配置的情况下，使用route_pool
@@ -22,39 +22,42 @@ route_pool=127.0.0.1:4444
 
 
 #websocket的监听地址 ip:port 可选项
-ws_address=:13891
+ws_address=":13891"
 #wss监听地址 可选项
-wss_address=:14891
+wss_address=":14891"
 
 #websocket tls域名的证书文件路径(let's encrypt) 可选项
-cert_file=fullchain1.pem
-key_file=privkey1.pem
+cert_file="fullchain1.pem"
+key_file="privkey1.pem"
 
 
 #服务器状态信息和发送群组通知消息的接口监听地址 ip:port ip一般使用内网网卡地址
-http_listen_address=:6666
+http_listen_address=":6666"
 #grpc监听地址
-rpc_listen_address=:6665
+rpc_listen_address=":6665"
 
 #mysql的链接地址  用户名:密码@tcp(服务器地址:服务器端口)/数据库名称
-mysqldb_source=root:123456@tcp(127.0.0.1:3306)/gobelieve
+mysqldb_source="root:123456@tcp(127.0.0.1:3306)/gobelieve"
 #redis服务器地址  服务器ip：服务器端口
-redis_address=127.0.0.1:6379
-redis_password=
-redis_db=0
+
+[redis]
+address="127.0.0.1:6379"
+password=""
+db=0
 
 #群组消息发送队列的存储路径，必须存在
-pending_root=/tmp/pending
+pending_root="/tmp/pending"
 
 #客服的appid 可选项
 kefu_appid=0
 
 #可选日志配置
-log_filename=im.log
-log_level=info
+[log]
+filename="im.log"
+level="info"
 #rotate log保存的文件数
-log_backup=3
+backup=3
 #log保存天数
-log_age=30
+age=30
 #是否打印file&line
-log_caller=1
+caller=true

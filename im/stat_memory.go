@@ -20,7 +20,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -55,7 +54,7 @@ func ReadRSSDarwin(pid int) int64 {
 
 func ReadRSSLinux(pid int, pagesize int) int64 {
 	//http://man7.org/linux/man-pages/man5/proc.5.html
-	procStatFileBytes, err := ioutil.ReadFile(path.Join("/proc", strconv.Itoa(pid), "stat"))
+	procStatFileBytes, err := os.ReadFile(path.Join("/proc", strconv.Itoa(pid), "stat"))
 	if err != nil {
 		log.Warning("read file err:", err)
 		return 0

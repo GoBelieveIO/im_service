@@ -32,11 +32,18 @@ func TestFilter(t *testing.T) {
 	log.Println(e, t2)
 }
 
-func Test_Relationship(t *testing.T) {
+func TestConfig(t *testing.T) {
+	conf := read_cfg("../bin/im.cfg")
+	log.Println("config:", conf)
+	log.Println("redis config:", conf.Redis)
+	log.Println("log config:", conf.Log)
+}
+
+func TestRelationship(t *testing.T) {
 	config := read_cfg("../bin/im.cfg")
-	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
-		config.redis_db)
-	relationship_pool := server.NewRelationshipPool(config.mysqldb_datasource, redis_pool)
+	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
+		config.Redis.Db)
+	relationship_pool := server.NewRelationshipPool(config.MySqlDataSource, redis_pool)
 	rs := relationship_pool.GetRelationship(7, 1, 2)
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
 
@@ -74,8 +81,8 @@ func Test_Relationship(t *testing.T) {
 
 func TestStreamRange(t *testing.T) {
 	config := read_cfg("../bin/im.cfg")
-	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
-		config.redis_db)
+	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
+		config.Redis.Db)
 	conn := redis_pool.Get()
 	defer conn.Close()
 
@@ -115,8 +122,9 @@ func TestStreamRange(t *testing.T) {
 
 func TestStreamRead(t *testing.T) {
 	config := read_cfg("../bin/im.cfg")
-	redis_pool := NewRedisPool(config.redis_address, config.redis_password,
-		config.redis_db)
+	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
+		config.Redis.Db)
+
 	conn := redis_pool.Get()
 	defer conn.Close()
 
