@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-REDIS_HOST="192.168.56.10"
-REDIS_PORT=6379
-REDIS_DB=1
-REDIS_PASSWORD="123456"
+REDIS_HOST = "127.0.0.1"
+REDIS_PORT = 6379
+REDIS_DB = 0
+REDIS_PASSWORD = ""
 
 
 KEFU_APP_ID = 1453
@@ -12,4 +12,4 @@ APP_ID = 7
 HOST = "127.0.0.1"
 SSL = False
 
-RPC_URL="http://localhost:6666"
+RPC_URL = "http://localhost:6666"

@@ -26,7 +26,7 @@ import (
 )
 
 type RedisConfig struct {
-	Address  string `toml:"host"`
+	Address  string `toml:"address"`
 	Password string `toml:"password"`
 	Db       int    `toml:"db"`
 }
@@ -40,10 +40,10 @@ type LogConfig struct {
 }
 
 type Config struct {
-	Listen string `toml:"filename"`
+	Listen string `toml:"listen"`
 
-	PushDisabled      bool   `toml:"filename"`
-	HttpListenAddress string `toml:"filename"`
+	PushDisabled      bool   `toml:"push_disabled"`
+	HttpListenAddress string `toml:"http_listen_address"`
 
 	Redis RedisConfig `toml:"redis"`
 	Log   LogConfig   `toml:"log"`

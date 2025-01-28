@@ -107,6 +107,8 @@ func print_config(config *Config) {
 	log.Infof("redis address:%s password:%s db:%d\n",
 		config.Redis.Address, config.Redis.Password, config.Redis.Db)
 
+	log.Info("mysql datasource:", config.MySqlDataSource)
+
 	log.Info("storage addresses:", config.StorageRpcAddrs)
 	log.Info("route addressed:", config.RouteAddrs)
 	log.Info("group route addressed:", config.GroupRouteAddrs)
@@ -149,7 +151,7 @@ func main() {
 	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
 		config.Redis.Db)
 
-	auth := NewAuth(config.AuthMethod)
+	auth := NewAuth(config.AuthMethod, redis_pool)
 
 	rpc_storage := server.NewRPCStorage(config.StorageRpcAddrs, config.GroupStorageRpcAdrs)
 

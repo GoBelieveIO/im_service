@@ -114,17 +114,17 @@ func (a *JWTAuth) LoadUserAccessToken(tokenString string) (int64, int64, error) 
 	}
 }
 
-func NewRedisAuth() server.Auth {
-	return &RedisAuth{}
+func NewRedisAuth(r *redis.Pool) server.Auth {
+	return &RedisAuth{redis_pool: r}
 }
 
 func NewJWTAuth() server.Auth {
 	return &JWTAuth{}
 }
 
-func NewAuth(method string) server.Auth {
+func NewAuth(method string, redis_pool *redis.Pool) server.Auth {
 	if method == "redis" {
-		return NewRedisAuth()
+		return NewRedisAuth(redis_pool)
 	} else if method == "jwt" {
 		return NewJWTAuth()
 	} else {

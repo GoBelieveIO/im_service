@@ -78,7 +78,8 @@ func NewServer(
 	friend_permission bool,
 	kefu_appid int64) *Server {
 	s := &Server{}
-
+	log.Info("tttttttttttttttttttttttt")
+	s.handlers = make(map[int]MessageHandler)
 	s.handlers[MSG_AUTH_TOKEN] = s.HandleAuthToken
 	s.handlers[MSG_PING] = s.HandlePing
 	s.handlers[MSG_ACK] = s.HandleACK

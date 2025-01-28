@@ -31,7 +31,7 @@ import (
 const DEFAULT_GROUP_DELIVER_COUNT = 4
 
 type RedisConfig struct {
-	Address  string `toml:"host"`
+	Address  string `toml:"address"`
 	Password string `toml:"password"`
 	Db       int    `toml:"db"`
 }

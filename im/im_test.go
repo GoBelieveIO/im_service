@@ -37,6 +37,7 @@ func TestConfig(t *testing.T) {
 	log.Println("config:", conf)
 	log.Println("redis config:", conf.Redis)
 	log.Println("log config:", conf.Log)
+	log.Println("route channels:", conf.RouteAddrs)
 }
 
 func TestRelationship(t *testing.T) {

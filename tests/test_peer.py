@@ -13,21 +13,23 @@ import rpc
 from protocol import *
 from client import *
 
+
 task = 0
 
 SENDER = 1
 RECEIVER = 2
 
+
 def send_client(uid, receiver, msg_type):
     global task
-    sock, seq =  connect_server(uid, 23000)
+    sock, seq = connect_server(uid, 23000)
     im = IMMessage()
     im.sender = uid
     im.receiver = receiver
     if msg_type == MSG_IM:
-        im.content = json.dumps({"uuid":str(uuid.uuid1()), "text":"test im"})
+        im.content = json.dumps({"uuid": str(uuid.uuid1()), "text": "test im"})
     else:
-        im.content = json.dumps({"uuid":str(uuid.uuid1()), "text":"test group im"})
+        im.content = json.dumps({"uuid": str(uuid.uuid1()), "text": "test group im"})
     seq += 1
     send_message(msg_type, seq, im, sock)
     msg_seq = seq
@@ -37,15 +39,14 @@ def send_client(uid, receiver, msg_type):
             break
         else:
             pass
-        
-    sock.close()    
+
+    sock.close()
     task += 1
     print("send success")
 
 
-
 def recv_room_client(uid, port, room_id, handler):
-    sock, seq =  connect_server(uid, port)
+    sock, seq = connect_server(uid, port)
 
     seq += 1
     send_message(MSG_ENTER_ROOM, seq, room_id, sock)
@@ -59,7 +60,8 @@ def recv_room_client(uid, port, room_id, handler):
 
 
 def recv_room_message_client(uid, room_id, port=23000):
-    global task    
+    global task
+
     def handle_message(cmd, s, msg):
         if cmd == MSG_ROOM_IM:
             return True
@@ -73,11 +75,11 @@ def recv_room_message_client(uid, room_id, port=23000):
 
 def send_room_message_client(uid, room_id):
     global task
-    sock, seq =  connect_server(uid, 23000)
+    sock, seq = connect_server(uid, 23000)
 
     seq += 1
     send_message(MSG_ENTER_ROOM, seq, room_id, sock)
-    
+
     im = RTMessage()
     im.sender = uid
     im.receiver = room_id
@@ -90,7 +92,7 @@ def send_room_message_client(uid, room_id):
 
 def send_rt_client(uid, receiver):
     global task
-    sock, seq =  connect_server(uid, 23000)
+    sock, seq = connect_server(uid, 23000)
     im = RTMessage()
     im.sender = uid
     im.receiver = receiver
@@ -103,9 +105,9 @@ def send_rt_client(uid, receiver):
     print("send success")
 
 
-    
 def recv_message_client(uid, port=23000):
     global task
+
     def handle_message(cmd, s, msg):
         if cmd == MSG_IM:
             return True
@@ -116,9 +118,10 @@ def recv_message_client(uid, port=23000):
     task += 1
     print("recv message success")
 
-    
+
 def recv_rt_message_client(uid, port=23000):
     global task
+
     def handle_message(cmd, s, msg):
         if cmd == MSG_RT:
             return True
@@ -130,18 +133,15 @@ def recv_rt_message_client(uid, port=23000):
     print("recv rt message success")
 
 
-
-    
 def send_http_peer_message(uid, receiver):
     global task
-    content = json.dumps({"text":"test", "uuid":str(uuid.uuid1())})    
+    content = json.dumps({"text": "test", "uuid": str(uuid.uuid1())})
     res = rpc.post_peer_message(APP_ID, uid, receiver, content)
     if res.status_code != 200:
         print(res.status_code, res.content)
         return
     print("send http peer message:", res.status_code)
     task += 1
-
 
 
 def send_notificaton(uid):
@@ -152,9 +152,11 @@ def send_notificaton(uid):
         return
     print("send notification:", res.status_code)
     task += 1
-    
+
+
 def recv_notification_client(uid):
     global task
+
     def handle_message(cmd, s, msg):
         if cmd == MSG_NOTIFICATION:
             print("cmd:", cmd, msg)
@@ -167,23 +169,21 @@ def recv_notification_client(uid):
     task += 1
     print("recv notification success")
 
-    
 
 def send_system_message(uid):
     global task
-    obj = {
-        "receiver":uid,
-        "content":"system message content"
-    }
+    obj = {"receiver": uid, "content": "system message content"}
     res = rpc.post_system_message(APP_ID, uid, "system message content")
     if res.status_code != 200:
         print(res.status_code, res.content)
         return
     print("send system message:", res.status_code)
     task += 1
-    
+
+
 def recv_system_message_client(uid):
     global task
+
     def handle_message(cmd, s, msg):
         if cmd == MSG_SYSTEM:
             print("cmd:", cmd, msg)
@@ -197,18 +197,16 @@ def recv_system_message_client(uid):
     print("recv system message success")
 
 
-
-    
 def TestCluster():
     global task
     task = 0
     t3 = threading.Thread(target=recv_message_client, args=(RECEIVER, 24000))
     t3.setDaemon(True)
     t3.start()
-    
+
     time.sleep(1)
 
-    t2 = threading.Thread(target=send_client, args=(SENDER,RECEIVER, MSG_IM))
+    t2 = threading.Thread(target=send_client, args=(SENDER, RECEIVER, MSG_IM))
     t2.setDaemon(True)
     t2.start()
 
@@ -217,41 +215,44 @@ def TestCluster():
 
     print("test cluster completed")
 
+
 def TestRTSendAndRecv():
     global task
     task = 0
- 
+
     t3 = threading.Thread(target=recv_rt_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
-    
-    t2 = threading.Thread(target=send_rt_client, args=(SENDER,RECEIVER))
+
+    t2 = threading.Thread(target=send_rt_client, args=(SENDER, RECEIVER))
     t2.setDaemon(True)
     t2.start()
-    
+
     while task < 2:
         time.sleep(1)
     print("test rt  completed")
 
+
 def TestSendAndRecv():
     global task
     task = 0
- 
+
     t3 = threading.Thread(target=recv_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
-    
+
     time.sleep(1)
-    
-    t2 = threading.Thread(target=send_client, args=(SENDER,RECEIVER, MSG_IM))
+
+    t2 = threading.Thread(target=send_client, args=(SENDER, RECEIVER, MSG_IM))
     t2.setDaemon(True)
     t2.start()
-    
+
     while task < 2:
         time.sleep(1)
     print("test single completed")
+
 
 def TestHttpSendAndRecv():
     global task
@@ -259,26 +260,26 @@ def TestHttpSendAndRecv():
     t3 = threading.Thread(target=recv_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
-    
+
     time.sleep(1)
-    
-    t2 = threading.Thread(target=send_http_peer_message, args=(SENDER,RECEIVER))
+
+    t2 = threading.Thread(target=send_http_peer_message, args=(SENDER, RECEIVER))
     t2.setDaemon(True)
     t2.start()
-    
+
     while task < 2:
         time.sleep(1)
 
     print("test http peer message completed")
 
-    
+
 def TestOffline():
     global task
     task = 0
-    t2 = threading.Thread(target=send_client, args=(SENDER,RECEIVER, MSG_IM))
+    t2 = threading.Thread(target=send_client, args=(SENDER, RECEIVER, MSG_IM))
     t2.setDaemon(True)
     t2.start()
-    
+
     time.sleep(1)
 
     t3 = threading.Thread(target=recv_message_client, args=(RECEIVER,))
@@ -300,9 +301,10 @@ def TestTimeout():
             print("test timeout completed")
             break
 
+
 def TestPingPong():
     uid = RECEIVER
-    sock, seq =  connect_server(uid, 23000)
+    sock, seq = connect_server(uid, 23000)
     seq += 1
     send_message(MSG_PING, seq, None, sock)
     while True:
@@ -313,28 +315,30 @@ def TestPingPong():
         else:
             continue
 
-    
+
 def _TestRoomMessage(port):
     global task
     task = 0
- 
+
     room_id = 1
     t3 = threading.Thread(target=recv_room_message_client, args=(SENDER, room_id, port))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
-    
+
     t2 = threading.Thread(target=send_room_message_client, args=(RECEIVER, room_id))
     t2.setDaemon(True)
     t2.start()
-    
+
     while task < 2:
         time.sleep(1)
+
 
 def TestRoomMessage():
     _TestRoomMessage(23000)
     print("test room message completed")
+
 
 def TestClusterRoomMessage():
     _TestRoomMessage(24000)
@@ -344,70 +348,71 @@ def TestClusterRoomMessage():
 def TestSystemMessage():
     global task
     task = 0
- 
+
     room_id = 1
-    t3 = threading.Thread(target=recv_system_message_client, args=(RECEIVER, ))
+    t3 = threading.Thread(target=recv_system_message_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
-    
-    t2 = threading.Thread(target=send_system_message, args=(RECEIVER, ))
+
+    t2 = threading.Thread(target=send_system_message, args=(RECEIVER,))
     t2.setDaemon(True)
     t2.start()
-    
+
     while task < 2:
         time.sleep(1)
 
     print("test system message completed")
-    
+
+
 def TestNotification():
     global task
     task = 0
- 
+
     room_id = 1
-    t3 = threading.Thread(target=recv_notification_client, args=(RECEIVER, ))
+    t3 = threading.Thread(target=recv_notification_client, args=(RECEIVER,))
     t3.setDaemon(True)
     t3.start()
 
     time.sleep(1)
-    
-    t2 = threading.Thread(target=send_notificaton, args=(RECEIVER, ))
+
+    t2 = threading.Thread(target=send_notificaton, args=(RECEIVER,))
     t2.setDaemon(True)
     t2.start()
-    
+
     while task < 2:
         time.sleep(1)
 
     print("test notification completed")
 
-    
+
 def main():
-    cluster = True
-     
+    cluster = False
+
     TestRTSendAndRecv()
     time.sleep(1)
-     
+
     print("test room message")
     TestRoomMessage()
     time.sleep(1)
-     
+
     if cluster:
         TestClusterRoomMessage()
-     
+
     TestSendAndRecv()
     time.sleep(1)
 
     TestOffline()
     time.sleep(1)
-     
+
     if cluster:
         TestCluster()
         time.sleep(1)
-     
+
     TestHttpSendAndRecv()
     time.sleep(1)
-    
+
     TestNotification()
     time.sleep(1)
 
@@ -418,9 +423,7 @@ def main():
     time.sleep(1)
     TestTimeout()
     time.sleep(1)
-    
 
 
 if __name__ == "__main__":
     main()
-
