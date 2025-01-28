@@ -44,7 +44,7 @@ type LogConfig struct {
 	Caller   bool   `toml:"caller"`
 }
 
-type StorageConfig struct {
+type Config struct {
 	RpcListen         string `toml:"rpc_listen"`
 	StorageRoot       string `toml:"storage_root"`
 	HttpListenAddress string `toml:"http_listen_address"`
@@ -58,8 +58,8 @@ type StorageConfig struct {
 	Log LogConfig `toml:"log"`
 }
 
-func read_storage_cfg(cfg_path string) *StorageConfig {
-	var conf StorageConfig
+func read_storage_cfg(cfg_path string) *Config {
+	var conf Config
 	if _, err := toml.DecodeFile(cfg_path, &conf); err != nil {
 		// handle error
 		log.Fatal("Decode cfg file fail:", err)

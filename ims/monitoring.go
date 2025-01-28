@@ -1,11 +1,14 @@
 package main
 
-import "net/http"
-import "encoding/json"
-import "os"
-import "runtime"
-import "runtime/pprof"
-import log "github.com/sirupsen/logrus"
+import (
+	"encoding/json"
+	"net/http"
+	"os"
+	"runtime"
+	"runtime/pprof"
+
+	log "github.com/sirupsen/logrus"
+)
 
 type ServerSummary struct {
 	nrequests           int64
@@ -18,7 +21,7 @@ func NewServerSummary() *ServerSummary {
 	return s
 }
 
-func Summary(rw http.ResponseWriter, req *http.Request) {
+func Summary(rw http.ResponseWriter, req *http.Request, server_summary *ServerSummary) {
 	obj := make(map[string]interface{})
 	obj["goroutine_count"] = runtime.NumGoroutine()
 	obj["request_count"] = server_summary.nrequests
@@ -36,7 +39,6 @@ func Summary(rw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Info("write err:", err)
 	}
-	return
 }
 
 func Stack(rw http.ResponseWriter, req *http.Request) {

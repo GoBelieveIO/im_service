@@ -27,11 +27,15 @@ import (
 )
 
 type RPCStorage struct {
+	server_summary *ServerSummary
+	storage        *rpc_storage.Storage
+	limit          int
+	hard_limit     int
 }
 
 func (rpc *RPCStorage) SyncMessage(sync_key *rpc_storage.SyncHistory, result *rpc_storage.PeerHistoryMessage) error {
-	atomic.AddInt64(&server_summary.nrequests, 1)
-	messages, last_msgid, hasMore := storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, config.Limit, config.HardLimit)
+	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
+	messages, last_msgid, hasMore := rpc.storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, rpc.limit, rpc.hard_limit)
 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
@@ -52,8 +56,8 @@ func (rpc *RPCStorage) SyncMessage(sync_key *rpc_storage.SyncHistory, result *rp
 }
 
 func (rpc *RPCStorage) SyncGroupMessage(sync_key *rpc_storage.SyncGroupHistory, result *rpc_storage.GroupHistoryMessage) error {
-	atomic.AddInt64(&server_summary.nrequests, 1)
-	messages, last_msgid := storage.LoadGroupHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.GroupID, sync_key.LastMsgID, sync_key.Timestamp, GROUP_OFFLINE_LIMIT)
+	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
+	messages, last_msgid := rpc.storage.LoadGroupHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.GroupID, sync_key.LastMsgID, sync_key.Timestamp, GROUP_OFFLINE_LIMIT)
 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
@@ -74,53 +78,53 @@ func (rpc *RPCStorage) SyncGroupMessage(sync_key *rpc_storage.SyncGroupHistory, 
 }
 
 func (rpc *RPCStorage) SavePeerMessage(m *rpc_storage.PeerMessage, result *rpc_storage.HistoryMessageID) error {
-	atomic.AddInt64(&server_summary.nrequests, 1)
-	atomic.AddInt64(&server_summary.peer_message_count, 1)
+	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
+	atomic.AddInt64(&rpc.server_summary.peer_message_count, 1)
 	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	msgid, prev_msgid := storage.SavePeerMessage(m.AppID, m.Uid, m.DeviceID, msg)
+	msgid, prev_msgid := rpc.storage.SavePeerMessage(m.AppID, m.Uid, m.DeviceID, msg)
 	result.MsgID = msgid
 	result.PrevMsgID = prev_msgid
 	return nil
 }
 
 func (rpc *RPCStorage) SavePeerGroupMessage(m *rpc_storage.PeerGroupMessage, result *rpc_storage.GroupHistoryMessageID) error {
-	atomic.AddInt64(&server_summary.nrequests, 1)
-	atomic.AddInt64(&server_summary.peer_message_count, 1)
+	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
+	atomic.AddInt64(&rpc.server_summary.peer_message_count, 1)
 	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	r := storage.SavePeerGroupMessage(m.AppID, m.Members, m.DeviceID, msg)
+	r := rpc.storage.SavePeerGroupMessage(m.AppID, m.Members, m.DeviceID, msg)
 
 	result.MessageIDs = make([]*rpc_storage.HistoryMessageID, 0, len(r)/2)
 	for i := 0; i < len(r); i += 2 {
 		msgid, prev_msgid := r[i], r[i+1]
-		result.MessageIDs = append(result.MessageIDs, &rpc_storage.HistoryMessageID{msgid, prev_msgid})
+		result.MessageIDs = append(result.MessageIDs, &rpc_storage.HistoryMessageID{MsgID: msgid, PrevMsgID: prev_msgid})
 	}
 
 	return nil
 }
 
 func (rpc *RPCStorage) SaveGroupMessage(m *rpc_storage.GroupMessage, result *rpc_storage.HistoryMessageID) error {
-	atomic.AddInt64(&server_summary.nrequests, 1)
-	atomic.AddInt64(&server_summary.group_message_count, 1)
+	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
+	atomic.AddInt64(&rpc.server_summary.group_message_count, 1)
 	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	msgid, prev_msgid := storage.SaveGroupMessage(m.AppID, m.GroupID, m.DeviceID, msg)
+	msgid, prev_msgid := rpc.storage.SaveGroupMessage(m.AppID, m.GroupID, m.DeviceID, msg)
 	result.MsgID = msgid
 	result.PrevMsgID = prev_msgid
 	return nil
 }
 
 func (rpc *RPCStorage) GetNewCount(sync_key *rpc_storage.SyncHistory, new_count *int64) error {
-	atomic.AddInt64(&server_summary.nrequests, 1)
-	count := storage.GetNewCount(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID)
+	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
+	count := rpc.storage.GetNewCount(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID)
 	*new_count = int64(count)
 	return nil
 }
 
 func (rpc *RPCStorage) GetLatestMessage(r *rpc_storage.HistoryRequest, l *rpc_storage.LatestMessage) error {
-	atomic.AddInt64(&server_summary.nrequests, 1)
-	messages := storage.LoadLatestMessages(r.AppID, r.Uid, int(r.Limit))
+	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
+	messages := rpc.storage.LoadLatestMessages(r.AppID, r.Uid, int(r.Limit))
 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {

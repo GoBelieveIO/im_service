@@ -34,6 +34,7 @@ import (
 	"github.com/gomodule/redigo/redis"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/GoBelieveIO/im_service/handler"
 	st "github.com/GoBelieveIO/im_service/storage"
 	log "github.com/sirupsen/logrus"
 )
@@ -45,15 +46,6 @@ var (
 	GIT_COMMIT_ID string
 	GIT_BRANCH    string
 )
-
-var storage *st.Storage
-var config *StorageConfig
-var master *st.Master
-var server_summary *ServerSummary
-
-func init() {
-	server_summary = NewServerSummary()
-}
 
 func Listen(f func(*net.TCPConn), listen_addr string) {
 	listen, err := net.Listen("tcp", listen_addr)
@@ -76,19 +68,22 @@ func Listen(f func(*net.TCPConn), listen_addr string) {
 	}
 }
 
-func handle_sync_client(conn *net.TCPConn) {
+func handle_sync_client(conn *net.TCPConn, storage *st.Storage, master *st.Master) {
 	conn.SetKeepAlive(true)
 	conn.SetKeepAlivePeriod(time.Duration(10 * 60 * time.Second))
 	client := st.NewSyncClient(conn, storage, master)
 	client.Run()
 }
 
-func ListenSyncClient() {
-	Listen(handle_sync_client, config.SyncListen)
+func ListenSyncClient(storage *st.Storage, config *Config, master *st.Master) {
+	f := func(conn *net.TCPConn) {
+		handle_sync_client(conn, storage, master)
+	}
+	Listen(f, config.SyncListen)
 }
 
 // Signal handler
-func waitSignal() {
+func waitSignal(storage *st.Storage) {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	for {
@@ -103,7 +98,7 @@ func waitSignal() {
 }
 
 // flush storage file
-func FlushLoop() {
+func FlushLoop(storage *st.Storage) {
 	ticker := time.NewTicker(time.Millisecond * 1000)
 	for range ticker.C {
 		storage.Flush()
@@ -111,7 +106,7 @@ func FlushLoop() {
 }
 
 // flush message index
-func FlushIndexLoop() {
+func FlushIndexLoop(storage *st.Storage) {
 	//5 min
 	ticker := time.NewTicker(time.Second * 60 * 5)
 	for range ticker.C {
@@ -147,20 +142,11 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
-type loggingHandler struct {
-	handler http.Handler
-}
-
-func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Infof("http request:%s %s %s", r.RemoteAddr, r.Method, r.URL)
-	h.handler.ServeHTTP(w, r)
-}
-
-func StartHttpServer(addr string) {
-	http.HandleFunc("/summary", Summary)
+func StartHttpServer(addr string, server_summary *ServerSummary) {
+	handler.Handle("/summary", Summary, server_summary)
 	http.HandleFunc("/stack", Stack)
 
-	handler := loggingHandler{http.DefaultServeMux}
+	handler := handler.LoggingHandler{Handler: http.DefaultServeMux}
 
 	err := http.ListenAndServe(addr, handler)
 	if err != nil {
@@ -168,8 +154,7 @@ func StartHttpServer(addr string) {
 	}
 }
 
-func ListenRPCClient() {
-	rpc_s := new(RPCStorage)
+func ListenRPCClient(rpc_s *RPCStorage, config *Config) {
 	rpc.Register(rpc_s)
 	rpc.HandleHTTP()
 
@@ -179,10 +164,9 @@ func ListenRPCClient() {
 	}
 
 	http.Serve(l, nil)
-
 }
 
-func initLog() {
+func initLog(config *Config) {
 	if config.Log.Filename != "" {
 		writer := &lumberjack.Logger{
 			Filename:   config.Log.Filename,
@@ -219,9 +203,9 @@ func main() {
 		return
 	}
 
-	config = read_storage_cfg(flag.Args()[0])
+	config := read_storage_cfg(flag.Args()[0])
 
-	initLog()
+	initLog(config)
 
 	log.Info("startup...")
 
@@ -243,24 +227,28 @@ func main() {
 	log.Infof("log filename:%s level:%s backup:%d age:%d caller:%t",
 		config.Log.Filename, config.Log.Level, config.Log.Backup, config.Log.Age, config.Log.Caller)
 
-	storage = st.NewStorage(config.StorageRoot, master.Channel())
+	server_summary := NewServerSummary()
 
-	master = st.NewMaster()
+	master := st.NewMaster()
 	master.Start()
+
+	storage := st.NewStorage(config.StorageRoot, master.Channel())
+
 	if config.MasterAddress != "" {
 		slaver := st.NewSlaver(config.MasterAddress, storage)
 		slaver.Start()
 	}
 
 	//刷新storage file
-	go FlushLoop()
-	go FlushIndexLoop()
-	go waitSignal()
+	go FlushLoop(storage)
+	go FlushIndexLoop(storage)
+	go waitSignal(storage)
 
 	if len(config.HttpListenAddress) > 0 {
-		go StartHttpServer(config.HttpListenAddress)
+		go StartHttpServer(config.HttpListenAddress, server_summary)
 	}
 
-	go ListenSyncClient()
-	ListenRPCClient()
+	go ListenSyncClient(storage, config, master)
+	rpc_s := &RPCStorage{server_summary: server_summary, storage: storage, limit: config.Limit, hard_limit: config.HardLimit}
+	ListenRPCClient(rpc_s, config)
 }

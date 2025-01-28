@@ -17,7 +17,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-package main
+package handler
 
 import "net/http"
 
@@ -28,6 +28,10 @@ type Handler[T1 any] struct {
 
 func (handler *Handler[T1]) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler.handler(w, r, handler.arg1)
+}
+
+func NewHandler[T1 any](handler func(http.ResponseWriter, *http.Request, T1), arg1 T1) *Handler[T1] {
+	return &Handler[T1]{handler: handler, arg1: arg1}
 }
 
 type Handler2[T1 any, T2 any] struct {
@@ -51,14 +55,14 @@ func (handler *Handler3[T1, T2, T3]) ServeHTTP(w http.ResponseWriter, r *http.Re
 	handler.handler(w, r, handler.arg1, handler.arg2, handler.arg3)
 }
 
-func handle_http[T any](pattern string, handler func(http.ResponseWriter, *http.Request, T), arg T) {
+func Handle[T any](pattern string, handler func(http.ResponseWriter, *http.Request, T), arg T) {
 	http.Handle(pattern, &Handler[T]{handler, arg})
 }
 
-func handle_http2[T1 any, T2 any](pattern string, handler func(http.ResponseWriter, *http.Request, T1, T2), arg1 T1, arg2 T2) {
+func Handle2[T1 any, T2 any](pattern string, handler func(http.ResponseWriter, *http.Request, T1, T2), arg1 T1, arg2 T2) {
 	http.Handle(pattern, &Handler2[T1, T2]{handler, arg1, arg2})
 }
 
-func handle_http3[T1 any, T2 any, T3 any](pattern string, handler func(http.ResponseWriter, *http.Request, T1, T2, T3), arg1 T1, arg2 T2, arg3 T3) {
+func Handle3[T1 any, T2 any, T3 any](pattern string, handler func(http.ResponseWriter, *http.Request, T1, T2, T3), arg1 T1, arg2 T2, arg3 T3) {
 	http.Handle(pattern, &Handler3[T1, T2, T3]{handler, arg1, arg2, arg3})
 }

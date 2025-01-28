@@ -39,7 +39,7 @@ type LogConfig struct {
 	Caller   bool   `toml:"caller"`
 }
 
-type RouteConfig struct {
+type Config struct {
 	Listen string `toml:"filename"`
 
 	PushDisabled      bool   `toml:"filename"`
@@ -49,8 +49,8 @@ type RouteConfig struct {
 	Log   LogConfig   `toml:"log"`
 }
 
-func read_route_cfg(cfg_path string) *RouteConfig {
-	var conf RouteConfig
+func read_route_cfg(cfg_path string) *Config {
+	var conf Config
 	if _, err := toml.DecodeFile(cfg_path, &conf); err != nil {
 		// handle error
 		log.Fatal("Decode cfg file fail:", err)

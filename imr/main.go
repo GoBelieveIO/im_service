@@ -29,6 +29,7 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/GoBelieveIO/im_service/handler"
 	"github.com/GoBelieveIO/im_service/router"
 	"github.com/gomodule/redigo/redis"
 	log "github.com/sirupsen/logrus"
@@ -41,9 +42,6 @@ var (
 	GIT_COMMIT_ID string
 	GIT_BRANCH    string
 )
-
-var config *RouteConfig
-var server *router.Server
 
 func handle_client(conn *net.TCPConn, server *router.Server) {
 	conn.SetKeepAlive(true)
@@ -75,7 +73,7 @@ func Listen(f func(*net.TCPConn, *router.Server), listen_addr string, server *ro
 	}
 }
 
-func ListenClient(server *router.Server) {
+func ListenClient(server *router.Server, config *Config) {
 	Listen(handle_client, config.Listen, server)
 }
 
@@ -107,24 +105,11 @@ func NewRedisPool(server, password string, db int) *redis.Pool {
 	}
 }
 
-type loggingHandler struct {
-	handler http.Handler
-}
+func StartHttpServer(addr string, server *router.Server) {
+	handler.Handle("/online", router.GetOnlineStatus, server)
+	handler.Handle("/all_online", router.GetOnlineClients, server)
 
-func (h loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Infof("http request:%s %s %s", r.RemoteAddr, r.Method, r.URL)
-	h.handler.ServeHTTP(w, r)
-}
-
-func StartHttpServer(addr string) {
-	http.HandleFunc("/online", func(w http.ResponseWriter, r *http.Request) {
-		router.GetOnlineStatus(w, r, server)
-	})
-	http.HandleFunc("/all_online", func(w http.ResponseWriter, r *http.Request) {
-		router.GetOnlineClients(w, r, server)
-	})
-
-	handler := loggingHandler{http.DefaultServeMux}
+	handler := handler.LoggingHandler{Handler: http.DefaultServeMux}
 
 	err := http.ListenAndServe(addr, handler)
 	if err != nil {
@@ -132,7 +117,7 @@ func StartHttpServer(addr string) {
 	}
 }
 
-func initLog() {
+func initLog(config *Config) {
 	if config.Log.Filename != "" {
 		writer := &lumberjack.Logger{
 			Filename:   config.Log.Filename,
@@ -169,9 +154,9 @@ func main() {
 		return
 	}
 
-	config = read_route_cfg(flag.Args()[0])
+	config := read_route_cfg(flag.Args()[0])
 
-	initLog()
+	initLog(config)
 
 	log.Info("startup...")
 
@@ -188,10 +173,11 @@ func main() {
 	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
 		config.Redis.Db)
 
-	if config.HttpListenAddress != "" {
-		go StartHttpServer(config.HttpListenAddress)
-	}
-	server = router.NewServer(redis_pool, config.PushDisabled)
+	server := router.NewServer(redis_pool, config.PushDisabled)
 	server.RunPushService()
-	ListenClient(server)
+	if config.HttpListenAddress != "" {
+		go StartHttpServer(config.HttpListenAddress, server)
+	}
+
+	ListenClient(server, config)
 }

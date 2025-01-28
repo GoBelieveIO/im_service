@@ -22,6 +22,7 @@ package main
 import (
 	"net/http"
 
+	"github.com/GoBelieveIO/im_service/handler"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 )
@@ -54,7 +55,7 @@ func ServeWebsocket(w http.ResponseWriter, r *http.Request, listener *Listener) 
 
 func StartWSSServer(tls_address string, cert_file string, key_file string, listener *Listener) {
 	mux := http.NewServeMux()
-	mux.Handle("/ws", &Handler[*Listener]{ServeWebsocket, listener})
+	mux.Handle("/ws", handler.NewHandler[*Listener](ServeWebsocket, listener))
 
 	if tls_address != "" && cert_file != "" && key_file != "" {
 		log.Infof("websocket Serving TLS at %s...", tls_address)
@@ -67,7 +68,7 @@ func StartWSSServer(tls_address string, cert_file string, key_file string, liste
 
 func StartWSServer(address string, listener *Listener) {
 	mux := http.NewServeMux()
-	mux.Handle("/ws", &Handler[*Listener]{ServeWebsocket, listener})
+	mux.Handle("/ws", handler.NewHandler[*Listener](ServeWebsocket, listener))
 	err := http.ListenAndServe(address, mux)
 	if err != nil {
 		log.Fatalf("listen err:%s", err)

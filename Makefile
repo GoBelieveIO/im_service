@@ -1,4 +1,4 @@
-all:im_bin ims_bin imr_bin 
+all:im_bin ims_bin imr_bin
 
 
 im_bin:
@@ -10,6 +10,8 @@ ims_bin:
 imr_bin:
 	cd imr && make
 
+im_truncate:
+	go build -o ./bin/im_truncate ./tools/ ;
 
 install:all
 	cp ./im/im ./bin

@@ -1,5 +1,3 @@
-//go:build exclude
-
 /**
  * Copyright (c) 2014-2015, GoBelieve
  * All rights reserved.
