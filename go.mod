@@ -5,8 +5,8 @@ go 1.22.4
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/bitly/go-simplejson v0.5.0
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/gomodule/redigo v1.8.1
 	github.com/gorilla/websocket v1.4.2
 	github.com/importcjj/sensitive v0.0.0-20190611120559-289e87ec4108

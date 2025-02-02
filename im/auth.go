@@ -25,7 +25,7 @@ import (
 	"fmt"
 
 	"github.com/GoBelieveIO/im_service/server"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/gomodule/redigo/redis"
 )
 
