@@ -54,17 +54,28 @@ func NewClient(conn Conn, server_summary *ServerSummary, observer ClientObserver
 	client.server_summary = server_summary
 	client.observer = observer
 
-	atomic.AddInt64(&server_summary.nconnections, 1)
-
 	return client
 }
 
+func (client *Client) onclose() {
+	atomic.AddInt64(&client.server_summary.nconnections, -1)
+	if client.uid > 0 {
+		atomic.AddInt64(&client.server_summary.nclients, -1)
+	}
+	atomic.StoreInt32(&client.closed, 1)
+
+	//write goroutine will quit when it receives nil
+	client.wt <- nil
+	client.observer.onClientClose(client)
+}
+
 func (client *Client) Read() {
+	atomic.AddInt64(&client.server_summary.nconnections, 1)
 	for {
 		tc := atomic.LoadInt32(&client.tc)
 		if tc > 0 {
 			log.Infof("quit read goroutine, client:%d write goroutine blocked", client.uid)
-			client.observer.onClientClose(client)
+			client.onclose()
 			break
 		}
 
@@ -75,7 +86,7 @@ func (client *Client) Read() {
 			log.Infof("client:%d socket read timeout:%d %d", client.uid, t1, t2)
 		}
 		if msg == nil {
-			client.observer.onClientClose(client)
+			client.onclose()
 			break
 		}
 
@@ -85,6 +96,7 @@ func (client *Client) Read() {
 			log.Infof("client:%d handle message is too slow:%d %d", client.uid, t2, t3)
 		}
 	}
+
 }
 
 // 发送等待队列中的消息

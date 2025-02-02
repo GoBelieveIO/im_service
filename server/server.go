@@ -78,7 +78,6 @@ func NewServer(
 	friend_permission bool,
 	kefu_appid int64) *Server {
 	s := &Server{}
-	log.Info("tttttttttttttttttttttttt")
 	s.handlers = make(map[int]MessageHandler)
 	s.handlers[MSG_AUTH_TOKEN] = s.HandleAuthToken
 	s.handlers[MSG_PING] = s.HandlePing
@@ -127,17 +126,7 @@ func (server *Server) onClientMessage(client *Client, msg *Message) {
 }
 
 func (server *Server) onClientClose(client *Client) {
-	atomic.AddInt64(&server.server_summary.nconnections, -1)
-	if client.uid > 0 {
-		atomic.AddInt64(&server.server_summary.nclients, -1)
-	}
-	atomic.StoreInt32(&client.closed, 1)
-
 	server.RemoveClient(client)
-
-	//quit when write goroutine received
-	client.wt <- nil
-
 	server.Logout(client)
 }
 
