@@ -20,12 +20,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/GoBelieveIO/im_service/server"
+	"github.com/go-sql-driver/mysql"
 )
 
 const DEFAULT_GROUP_DELIVER_COUNT = 4
@@ -44,11 +46,32 @@ type LogConfig struct {
 	Caller   bool   `toml:"caller"`
 }
 
+type MySqlConfig struct {
+	User     string `toml:"user"`
+	Password string `toml:"password"`
+	Host     string `toml:"host"`
+	Port     int    `toml:"port"`
+	DBName   string `toml:"db_name"`
+}
+
+func (c *MySqlConfig) DSN() string {
+	cfg := mysql.Config{
+		User:                 c.User,
+		Passwd:               c.Password,
+		Net:                  "tcp",
+		Addr:                 fmt.Sprintf("%s:%d", c.Host, c.Port),
+		DBName:               c.DBName,
+		AllowNativePasswords: true,
+	}
+	return cfg.FormatDSN()
+}
+
 type Config struct {
-	Port            int    `toml:"port"`
-	SslPort         int    `toml:"ssl_port"`
-	MySqlDataSource string `toml:"mysqldb_datasource"`
-	PendingRoot     string `toml:"pending_root"`
+	Port        int    `toml:"port"`
+	SslPort     int    `toml:"ssl_port"`
+	PendingRoot string `toml:"pending_root"`
+
+	MySql MySqlConfig `toml:"mysql"`
 
 	KefuAppId int64 `toml:"kefu_appid"`
 

@@ -36,8 +36,13 @@ http_listen_address=":6666"
 #grpc监听地址
 rpc_listen_address=":6665"
 
-#mysql的链接地址  用户名:密码@tcp(服务器地址:服务器端口)/数据库名称
-mysqldb_datasource="root:123456@tcp(127.0.0.1:3306)/gobelieve"
+#mysql配置
+[mysql]
+user="root"
+password="123456"
+host="127.0.0.1"
+port=3306
+db_name="gobelieve"
 #redis服务器地址  服务器ip：服务器端口
 
 #群组消息发送队列的存储路径，必须存在

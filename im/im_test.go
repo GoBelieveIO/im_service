@@ -2,12 +2,65 @@ package main
 
 import (
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/GoBelieveIO/im_service/server"
 	"github.com/gomodule/redigo/redis"
 	"github.com/importcjj/sensitive"
 )
+
+func TestReadCfg(t *testing.T) {
+	configContent := `port=23000
+ssl_port=24430
+pending_root="/tmp/pending"
+memory_limit="2G"
+
+[mysql]
+user="root"
+password="123#@@"
+host="127.0.0.1"
+port=3306
+db_name="gobelieve"
+
+[redis]
+address="127.0.0.1:6379"
+password=""
+db=0
+`
+
+	configPath := filepath.Join(t.TempDir(), "im_test.cfg")
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	if err != nil {
+		t.Fatalf("write config file failed: %v", err)
+	}
+
+	conf := read_cfg(configPath)
+	if conf.Port != 23000 {
+		t.Fatalf("unexpected port: %d", conf.Port)
+	}
+	log.Println("dsn:", conf.MySql.DSN())
+	if conf.MySql.User != "root" || conf.MySql.Password != "123#@@" ||
+		conf.MySql.Host != "127.0.0.1" || conf.MySql.Port != 3306 || conf.MySql.DBName != "gobelieve" {
+		t.Fatalf("unexpected mysql config: %+v", conf.MySql)
+	}
+
+	expectedDSNPrefix := "root:123#@@@tcp(127.0.0.1:3306)/gobelieve"
+
+	if !strings.HasPrefix(conf.MySql.DSN(), expectedDSNPrefix) {
+		t.Fatalf("unexpected mysql dsn: %s", conf.MySql.DSN())
+	}
+
+	if conf.AuthMethod != "redis" {
+		t.Fatalf("unexpected default auth method: %s", conf.AuthMethod)
+	}
+
+	if conf.memory_limit != 2*1024*1024*1024 {
+		t.Fatalf("unexpected memory limit: %d", conf.memory_limit)
+	}
+}
 
 func TestFilter(t *testing.T) {
 	filter := sensitive.New()
@@ -44,7 +97,7 @@ func TestRelationship(t *testing.T) {
 	config := read_cfg("../bin/im.cfg")
 	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
 		config.Redis.Db)
-	relationship_pool := server.NewRelationshipPool(config.MySqlDataSource, redis_pool)
+	relationship_pool := server.NewRelationshipPool(config.MySql.DSN(), redis_pool)
 	rs := relationship_pool.GetRelationship(7, 1, 2)
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
 

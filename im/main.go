@@ -107,7 +107,8 @@ func print_config(config *Config) {
 	log.Infof("redis address:%s password:%s db:%d\n",
 		config.Redis.Address, config.Redis.Password, config.Redis.Db)
 
-	log.Info("mysql datasource:", config.MySqlDataSource)
+	log.Infof("mysql user:%s host:%s:%d db:%s\n",
+		config.MySql.User, config.MySql.Host, config.MySql.Port, config.MySql.DBName)
 
 	log.Info("storage addresses:", config.StorageRpcAddrs)
 	log.Info("route addressed:", config.RouteAddrs)
@@ -156,10 +157,9 @@ func main() {
 	rpc_storage := server.NewRPCStorage(config.StorageRpcAddrs, config.GroupStorageRpcAdrs)
 
 	var group_service *server.GroupService
-	if len(config.MySqlDataSource) > 0 {
-		group_service = server.NewGroupService(redis_pool, config.MySqlDataSource, config.redis_config())
-		group_service.Start()
-	}
+	mysql_dsn := config.MySql.DSN()
+	group_service = server.NewGroupService(redis_pool, mysql_dsn, config.redis_config())
+	group_service.Start()
 
 	app_route := server.NewAppRoute()
 	app := &server.App{}
@@ -225,7 +225,7 @@ func main() {
 
 	var relationship_pool *server.RelationshipPool
 	if config.EnableFriendship || config.EnableBlacklist {
-		relationship_pool = server.NewRelationshipPool(config.MySqlDataSource, redis_pool)
+		relationship_pool = server.NewRelationshipPool(mysql_dsn, redis_pool)
 		relationship_pool.Start()
 	}
 

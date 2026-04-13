@@ -5,7 +5,7 @@ go 1.22.4
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/bitly/go-simplejson v0.5.0
-	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/gomodule/redigo v1.8.1
 	github.com/gorilla/websocket v1.4.2
@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
