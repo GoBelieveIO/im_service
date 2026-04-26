@@ -225,7 +225,7 @@ func main() {
 
 	var relationship_pool *server.RelationshipPool
 	if config.EnableFriendship || config.EnableBlacklist {
-		relationship_pool = server.NewRelationshipPool(mysql_dsn, redis_pool)
+		relationship_pool = server.NewRelationshipPool(mysql_dsn, redis_pool, config.redis_config())
 		relationship_pool.Start()
 	}
 

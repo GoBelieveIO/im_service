@@ -77,7 +77,7 @@ type RelationshipPool struct {
 	redis_config  *RedisConfig
 }
 
-func NewRelationshipPool(mysqldb_datasource string, redis_pool *redis.Pool) *RelationshipPool {
+func NewRelationshipPool(mysqldb_datasource string, redis_pool *redis.Pool, redis_config *RedisConfig) *RelationshipPool {
 	rp := &RelationshipPool{}
 	rp.items = &sync.Map{}
 
@@ -87,6 +87,7 @@ func NewRelationshipPool(mysqldb_datasource string, redis_pool *redis.Pool) *Rel
 	}
 	rp.db = db
 	rp.redis_pool = redis_pool
+	rp.redis_config = redis_config
 	return rp
 }
 

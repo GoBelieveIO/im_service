@@ -17,6 +17,7 @@ func TestReadCfg(t *testing.T) {
 ssl_port=24430
 pending_root="/tmp/pending"
 memory_limit="2G"
+enable_friendship=true
 
 [mysql]
 user="root"
@@ -53,6 +54,9 @@ db=0
 		t.Fatalf("unexpected mysql dsn: %s", conf.MySql.DSN())
 	}
 
+	if conf.EnableFriendship != true {
+		t.Fatalf("unexpected enable_friendship: %t", conf.EnableFriendship)
+	}
 	if conf.AuthMethod != "redis" {
 		t.Fatalf("unexpected default auth method: %s", conf.AuthMethod)
 	}
@@ -97,7 +101,7 @@ func TestRelationship(t *testing.T) {
 	config := read_cfg("../bin/im.cfg")
 	redis_pool := NewRedisPool(config.Redis.Address, config.Redis.Password,
 		config.Redis.Db)
-	relationship_pool := server.NewRelationshipPool(config.MySql.DSN(), redis_pool)
+	relationship_pool := server.NewRelationshipPool(config.MySql.DSN(), redis_pool, config.redis_config())
 	rs := relationship_pool.GetRelationship(7, 1, 2)
 	log.Println("rs:", rs, rs.IsMyFriend(), rs.IsYourFriend(), rs.IsInMyBlacklist(), rs.IsInYourBlacklist())
 
