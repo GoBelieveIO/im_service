@@ -102,6 +102,9 @@ const MSG_STORAGE_SYNC_BEGIN = 220
 const MSG_STORAGE_SYNC_MESSAGE = 221
 const MSG_STORAGE_SYNC_MESSAGE_BATCH = 222
 
+// channel 消息队列
+const MSG_OFFLINE_V5 = 246
+
 // 内部文件存储使用
 // 超级群消息队列 代替MSG_GROUP_IM_LIST
 const MSG_GROUP_OFFLINE = 247

@@ -35,7 +35,7 @@ type RPCStorage struct {
 
 func (rpc *RPCStorage) SyncMessage(sync_key *rpc_storage.SyncHistory, result *rpc_storage.PeerHistoryMessage) error {
 	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
-	messages, last_msgid, hasMore := rpc.storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID, rpc.limit, rpc.hard_limit)
+	messages, last_msgid, hasMore := rpc.storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.Uid, rpc_storage.CHANNLE_TYPE_PEER, sync_key.LastMsgID, 0, rpc.limit, rpc.hard_limit)
 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
@@ -57,7 +57,7 @@ func (rpc *RPCStorage) SyncMessage(sync_key *rpc_storage.SyncHistory, result *rp
 
 func (rpc *RPCStorage) SyncGroupMessage(sync_key *rpc_storage.SyncGroupHistory, result *rpc_storage.GroupHistoryMessage) error {
 	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
-	messages, last_msgid := rpc.storage.LoadGroupHistoryMessages(sync_key.AppID, sync_key.Uid, sync_key.GroupID, sync_key.LastMsgID, sync_key.Timestamp, GROUP_OFFLINE_LIMIT)
+	messages, last_msgid, hasMore := rpc.storage.LoadHistoryMessagesV3(sync_key.AppID, sync_key.GroupID, rpc_storage.CHANNEL_TYPE_GROUP, sync_key.LastMsgID, sync_key.Timestamp, rpc.limit, rpc.hard_limit)
 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {
@@ -73,7 +73,7 @@ func (rpc *RPCStorage) SyncGroupMessage(sync_key *rpc_storage.SyncGroupHistory, 
 
 	result.Messages = historyMessages
 	result.LastMsgID = last_msgid
-	result.HasMore = false
+	result.HasMore = hasMore
 	return nil
 }
 
@@ -82,7 +82,7 @@ func (rpc *RPCStorage) SavePeerMessage(m *rpc_storage.PeerMessage, result *rpc_s
 	atomic.AddInt64(&rpc.server_summary.peer_message_count, 1)
 	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	msgid, prev_msgid := rpc.storage.SavePeerMessage(m.AppID, m.Uid, m.DeviceID, msg)
+	msgid, prev_msgid := rpc.storage.SaveChannelMessage(m.AppID, m.Uid, rpc_storage.CHANNLE_TYPE_PEER, m.DeviceID, msg)
 	result.MsgID = msgid
 	result.PrevMsgID = prev_msgid
 	return nil
@@ -93,7 +93,7 @@ func (rpc *RPCStorage) SavePeerGroupMessage(m *rpc_storage.PeerGroupMessage, res
 	atomic.AddInt64(&rpc.server_summary.peer_message_count, 1)
 	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	r := rpc.storage.SavePeerGroupMessage(m.AppID, m.Members, m.DeviceID, msg)
+	r := rpc.storage.SavePeerGroupMessage(m.AppID, m.Members, rpc_storage.CHANNLE_TYPE_PEER, m.DeviceID, msg)
 
 	result.MessageIDs = make([]*rpc_storage.HistoryMessageID, 0, len(r)/2)
 	for i := 0; i < len(r); i += 2 {
@@ -109,7 +109,7 @@ func (rpc *RPCStorage) SaveGroupMessage(m *rpc_storage.GroupMessage, result *rpc
 	atomic.AddInt64(&rpc.server_summary.group_message_count, 1)
 	msg := &Message{Cmd: int(m.Cmd), Version: DEFAULT_VERSION}
 	msg.FromData(m.Raw)
-	msgid, prev_msgid := rpc.storage.SaveGroupMessage(m.AppID, m.GroupID, m.DeviceID, msg)
+	msgid, prev_msgid := rpc.storage.SaveChannelMessage(m.AppID, m.GroupID, rpc_storage.CHANNEL_TYPE_GROUP, m.DeviceID, msg)
 	result.MsgID = msgid
 	result.PrevMsgID = prev_msgid
 	return nil
@@ -117,14 +117,14 @@ func (rpc *RPCStorage) SaveGroupMessage(m *rpc_storage.GroupMessage, result *rpc
 
 func (rpc *RPCStorage) GetNewCount(sync_key *rpc_storage.SyncHistory, new_count *int64) error {
 	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
-	count := rpc.storage.GetNewCount(sync_key.AppID, sync_key.Uid, sync_key.LastMsgID)
+	count := rpc.storage.GetNewCount(sync_key.AppID, sync_key.Uid, rpc_storage.CHANNLE_TYPE_PEER, sync_key.LastMsgID)
 	*new_count = int64(count)
 	return nil
 }
 
 func (rpc *RPCStorage) GetLatestMessage(r *rpc_storage.HistoryRequest, l *rpc_storage.LatestMessage) error {
 	atomic.AddInt64(&rpc.server_summary.nrequests, 1)
-	messages := rpc.storage.LoadLatestMessages(r.AppID, r.Uid, int(r.Limit))
+	messages := rpc.storage.LoadLatestMessages(r.AppID, r.Uid, rpc_storage.CHANNLE_TYPE_PEER, int(r.Limit))
 
 	historyMessages := make([]*rpc_storage.HistoryMessage, 0, 10)
 	for _, emsg := range messages {

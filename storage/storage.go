@@ -29,33 +29,25 @@ import (
 
 type Storage struct {
 	*StorageFile
-	*PeerStorage
-	*GroupStorage
+	*ChannelStorage
 }
 
 func NewStorage(root string, ewt chan *EMessage) *Storage {
 	f := NewStorageFile(root, ewt)
-	ps := NewPeerStorage(f)
-	gs := NewGroupStorage(f)
+	ps := NewChannelStorage(f)
 
-	storage := &Storage{f, ps, gs}
+	storage := &Storage{f, ps}
 
-	r1 := storage.readPeerIndex()
-	r2 := storage.readGroupIndex()
+	r1 := storage.readChannelIndex()
+
 	storage.last_saved_id = storage.last_id
 
 	if r1 {
-		storage.repairPeerIndex()
-	}
-	if r2 {
-		storage.repairGroupIndex()
+		storage.repairChannelIndex()
 	}
 
 	if !r1 {
-		storage.createPeerIndex()
-	}
-	if !r2 {
-		storage.createGroupIndex()
+		storage.createChannelIndex()
 	}
 
 	log.Infof("last id:%d last saved id:%d", storage.last_id, storage.last_saved_id)
@@ -74,8 +66,7 @@ func (storage *Storage) NextMessageID() int64 {
 }
 
 func (storage *Storage) execMessage(msg *Message, msgid int64) {
-	storage.PeerStorage.execMessage(msg, msgid)
-	storage.GroupStorage.execMessage(msg, msgid)
+	storage.ChannelStorage.execMessage(msg, msgid)
 }
 
 func (storage *Storage) ExecMessage(msg *Message, msgid int64) {
@@ -232,12 +223,9 @@ func (storage *Storage) SaveIndexFileAndExit() {
 func (storage *Storage) flushIndex() {
 	storage.mutex.Lock()
 	last_id := storage.last_id
-	peer_index := storage.clonePeerIndex()
-	group_index := storage.cloneGroupIndex()
+	peer_index := storage.cloneChannelIndex()
 	storage.mutex.Unlock()
-
-	storage.savePeerIndex(peer_index)
-	storage.saveGroupIndex(group_index)
+	storage.saveChannelIndex(peer_index)
 	storage.last_saved_id = last_id
 }
 

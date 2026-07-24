@@ -28,7 +28,7 @@ import (
 )
 
 func init() {
-
+	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V5, func() IMessage { return new(OfflineMessageV5) })
 	protocol.RegisterMessageCreator(protocol.MSG_GROUP_OFFLINE, func() IMessage { return new(OfflineMessage) })
 	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V4, func() IMessage { return new(OfflineMessage) })
 	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V3_, func() IMessage { return new(IgnoreMessage) })
@@ -202,6 +202,44 @@ func (off *OfflineMessage) FromData(buff []byte) bool {
 	buffer := bytes.NewBuffer(buff)
 	binary.Read(buffer, binary.BigEndian, &off.appid)
 	binary.Read(buffer, binary.BigEndian, &off.receiver)
+	binary.Read(buffer, binary.BigEndian, &off.msgid)
+	binary.Read(buffer, binary.BigEndian, &off.device_id)
+	binary.Read(buffer, binary.BigEndian, &off.seq_id)
+	binary.Read(buffer, binary.BigEndian, &off.prev_msgid)
+	binary.Read(buffer, binary.BigEndian, &off.prev_peer_msgid)
+	binary.Read(buffer, binary.BigEndian, &off.prev_batch_msgid)
+	return true
+}
+
+type OfflineMessageV5 struct {
+	OfflineMessage
+
+	channel_type uint8
+}
+
+func (off *OfflineMessageV5) ToData() []byte {
+	buffer := new(bytes.Buffer)
+	binary.Write(buffer, binary.BigEndian, off.appid)
+	binary.Write(buffer, binary.BigEndian, off.receiver)
+	binary.Write(buffer, binary.BigEndian, off.channel_type)
+	binary.Write(buffer, binary.BigEndian, off.msgid)
+	binary.Write(buffer, binary.BigEndian, off.device_id)
+	binary.Write(buffer, binary.BigEndian, off.seq_id)
+	binary.Write(buffer, binary.BigEndian, off.prev_msgid)
+	binary.Write(buffer, binary.BigEndian, off.prev_peer_msgid)
+	binary.Write(buffer, binary.BigEndian, off.prev_batch_msgid)
+	buf := buffer.Bytes()
+	return buf
+}
+
+func (off *OfflineMessageV5) FromData(buff []byte) bool {
+	if len(buff) < 65 {
+		return false
+	}
+	buffer := bytes.NewBuffer(buff)
+	binary.Read(buffer, binary.BigEndian, &off.appid)
+	binary.Read(buffer, binary.BigEndian, &off.receiver)
+	binary.Read(buffer, binary.BigEndian, &off.channel_type)
 	binary.Read(buffer, binary.BigEndian, &off.msgid)
 	binary.Read(buffer, binary.BigEndian, &off.device_id)
 	binary.Read(buffer, binary.BigEndian, &off.seq_id)

@@ -124,6 +124,7 @@ func init() {
 	message_descriptions[MSG_STORAGE_SYNC_MESSAGE_BATCH] = "MSG_STORAGE_SYNC_MESSAGE_BATCH"
 
 	message_descriptions[MSG_GROUP_OFFLINE] = "MSG_GROUP_OFFLINE"
+	message_descriptions[MSG_OFFLINE_V5] = "MSG_OFFLINE_V5"
 	message_descriptions[MSG_OFFLINE_V4] = "MSG_OFFLINE_V4"
 	message_descriptions[MSG_OFFLINE_V3_] = "MSG_OFFLINE_V3"
 	message_descriptions[MSG_OFFLINE_V2_] = "MSG_OFFLINE_V2"
