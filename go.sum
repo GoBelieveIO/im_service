@@ -13,8 +13,8 @@ github.com/golang-jwt/jwt/v4 v4.5.1 h1:JdqV9zKUdtaa9gdPlywC3aeoEsR681PlKC+4F5gQg
 github.com/golang-jwt/jwt/v4 v4.5.1/go.mod h1:m21LjoU+eqJr34lmDMbreY2eSTRJ1cv77w39/MY0Ch0=
 github.com/gomodule/redigo v1.8.1 h1:Abmo0bI7Xf0IhdIPc7HZQzZcShdnmxeoVuDDtIQp8N8=
 github.com/gomodule/redigo v1.8.1/go.mod h1:P9dn9mFrCBvWhGE1wpxx6fgq7BAeLBk+UUUzlpkBYO0=
-github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
-github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
+github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/importcjj/sensitive v0.0.0-20190611120559-289e87ec4108 h1:+8ShsQ1TCRYvZvLlQkekhVDLAHtm/V4nOTZWq1VedbU=
 github.com/importcjj/sensitive v0.0.0-20190611120559-289e87ec4108/go.mod h1:zLVdX6Ed2SvCbEamKmve16U0E03UkdJo4ls1TBfmc8Q=
 github.com/jackc/puddle v1.1.4 h1:5Ey/o5IfV7dYX6Znivq+N9MdK1S18OJI5OJq6EAAADw=
