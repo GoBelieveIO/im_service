@@ -30,7 +30,7 @@ import (
 func init() {
 	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V5, func() IMessage { return new(OfflineMessageV5) })
 	protocol.RegisterMessageCreator(protocol.MSG_GROUP_OFFLINE, func() IMessage { return new(OfflineMessage) })
-	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V4, func() IMessage { return new(OfflineMessage) })
+	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V4_, func() IMessage { return new(OfflineMessage) })
 	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V3_, func() IMessage { return new(IgnoreMessage) })
 	protocol.RegisterMessageCreator(protocol.MSG_OFFLINE_V2_, func() IMessage { return new(IgnoreMessage) })
 	protocol.RegisterMessageCreator(protocol.MSG_GROUP_IM_LIST_, func() IMessage { return new(IgnoreMessage) })

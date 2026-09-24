@@ -94,7 +94,7 @@ func (storage *ChannelStorage) SaveChannelMessage(appid int64, channel_id int64,
 	if storage.isGroupMessage(msg) {
 		flag = MESSAGE_FLAG_GROUP
 	}
-	m := &Message{Cmd: MSG_OFFLINE_V4, Flag: flag, Body: off}
+	m := &Message{Cmd: MSG_OFFLINE_V5, Flag: flag, Body: off}
 	last_id = storage.saveMessage(m)
 
 	if !storage.isGroupMessage(msg) {
@@ -663,7 +663,7 @@ func (storage *ChannelStorage) execMessage(msg *Message, msgid int64) {
 	}
 
 	//兼容历史数据
-	if msg.Cmd == MSG_OFFLINE_V4 {
+	if msg.Cmd == MSG_OFFLINE_V4_ {
 		off := msg.Body.(*OfflineMessage)
 		last_peer_id := msgid
 

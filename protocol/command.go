@@ -110,7 +110,7 @@ const MSG_OFFLINE_V5 = 246
 const MSG_GROUP_OFFLINE = 247
 
 // 个人消息队列 代替MSG_OFFLINE_V3
-const MSG_OFFLINE_V4 = 248
+const MSG_OFFLINE_V4_ = 248
 
 // 个人消息队列 代替MSG_OFFLINE_V2
 const MSG_OFFLINE_V3_ = 249

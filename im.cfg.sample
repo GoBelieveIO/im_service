@@ -36,6 +36,12 @@ http_listen_address=":6666"
 #grpc监听地址
 rpc_listen_address=":6665"
 
+
+#发送消息时，校验好友关系
+enable_friendship=true
+#验证是否在对方的黑名单中
+enable_blacklist=false
+
 #mysql配置
 [mysql]
 user="root"
